@@ -1,0 +1,3 @@
+.vs
+projects/CMake/build*
+out/*
