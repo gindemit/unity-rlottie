@@ -5,9 +5,9 @@ extern "C" {
         *animation_wrapper = new lottie_animation_wrapper();
         (*animation_wrapper)->self = *animation_wrapper;
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
-        double frameRate = animation->frameRate();
-        size_t totalFrame = animation->totalFrame();
-        double duration = animation->duration();
+        (*animation_wrapper)->frameRate = animation->frameRate();
+        (*animation_wrapper)->totalFrame = animation->totalFrame();
+        (*animation_wrapper)->duration = animation->duration();
         (*animation_wrapper)->animation = std::move(animation);
         return 0;
     }
