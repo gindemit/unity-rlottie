@@ -10,7 +10,7 @@ namespace LottiePlugin
     {
         public Texture2D Texture => _animationTexture;
         public double FrameRate => _animationWrapper.frameRate;
-        public uint TotalFramesCount => _animationWrapper.totalFrames;
+        public long TotalFramesCount => _animationWrapper.totalFrames;
         public double DurationSeconds => _animationWrapper.duration;
 
         private IntPtr _animationWrapperIntPtr;
@@ -26,7 +26,14 @@ namespace LottiePlugin
         private double _frameDelta;
         private bool _isInPlayState;
 
-        public LottieAnimation(string jsonFilePath, uint width, uint height)
+        private LottieAnimation(string jsonData, string resourcesPath, uint width, uint height)
+        {
+            _animationWrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animationWrapperIntPtr);
+            _frameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
+            CreateRenderDataTexture2DMarshalToNative(width, height);
+            _isInPlayState = true;
+        }
+        private LottieAnimation(string jsonFilePath, uint width, uint height)
         {
             _animationWrapper = NativeBridge.LoadFromFile(jsonFilePath, out _animationWrapperIntPtr);
             _frameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
@@ -49,8 +56,7 @@ namespace LottiePlugin
             }
             if (_currentPlayTime > _frameDelta)
             {
-                NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, _currentFrame++, true);
-                _animationTexture.Apply();
+                DrawOneFrame();
                 _currentPlayTime = 0;
             }
             if (_currentFrame >= _animationWrapper.totalFrames)
@@ -61,6 +67,11 @@ namespace LottiePlugin
         public void TogglePlay()
         {
             _isInPlayState = !_isInPlayState;
+        }
+        public void DrawOneFrame()
+        {
+            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, _currentFrame++, true);
+            _animationTexture.Apply();
         }
 
         private unsafe void CreateRenderDataTexture2DMarshalToNative(uint width, uint height)
@@ -79,6 +90,15 @@ namespace LottiePlugin
             _lottieRenderData.buffer = NativeArrayUnsafeUtility.GetUnsafePtr(_pixelData);
             NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
+        }
+
+        public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)
+        {
+            return new LottieAnimation(filePath, width, height);
+        }
+        public static LottieAnimation LoadFromJsonData(string jsonData, string resourcesPath, uint width, uint height)
+        {
+            return new LottieAnimation(jsonData, resourcesPath, width, height);
         }
     }
 }

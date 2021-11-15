@@ -5,16 +5,18 @@ using UnityEngine;
 namespace LottiePlugin
 {
     [StructLayout(LayoutKind.Sequential)]
-    public struct LottieAnimationWrapper
+    internal struct LottieAnimationWrapper
     {
         public IntPtr self;
         public IntPtr animation;
         public double frameRate;
-        public uint totalFrames;
+        public long totalFrames;
         public double duration;
+        public long width;
+        public long height;
     }
     [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct LottieRenderData
+    internal unsafe struct LottieRenderData
     {
         public void* buffer;
         public uint width;
@@ -31,23 +33,31 @@ namespace LottiePlugin
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_load_from_data")]
+        private static extern int LottieLoadFromData(
+            string jsonData,
+            string resourcePath,
+            out IntPtr animationWrapper);
+
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_load_from_file")]
-        internal static extern int LottieLoadFromFile(
+        private static extern int LottieLoadFromFile(
             string filePath,
-            out System.IntPtr animationWrapper);
+            out IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_dispose_wrapper")]
         internal static extern int LottieDisposeWrapper(
-            ref System.IntPtr animationWrapper);
+            ref IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_render_immediately")]
         internal static extern int LottieRenderImmediately(
-            System.IntPtr animationWrapper,
-            System.IntPtr renderData,
+            IntPtr animationWrapper,
+            IntPtr renderData,
             int frameNumber,
             bool keepAspectRatio);
 
@@ -55,30 +65,27 @@ namespace LottiePlugin
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_allocate_render_data")]
         internal static extern int LottieAllocateRenderData(
-            ref System.IntPtr animationWrapper);
+            ref IntPtr animationWrapper);
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_dispose_render_data")]
         internal static extern int LottieDisposeRenderData(
-            ref System.IntPtr animationWrapper);
+            ref IntPtr animationWrapper);
 
+        internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)
+        {
+            LottieLoadFromData(filePath, resourcesPath, out animationWrapper);
+            return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
+        }
         internal static LottieAnimationWrapper LoadFromFile(string filePath, out IntPtr animationWrapper)
         {
-            NativeBridge.LottieLoadFromFile(filePath, out animationWrapper);
+            LottieLoadFromFile(filePath, out animationWrapper);
             return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
         }
         internal static void Dispose(LottieAnimationWrapper lottieAnimationWrapper)
         {
-            NativeBridge.LottieDisposeWrapper(ref lottieAnimationWrapper.self);
+            LottieDisposeWrapper(ref lottieAnimationWrapper.self);
             Debug.Assert(lottieAnimationWrapper.self == IntPtr.Zero);
-        }
-        internal static void RenderImmediately(
-            ref LottieAnimationWrapper lottieAnimationWrapper,
-            ref LottieRenderData lottieRenderData,
-            int frameNumber,
-            bool keepAspectRatio)
-        {
-
         }
     }
 }

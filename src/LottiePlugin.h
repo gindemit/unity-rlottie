@@ -10,8 +10,10 @@ typedef struct lottie_animation_wrapper {
     lottie_animation_wrapper *self;
     std::unique_ptr<rlottie::Animation> animation;
     double frameRate;
-    uint32_t totalFrame;
+    int64_t totalFrame;
     double duration;
+    int64_t width;
+    int64_t height;
 } lottie_animation_wrapper;
 
 typedef struct lottie_render_data {
@@ -22,6 +24,7 @@ typedef struct lottie_render_data {
 } lottie_render_data;
 
 extern "C" {
+    EXPORT_API int32_t lottie_load_from_data(const char* json_data, const char* resource_path, lottie_animation_wrapper** animation_wrapper);
     EXPORT_API int32_t lottie_load_from_file(const char *file_path, lottie_animation_wrapper **animation_wrapper);
     EXPORT_API int32_t lottie_dispose_wrapper(lottie_animation_wrapper **animation_wrapper);
     EXPORT_API int32_t lottie_render_immediately(
