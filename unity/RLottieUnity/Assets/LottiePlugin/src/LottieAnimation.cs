@@ -24,12 +24,14 @@ namespace LottiePlugin
         private int _currentFrame;
         private float _currentPlayTime;
         private double _frameDelta;
+        private bool _isInPlayState;
 
         public LottieAnimation(string jsonFilePath, uint width, uint height)
         {
             _animationWrapper = NativeBridge.LoadFromFile(jsonFilePath, out _animationWrapperIntPtr);
             _frameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
             CreateRenderDataTexture2DMarshalToNative(width, height);
+            _isInPlayState = true;
         }
         public void Dispose()
         {
@@ -39,9 +41,12 @@ namespace LottiePlugin
             UnityEngine.Object.DestroyImmediate(_animationTexture);
             _animationTexture = null;
         }
-        public void Update()
+        public unsafe void Update()
         {
-            _currentPlayTime += Time.deltaTime;
+            if (_isInPlayState)
+            {
+                _currentPlayTime += Time.deltaTime;
+            }
             if (_currentPlayTime > _frameDelta)
             {
                 NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, _currentFrame++, true);
@@ -52,13 +57,10 @@ namespace LottiePlugin
             {
                 _currentFrame = 0;
             }
-            //if (_once == false)
-            //{
-            //    _once = true;
-            //    byte[] bytes = _animationTexture.EncodeToPNG();
-            //    string texturePath = Path.Combine("C:/Temp", "sticker.png");
-            //    File.WriteAllBytes(texturePath, bytes);
-            //}
+        }
+        public void TogglePlay()
+        {
+            _isInPlayState = !_isInPlayState;
         }
 
         private unsafe void CreateRenderDataTexture2DMarshalToNative(uint width, uint height)
