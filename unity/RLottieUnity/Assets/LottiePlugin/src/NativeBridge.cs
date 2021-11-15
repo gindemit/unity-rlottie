@@ -10,7 +10,7 @@ namespace LottiePlugin
         public IntPtr self;
         public IntPtr animation;
         public double frameRate;
-        public uint totalFrame;
+        public uint totalFrames;
         public double duration;
     }
     [StructLayout(LayoutKind.Sequential)]
@@ -26,7 +26,7 @@ namespace LottiePlugin
 #if UNITY_IOS && !UNITY_EDITOR
         private const string PLUGIN_NAME = "__Internal";
 #else
-        private const string PLUGIN_NAME = "lottieplugin";
+        private const string PLUGIN_NAME = "LottiePlugin";
 #endif
 
         [DllImport(PLUGIN_NAME,
