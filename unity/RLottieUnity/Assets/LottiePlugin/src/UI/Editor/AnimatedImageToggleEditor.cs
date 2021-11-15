@@ -2,6 +2,7 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.UI;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace LottiePlugin.UI.Editor
@@ -12,6 +13,8 @@ namespace LottiePlugin.UI.Editor
     {
         //Own
         private SerializedProperty _animationJsonProperty;
+        private SerializedProperty _widthProperty;
+        private SerializedProperty _heightProperty;
         //Selectable
         private SerializedProperty m_InteractableProperty;
         private SerializedProperty m_NavigationProperty;
@@ -26,6 +29,8 @@ namespace LottiePlugin.UI.Editor
             base.OnEnable();
 
             _animationJsonProperty = serializedObject.FindProperty("_animationJson");
+            _widthProperty = serializedObject.FindProperty("_textureWidth");
+            _heightProperty = serializedObject.FindProperty("_textureHeight");
 
             m_InteractableProperty = serializedObject.FindProperty("m_Interactable");
             m_NavigationProperty = serializedObject.FindProperty("m_Navigation");
@@ -49,6 +54,38 @@ namespace LottiePlugin.UI.Editor
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated toggle.", MessageType.Error);
             }
+            else if (toggle.graphic.mainTexture == Texture2D.whiteTexture)
+            {
+                string jsonData = toggle.AnimationJson.text;
+                using (var lottieAnimation = LottieAnimation.LoadFromJsonData(
+                    jsonData,
+                    string.Empty,
+                    toggle.TextureWidth,
+                    toggle.TextureHeight))
+                {
+                    lottieAnimation.DrawOneFrame();
+                    var copyOfAnimationTexture = new Texture2D(
+                        (int)toggle.TextureWidth,
+                        (int)toggle.TextureHeight,
+                        TextureFormat.BGRA32,
+                        0,
+                        false);
+                    Graphics.CopyTexture(lottieAnimation.Texture, copyOfAnimationTexture);
+                    copyOfAnimationTexture.Apply();
+                    ((RawImage)toggle.graphic).texture = copyOfAnimationTexture;
+                }
+            }
+            EditorGUILayout.Space();
+            if (_widthProperty.intValue == 0)
+            {
+                _widthProperty.intValue = 128;
+            }
+            if (_heightProperty.intValue == 0)
+            {
+                _heightProperty.intValue = 128;
+            }
+            EditorGUILayout.PropertyField(_widthProperty);
+            EditorGUILayout.PropertyField(_heightProperty);
             EditorGUILayout.PropertyField(m_IsOnProperty);
             if (EditorGUI.EndChangeCheck())
             {
