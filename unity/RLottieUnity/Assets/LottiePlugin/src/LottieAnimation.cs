@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -8,7 +8,7 @@ namespace LottiePlugin
 {
     public sealed class LottieAnimation : IDisposable
     {
-        public Texture2D Texture => _animationTexture;
+        public Texture2D Texture { get; private set; }
         public double FrameRate => _animationWrapper.frameRate;
         public long TotalFramesCount => _animationWrapper.totalFrames;
         public double DurationSeconds => _animationWrapper.duration;
@@ -19,7 +19,6 @@ namespace LottiePlugin
         private IntPtr _lottieRenderDataIntPtr;
         private LottieRenderData _lottieRenderData;
         private NativeArray<byte> _pixelData;
-        private Texture2D _animationTexture;
 
         private int _currentFrame;
         private float _currentPlayTime;
@@ -45,8 +44,8 @@ namespace LottiePlugin
             _pixelData.Dispose();
             NativeBridge.Dispose(_animationWrapper);
             NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
-            UnityEngine.Object.DestroyImmediate(_animationTexture);
-            _animationTexture = null;
+            UnityEngine.Object.DestroyImmediate(Texture);
+            Texture = null;
         }
         public unsafe void Update()
         {
@@ -71,12 +70,12 @@ namespace LottiePlugin
         public void DrawOneFrame()
         {
             NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, _currentFrame++, true);
-            _animationTexture.Apply();
+            Texture.Apply();
         }
         public void DrawOneFrame(int frameNumber)
         {
             NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true);
-            _animationTexture.Apply();
+            Texture.Apply();
         }
 
         private unsafe void CreateRenderDataTexture2DMarshalToNative(uint width, uint height)
@@ -85,13 +84,13 @@ namespace LottiePlugin
             _lottieRenderData.width = width;
             _lottieRenderData.height = height;
             _lottieRenderData.bytesPerLine = width * sizeof(uint);
-            _animationTexture = new Texture2D(
+            Texture = new Texture2D(
                 (int)_lottieRenderData.width,
                 (int)_lottieRenderData.height,
                 TextureFormat.BGRA32,
                 0,
                 false);
-            _pixelData = _animationTexture.GetRawTextureData<byte>();
+            _pixelData = Texture.GetRawTextureData<byte>();
             _lottieRenderData.buffer = NativeArrayUnsafeUtility.GetUnsafePtr(_pixelData);
             NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
