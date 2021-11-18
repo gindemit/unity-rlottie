@@ -73,6 +73,11 @@ namespace LottiePlugin
             NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, _currentFrame++, true);
             _animationTexture.Apply();
         }
+        public void DrawOneFrame(int frameNumber)
+        {
+            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true);
+            _animationTexture.Apply();
+        }
 
         private unsafe void CreateRenderDataTexture2DMarshalToNative(uint width, uint height)
         {
