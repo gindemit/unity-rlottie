@@ -24,6 +24,7 @@ namespace LottiePlugin.UI.Editor
 
         private ReorderableList _statesList;
         private LottieAnimation _lottieAnimation;
+        private string _animationInfoBoxText;
 
         protected override void OnEnable()
         {
@@ -39,6 +40,7 @@ namespace LottiePlugin.UI.Editor
             m_NavigationProperty = serializedObject.FindProperty("m_Navigation");
 
             CreateAnimationIfNecessaryAndAttachToGraphic();
+            UpdateTheAnimationInfoBoxText();
 
             _statesList = new ReorderableList(serializedObject, _statesProperty, true, true, true, true) {
                 drawHeaderCallback = DrawHeader,
@@ -57,14 +59,13 @@ namespace LottiePlugin.UI.Editor
             _statesList.drawElementCallback = null;
             _statesList.onSelectCallback = null;
             _statesList = null;
+            SetGraphicsTexture(null);
         }
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
             EditorGUILayout.PropertyField(m_InteractableProperty);
-            EditorGUILayout.Space();
             EditorGUILayout.PropertyField(m_NavigationProperty);
-            EditorGUILayout.Space();
             AnimatedButton button = serializedObject.targetObject as AnimatedButton;
 
             EditorGUI.BeginChangeCheck();
@@ -74,15 +75,22 @@ namespace LottiePlugin.UI.Editor
                 _lottieAnimation?.Dispose();
                 _lottieAnimation = null;
                 CreateAnimationIfNecessaryAndAttachToGraphic();
+                UpdateTheAnimationInfoBoxText();
 
                 _statesProperty.arraySize = 0;
                 _statesProperty.arraySize = 2;
                 SetStateValuesAtIndex(0, "Begin", 0, true);
-                SetStateValuesAtIndex(1, "End", (int)_lottieAnimation?.TotalFramesCount, true);
+                SetStateValuesAtIndex(1, "End", _lottieAnimation != null ? (int)_lottieAnimation.TotalFramesCount : 0, true);
             }
-            if (button.AnimationJson == null)
+            if (button.AnimationJson == null ||
+                string.IsNullOrEmpty(button.AnimationJson.text) ||
+                !button.AnimationJson.text.StartsWith("{\"v\":"))
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated button.", MessageType.Error);
+            }
+            if (_lottieAnimation != null)
+            {
+                EditorGUILayout.HelpBox(_animationInfoBoxText, MessageType.Info);
             }
             EditorGUILayout.Space();
             if (_widthProperty.intValue == 0)
@@ -93,14 +101,28 @@ namespace LottiePlugin.UI.Editor
             {
                 _heightProperty.intValue = 128;
             }
+            EditorGUILayout.BeginHorizontal();
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_widthProperty);
             EditorGUILayout.PropertyField(_heightProperty);
+            if (EditorGUI.EndChangeCheck())
+            {
+                _lottieAnimation?.Dispose();
+                _lottieAnimation = null;
+                CreateAnimationIfNecessaryAndAttachToGraphic();
+            }
+            EditorGUILayout.EndHorizontal();
+            if (_widthProperty.intValue > 2048 || _heightProperty.intValue > 2048)
+            {
+                EditorGUILayout.HelpBox("Higher texture resolution will consume more processor resources at runtime.", MessageType.Warning);
+            }
+            EditorGUILayout.Space();
             EditorGUILayout.PropertyField(_graphicProperty);
-
             if (button.Graphic == null)
             {
                 EditorGUILayout.HelpBox("You must have a target graphic set in order to use the animated button.", MessageType.Error);
             }
+            EditorGUILayout.Space();
             _statesList.DoLayoutList();
             serializedObject.ApplyModifiedProperties();
         }
@@ -117,37 +139,58 @@ namespace LottiePlugin.UI.Editor
                 return;
             }
             string jsonData = button.AnimationJson.text;
+            if (string.IsNullOrEmpty(jsonData) ||
+                !jsonData.StartsWith("{\"v\":"))
+            {
+                Debug.LogError("Selected file is not a lottie json");
+                return;
+            }
             _lottieAnimation = LottieAnimation.LoadFromJsonData(
                 jsonData,
                 string.Empty,
                 button.TextureWidth,
                 button.TextureHeight);
             _lottieAnimation.DrawOneFrame();
-            ((RawImage)button.Graphic).texture = _lottieAnimation.Texture;
+            SetGraphicsTexture(_lottieAnimation.Texture);
         }
+        private void UpdateTheAnimationInfoBoxText()
+        {
+            if (_lottieAnimation == null)
+            {
+                return;
+            }
+            _animationInfoBoxText = $"Animation info: Frame Rate \"{_lottieAnimation.FrameRate.ToString("F2")}\", " +
+                    $"Total Frames \"{_lottieAnimation.TotalFramesCount.ToString()}\", " +
+                    $"Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec.";
+        }
+        private void SetGraphicsTexture(Texture2D texture)
+        {
+            AnimatedButton button = serializedObject.targetObject as AnimatedButton;
+            ((RawImage)button.Graphic).texture = texture;
+        }
+
         private void DrawListItems(Rect rect, int index, bool isActive, bool isFocused)
         {
             SerializedProperty element = _statesList.serializedProperty.GetArrayElementAtIndex(index); //The element in the list
 
+            rect.y += 3;
             EditorGUI.PropertyField(
-                new Rect(rect.x, rect.y, 120, EditorGUIUtility.singleLineHeight),
+                new Rect(rect.x + 10, rect.y, 120, EditorGUIUtility.singleLineHeight),
                 GetStateNameProperty(element),
                 GUIContent.none
             );
-            //EditorGUI.PropertyField(
-            //    new Rect(rect.x + 140, rect.y, 50, EditorGUIUtility.singleLineHeight),
-            //    GetFrameNumberProperty(element),
-            //    GUIContent.none
-            //);
+            EditorGUI.IntField(
+                new Rect(rect.x + 140, rect.y, 20, EditorGUIUtility.singleLineHeight),
+                0);
             SerializedProperty prop = GetFrameNumberProperty(element);
             int currentFrame = EditorGUI.IntSlider(
-                new Rect(rect.x + 200, rect.y, rect.width - 260, EditorGUIUtility.singleLineHeight),
+                new Rect(rect.x + 170, rect.y, rect.width - 260, EditorGUIUtility.singleLineHeight),
                 prop.intValue,
                 0,
-                (int)_lottieAnimation.TotalFramesCount);
+                _lottieAnimation != null ? (int)_lottieAnimation.TotalFramesCount : 0);
             if (currentFrame != prop.intValue)
             {
-                _lottieAnimation.DrawOneFrame(currentFrame);
+                _lottieAnimation?.DrawOneFrame(currentFrame);
                 prop.intValue = currentFrame;
             }
             EditorGUI.PropertyField(
@@ -182,8 +225,12 @@ namespace LottiePlugin.UI.Editor
         }
         private void DrawHeader(Rect rect)
         {
-            string name = "Button states";
-            EditorGUI.LabelField(rect, name);
+            const string NAME = "State Name";
+            EditorGUI.LabelField(new Rect(rect.x + 24, rect.y, 70, EditorGUIUtility.singleLineHeight), NAME);
+            const string FRAME_NUMBER = "Frame Number";
+            EditorGUI.LabelField(new Rect((rect.width / 2f) - 10, rect.y, 100, EditorGUIUtility.singleLineHeight), FRAME_NUMBER);
+            const string STAY_HERE = "Stay Here";
+            EditorGUI.LabelField(new Rect(rect.width - 42, rect.y, 60, EditorGUIUtility.singleLineHeight), STAY_HERE);
         }
         private void AddCallback(ReorderableList list)
         {
