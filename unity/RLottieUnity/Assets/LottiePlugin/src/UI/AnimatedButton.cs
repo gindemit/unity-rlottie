@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace LottiePlugin.UI
@@ -8,7 +8,9 @@ namespace LottiePlugin.UI
         [System.Serializable]
         public struct State
         {
+            public string Name;
             public int FrameNumber;
+            public bool StayHere;
         }
 
         internal TextAsset AnimationJson => _animationJson;

@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System.Collections.ObjectModel;
 using UnityEditor;
 using UnityEditor.UI;
@@ -40,11 +40,12 @@ namespace LottiePlugin.UI.Editor
 
             CreateAnimationIfNecessaryAndAttachToGraphic();
 
-            _statesList = new ReorderableList(serializedObject, _statesProperty, true, true, true, true);
-            _statesList.drawHeaderCallback = DrawHeader;
-            _statesList.onAddCallback = AddCallback;
-            _statesList.drawElementCallback = DrawListItems;
-            _statesList.onSelectCallback = OnSelectCallback;
+            _statesList = new ReorderableList(serializedObject, _statesProperty, true, true, true, true) {
+                drawHeaderCallback = DrawHeader,
+                onAddCallback = AddCallback,
+                drawElementCallback = DrawListItems,
+                onSelectCallback = OnSelectCallback
+            };
         }
         protected override void OnDisable()
         {
@@ -72,7 +73,13 @@ namespace LottiePlugin.UI.Editor
             {
                 _lottieAnimation?.Dispose();
                 _lottieAnimation = null;
-                CreateAnimationIfNecessaryAndAttachToGraphic();            }
+                CreateAnimationIfNecessaryAndAttachToGraphic();
+
+                _statesProperty.arraySize = 0;
+                _statesProperty.arraySize = 2;
+                SetStateValuesAtIndex(0, "Begin", 0, true);
+                SetStateValuesAtIndex(1, "End", (int)_lottieAnimation?.TotalFramesCount, true);
+            }
             if (button.AnimationJson == null)
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated button.", MessageType.Error);
@@ -103,6 +110,7 @@ namespace LottiePlugin.UI.Editor
             {
                 return;
             }
+            serializedObject.ApplyModifiedProperties();
             AnimatedButton button = serializedObject.targetObject as AnimatedButton;
             if (button.AnimationJson == null)
             {
@@ -122,8 +130,29 @@ namespace LottiePlugin.UI.Editor
             SerializedProperty element = _statesList.serializedProperty.GetArrayElementAtIndex(index); //The element in the list
 
             EditorGUI.PropertyField(
-                new Rect(rect.x, rect.y, 100, EditorGUIUtility.singleLineHeight),
-                element.FindPropertyRelative("FrameNumber"),
+                new Rect(rect.x, rect.y, 120, EditorGUIUtility.singleLineHeight),
+                GetStateNameProperty(element),
+                GUIContent.none
+            );
+            //EditorGUI.PropertyField(
+            //    new Rect(rect.x + 140, rect.y, 50, EditorGUIUtility.singleLineHeight),
+            //    GetFrameNumberProperty(element),
+            //    GUIContent.none
+            //);
+            SerializedProperty prop = GetFrameNumberProperty(element);
+            int currentFrame = EditorGUI.IntSlider(
+                new Rect(rect.x + 200, rect.y, rect.width - 260, EditorGUIUtility.singleLineHeight),
+                prop.intValue,
+                0,
+                (int)_lottieAnimation.TotalFramesCount);
+            if (currentFrame != prop.intValue)
+            {
+                _lottieAnimation.DrawOneFrame(currentFrame);
+                prop.intValue = currentFrame;
+            }
+            EditorGUI.PropertyField(
+                new Rect(rect.width, rect.y, 0, EditorGUIUtility.singleLineHeight),
+                GetStayHereProperty(element),
                 GUIContent.none
             );
 
@@ -160,8 +189,18 @@ namespace LottiePlugin.UI.Editor
         {
             _statesProperty.arraySize++;
             int newIndex = _statesProperty.arraySize - 1;
-            SerializedProperty newElement = _statesProperty.GetArrayElementAtIndex(newIndex);
-            //list.list.Add(new AnimatedButton.State());
+            string stateName = "State Number " + (newIndex + 1).ToString();
+            SetStateValuesAtIndex(newIndex, stateName, 0, true);
+        }
+        private void SetStateValuesAtIndex(int index, string stateName, int frameNumber, bool stayInThisState)
+        {
+            SerializedProperty element = _statesProperty.GetArrayElementAtIndex(index);
+            SerializedProperty stateNameProp = GetStateNameProperty(element);
+            stateNameProp.stringValue = stateName;
+            SerializedProperty frameNumberProp = GetFrameNumberProperty(element);
+            frameNumberProp.intValue = frameNumber;
+            SerializedProperty stayInThisStateProp = GetStayHereProperty(element);
+            stayInThisStateProp.boolValue = stayInThisState;
         }
         private void OnSelectCallback(ReorderableList list)
         {
@@ -172,9 +211,16 @@ namespace LottiePlugin.UI.Editor
             }
             int selectedElementIndex = selectedIndices[0];
             SerializedProperty selectedElement = _statesProperty.GetArrayElementAtIndex(selectedElementIndex);
-            SerializedProperty frameNumberProperty = selectedElement.FindPropertyRelative("FrameNumber");
+            SerializedProperty frameNumberProperty = GetFrameNumberProperty(selectedElement);
             _lottieAnimation?.DrawOneFrame(frameNumberProperty.intValue);
         }
+        private static SerializedProperty GetStateNameProperty(SerializedProperty element) =>
+            element.FindPropertyRelative("Name");
+        private static SerializedProperty GetFrameNumberProperty(SerializedProperty element) =>
+            element.FindPropertyRelative("FrameNumber");
+        private static SerializedProperty GetStayHereProperty(SerializedProperty element) =>
+            element.FindPropertyRelative("StayHere");
+
     }
 }
 #endif
