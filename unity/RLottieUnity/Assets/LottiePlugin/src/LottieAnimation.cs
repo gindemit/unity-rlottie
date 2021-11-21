@@ -9,6 +9,7 @@ namespace LottiePlugin
     public sealed class LottieAnimation : IDisposable
     {
         public Texture2D Texture { get; private set; }
+        public int CurrentFrame { get; private set; }
         public double FrameRate => _animationWrapper.frameRate;
         public long TotalFramesCount => _animationWrapper.totalFrames;
         public double DurationSeconds => _animationWrapper.duration;
@@ -19,8 +20,6 @@ namespace LottiePlugin
         private IntPtr _lottieRenderDataIntPtr;
         private LottieRenderData _lottieRenderData;
         private NativeArray<byte> _pixelData;
-
-        private int _currentFrame;
         private float _currentPlayTime;
         private double _frameDelta;
         private bool _isInPlayState;
@@ -58,23 +57,37 @@ namespace LottiePlugin
                 DrawOneFrame();
                 _currentPlayTime = 0;
             }
-            if (_currentFrame >= _animationWrapper.totalFrames)
+            if (CurrentFrame >= _animationWrapper.totalFrames)
             {
-                _currentFrame = 0;
+                CurrentFrame = 0;
             }
         }
         public void TogglePlay()
         {
             _isInPlayState = !_isInPlayState;
         }
+        public void Play()
+        {
+            _isInPlayState = true;
+        }
+        public void Pause()
+        {
+            _isInPlayState = false;
+        }
+        public void Stop()
+        {
+            Pause();
+            CurrentFrame = 0;
+        }
         public void DrawOneFrame()
         {
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, _currentFrame++, true);
+            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, (int)CurrentFrame++, true);
             Texture.Apply();
         }
         public void DrawOneFrame(int frameNumber)
         {
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true);
+            CurrentFrame = frameNumber;
+            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, CurrentFrame, true);
             Texture.Apply();
         }
 
