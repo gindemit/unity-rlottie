@@ -46,7 +46,7 @@ namespace LottiePlugin
             UnityEngine.Object.DestroyImmediate(Texture);
             Texture = null;
         }
-        public unsafe void Update()
+        public void Update()
         {
             if (_isInPlayState)
             {
