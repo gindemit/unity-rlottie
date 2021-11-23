@@ -29,11 +29,13 @@ namespace LottiePlugin.UI
         [SerializeField] private uint _textureWidth;
         [SerializeField] private uint _textureHeight;
         [SerializeField] private Graphic _graphic;
+        [SerializeField] private bool _ignoreInputWhileAnimating = true;
         [SerializeField] private State[] _states;
         [SerializeField] private ButtonClickedEvent _onClick = new ButtonClickedEvent();
 
         private int _currentStateIndex;
         private LottieAnimation _lottieAnimation;
+        private Coroutine _updateAnimationCoroutine;
 
         protected override void Start()
         {
@@ -67,12 +69,18 @@ namespace LottiePlugin.UI
 
         private void Press()
         {
-            if (!IsActive() || !IsInteractable())
+            if (!IsActive() ||
+                !IsInteractable() ||
+                (_updateAnimationCoroutine != null && _ignoreInputWhileAnimating))
             {
                 return;
             }
             _onClick.Invoke(_currentStateIndex, _states[_currentStateIndex]);
-            StartCoroutine(AnimateToNextState());
+            if (_updateAnimationCoroutine != null)
+            {
+                StopCoroutine(_updateAnimationCoroutine);
+            }
+            _updateAnimationCoroutine = StartCoroutine(AnimateToNextState());
         }
         private IEnumerator AnimateToNextState()
         {
@@ -91,6 +99,7 @@ namespace LottiePlugin.UI
                 _lottieAnimation.Update();
                 if (_lottieAnimation.CurrentFrame == 0)
                 {
+                    _updateAnimationCoroutine = null;
                     yield break;
                 }
                 yield return null;
@@ -99,6 +108,7 @@ namespace LottiePlugin.UI
             {
                 _lottieAnimation.Stop();
             }
+            _updateAnimationCoroutine = null;
         }
     }
 }

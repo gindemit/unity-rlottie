@@ -17,6 +17,8 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty _widthProperty;
         private SerializedProperty _heightProperty;
         private SerializedProperty _graphicProperty;
+        private SerializedProperty _ignoreInputWhileAnimatingProperty;
+        private SerializedProperty _onClickProperty;
         private SerializedProperty _statesProperty;
         //Selectable
         private SerializedProperty m_InteractableProperty;
@@ -34,6 +36,8 @@ namespace LottiePlugin.UI.Editor
             _widthProperty = serializedObject.FindProperty("_textureWidth");
             _heightProperty = serializedObject.FindProperty("_textureHeight");
             _graphicProperty = serializedObject.FindProperty("_graphic");
+            _ignoreInputWhileAnimatingProperty = serializedObject.FindProperty("_ignoreInputWhileAnimating");
+            _onClickProperty = serializedObject.FindProperty("_onClick");
             _statesProperty = serializedObject.FindProperty("_states");
 
             m_InteractableProperty = serializedObject.FindProperty("m_Interactable");
@@ -65,6 +69,7 @@ namespace LottiePlugin.UI.Editor
         {
             serializedObject.Update();
             EditorGUILayout.PropertyField(m_InteractableProperty);
+            EditorGUILayout.PropertyField(_ignoreInputWhileAnimatingProperty);
             EditorGUILayout.PropertyField(m_NavigationProperty);
             AnimatedButton button = serializedObject.targetObject as AnimatedButton;
 
@@ -124,6 +129,8 @@ namespace LottiePlugin.UI.Editor
             }
             EditorGUILayout.Space();
             _statesList.DoLayoutList();
+            EditorGUILayout.Space();
+            EditorGUILayout.PropertyField(_onClickProperty);
             serializedObject.ApplyModifiedProperties();
         }
         private void CreateAnimationIfNecessaryAndAttachToGraphic()
