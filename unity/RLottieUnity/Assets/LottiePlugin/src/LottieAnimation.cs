@@ -20,7 +20,7 @@ namespace LottiePlugin
         private IntPtr _lottieRenderDataIntPtr;
         private LottieRenderData _lottieRenderData;
         private NativeArray<byte> _pixelData;
-        private float _currentPlayTime;
+        private float _timeSinceLastRenderCall;
         private double _frameDelta;
         private bool _isInPlayState;
 
@@ -50,12 +50,12 @@ namespace LottiePlugin
         {
             if (_isInPlayState)
             {
-                _currentPlayTime += Time.deltaTime;
+                _timeSinceLastRenderCall += Time.deltaTime;
             }
-            if (_currentPlayTime > _frameDelta)
+            if (_timeSinceLastRenderCall > _frameDelta)
             {
                 DrawOneFrame();
-                _currentPlayTime = 0;
+                _timeSinceLastRenderCall = 0;
             }
             if (CurrentFrame >= _animationWrapper.totalFrames)
             {
@@ -69,6 +69,7 @@ namespace LottiePlugin
         public void Play()
         {
             _isInPlayState = true;
+            MakeSureTheFirstUpdateWillCallTheDraw();
         }
         public void Pause()
         {
@@ -107,6 +108,10 @@ namespace LottiePlugin
             _lottieRenderData.buffer = NativeArrayUnsafeUtility.GetUnsafePtr(_pixelData);
             NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
+        }
+        private void MakeSureTheFirstUpdateWillCallTheDraw()
+        {
+            _timeSinceLastRenderCall = (float)_frameDelta + 1f;
         }
 
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)

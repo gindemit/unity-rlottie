@@ -83,26 +83,21 @@ namespace LottiePlugin.UI
             }
             _lottieAnimation.Play();
             State nextState = _states[_currentStateIndex];
+            while (
+                (_currentStateIndex == 0 &&
+                _lottieAnimation.CurrentFrame <= _lottieAnimation.TotalFramesCount) ||
+                _lottieAnimation.CurrentFrame < nextState.FrameNumber)
+            {
+                _lottieAnimation.Update();
+                if (_lottieAnimation.CurrentFrame == 0)
+                {
+                    yield break;
+                }
+                yield return null;
+            }
             if (_currentStateIndex == 0)
             {
-                while (_lottieAnimation.CurrentFrame <= _lottieAnimation.TotalFramesCount)
-                {
-                    _lottieAnimation.Update();
-                    if (_lottieAnimation.CurrentFrame == 0)
-                    {
-                        yield break;
-                    }
-                    yield return null;
-                }
                 _lottieAnimation.Stop();
-            }
-            else
-            {
-                while (_lottieAnimation.CurrentFrame < nextState.FrameNumber)
-                {
-                    _lottieAnimation.Update();
-                    yield return null;
-                }
             }
         }
     }
