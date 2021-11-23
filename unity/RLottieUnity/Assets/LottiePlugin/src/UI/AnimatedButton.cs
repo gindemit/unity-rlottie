@@ -12,7 +12,6 @@ namespace LottiePlugin.UI
         {
             public string Name;
             public int FrameNumber;
-            public bool StayHere;
         }
         [System.Serializable]
         public class ButtonClickedEvent : UnityEngine.Events.UnityEvent<int, State> { }
@@ -80,15 +79,15 @@ namespace LottiePlugin.UI
             {
                 StopCoroutine(_updateAnimationCoroutine);
             }
-            _updateAnimationCoroutine = StartCoroutine(AnimateToNextState());
-        }
-        private IEnumerator AnimateToNextState()
-        {
             _currentStateIndex++;
             if (_currentStateIndex >= _states.Length)
             {
                 _currentStateIndex = 0;
             }
+            _updateAnimationCoroutine = StartCoroutine(AnimateToNextState());
+        }
+        private IEnumerator AnimateToNextState()
+        {
             _lottieAnimation.Play();
             State nextState = _states[_currentStateIndex];
             while (

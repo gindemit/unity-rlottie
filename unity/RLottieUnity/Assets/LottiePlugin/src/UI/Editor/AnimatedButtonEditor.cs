@@ -191,7 +191,7 @@ namespace LottiePlugin.UI.Editor
                 0);
             SerializedProperty prop = GetFrameNumberProperty(element);
             int currentFrame = EditorGUI.IntSlider(
-                new Rect(rect.x + 170, rect.y, rect.width - 260, EditorGUIUtility.singleLineHeight),
+                new Rect(rect.x + 170, rect.y, rect.width - 180, EditorGUIUtility.singleLineHeight),
                 prop.intValue,
                 0,
                 _lottieAnimation != null ? (int)_lottieAnimation.TotalFramesCount : 0);
@@ -200,11 +200,6 @@ namespace LottiePlugin.UI.Editor
                 _lottieAnimation?.DrawOneFrame(currentFrame);
                 prop.intValue = currentFrame;
             }
-            EditorGUI.PropertyField(
-                new Rect(rect.width, rect.y, 0, EditorGUIUtility.singleLineHeight),
-                GetStayHereProperty(element),
-                GUIContent.none
-            );
 
             //// The 'level' property
             //// The label field for level (width 100, height of a single line)
@@ -235,9 +230,7 @@ namespace LottiePlugin.UI.Editor
             const string NAME = "State Name";
             EditorGUI.LabelField(new Rect(rect.x + 24, rect.y, 70, EditorGUIUtility.singleLineHeight), NAME);
             const string FRAME_NUMBER = "Frame Number";
-            EditorGUI.LabelField(new Rect((rect.width / 2f) - 10, rect.y, 100, EditorGUIUtility.singleLineHeight), FRAME_NUMBER);
-            const string STAY_HERE = "Stay Here";
-            EditorGUI.LabelField(new Rect(rect.width - 42, rect.y, 60, EditorGUIUtility.singleLineHeight), STAY_HERE);
+            EditorGUI.LabelField(new Rect((rect.width / 2f) + 20, rect.y, 100, EditorGUIUtility.singleLineHeight), FRAME_NUMBER);
         }
         private void AddCallback(ReorderableList list)
         {
@@ -253,8 +246,6 @@ namespace LottiePlugin.UI.Editor
             stateNameProp.stringValue = stateName;
             SerializedProperty frameNumberProp = GetFrameNumberProperty(element);
             frameNumberProp.intValue = frameNumber;
-            SerializedProperty stayInThisStateProp = GetStayHereProperty(element);
-            stayInThisStateProp.boolValue = stayInThisState;
         }
         private void OnSelectCallback(ReorderableList list)
         {
@@ -272,9 +263,6 @@ namespace LottiePlugin.UI.Editor
             element.FindPropertyRelative("Name");
         private static SerializedProperty GetFrameNumberProperty(SerializedProperty element) =>
             element.FindPropertyRelative("FrameNumber");
-        private static SerializedProperty GetStayHereProperty(SerializedProperty element) =>
-            element.FindPropertyRelative("StayHere");
-
     }
 }
 #endif
