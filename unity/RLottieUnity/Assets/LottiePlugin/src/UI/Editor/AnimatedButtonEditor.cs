@@ -108,7 +108,12 @@ namespace LottiePlugin.UI.Editor
             {
                 _heightProperty.intValue = 128;
             }
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_animationSpeedProperty);
+            if (EditorGUI.EndChangeCheck())
+            {
+                UpdateTheAnimationInfoBoxText();
+            }
             EditorGUILayout.BeginHorizontal();
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_widthProperty);
@@ -160,7 +165,7 @@ namespace LottiePlugin.UI.Editor
                 string.Empty,
                 button.TextureWidth,
                 button.TextureHeight);
-            _lottieAnimation.DrawOneFrame();
+            _lottieAnimation.DrawOneFrame(0);
             SetGraphicsTexture(_lottieAnimation.Texture);
         }
         private void UpdateTheAnimationInfoBoxText()
@@ -171,7 +176,8 @@ namespace LottiePlugin.UI.Editor
             }
             _animationInfoBoxText = $"Animation info: Frame Rate \"{_lottieAnimation.FrameRate.ToString("F2")}\", " +
                     $"Total Frames \"{_lottieAnimation.TotalFramesCount.ToString()}\", " +
-                    $"Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec.";
+                    $"Original Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec. " +
+                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue) .ToString("F2")}\" sec. " ;
         }
         private void SetGraphicsTexture(Texture2D texture)
         {

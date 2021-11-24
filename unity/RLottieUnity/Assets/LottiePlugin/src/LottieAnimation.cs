@@ -52,14 +52,16 @@ namespace LottiePlugin
             {
                 _timeSinceLastRenderCall += Time.deltaTime * animationSpeed;
             }
-            if (_timeSinceLastRenderCall > _frameDelta)
+            if (_timeSinceLastRenderCall >= _frameDelta)
             {
-                DrawOneFrame();
+                int framesDelta = Mathf.RoundToInt(_timeSinceLastRenderCall / (float)_frameDelta);
+                CurrentFrame += framesDelta;
+                if (CurrentFrame >= _animationWrapper.totalFrames)
+                {
+                    CurrentFrame = 0;
+                }
+                DrawOneFrame(CurrentFrame);
                 _timeSinceLastRenderCall = 0;
-            }
-            if (CurrentFrame >= _animationWrapper.totalFrames)
-            {
-                CurrentFrame = 0;
             }
         }
         public void TogglePlay()
@@ -69,7 +71,7 @@ namespace LottiePlugin
         public void Play()
         {
             _isInPlayState = true;
-            MakeSureTheFirstUpdateWillCallTheDraw();
+            DrawOneFrame(++CurrentFrame);
         }
         public void Pause()
         {
@@ -80,15 +82,10 @@ namespace LottiePlugin
             Pause();
             CurrentFrame = 0;
         }
-        public void DrawOneFrame()
-        {
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, (int)CurrentFrame++, true);
-            Texture.Apply();
-        }
         public void DrawOneFrame(int frameNumber)
         {
+            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true);
             CurrentFrame = frameNumber;
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, CurrentFrame, true);
             Texture.Apply();
         }
 
@@ -108,10 +105,6 @@ namespace LottiePlugin
             _lottieRenderData.buffer = NativeArrayUnsafeUtility.GetUnsafePtr(_pixelData);
             NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
-        }
-        private void MakeSureTheFirstUpdateWillCallTheDraw()
-        {
-            _timeSinceLastRenderCall = (float)_frameDelta + 1f;
         }
 
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)

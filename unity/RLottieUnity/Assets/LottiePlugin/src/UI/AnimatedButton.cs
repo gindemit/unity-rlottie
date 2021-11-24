@@ -89,8 +89,8 @@ namespace LottiePlugin.UI
         }
         private IEnumerator AnimateToNextState()
         {
-            _lottieAnimation.Play();
             State nextState = _states[_currentStateIndex];
+            _lottieAnimation.Play();
             while (
                 (_currentStateIndex == 0 &&
                 _lottieAnimation.CurrentFrame <= _lottieAnimation.TotalFramesCount) ||
