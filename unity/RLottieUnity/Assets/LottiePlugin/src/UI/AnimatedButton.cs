@@ -25,6 +25,7 @@ namespace LottiePlugin.UI
         internal State[] States => _states;
 
         [SerializeField] private TextAsset _animationJson;
+        [SerializeField] private float _animationSpeed = 1f;
         [SerializeField] private uint _textureWidth;
         [SerializeField] private uint _textureHeight;
         [SerializeField] private Graphic _graphic;
@@ -95,7 +96,7 @@ namespace LottiePlugin.UI
                 _lottieAnimation.CurrentFrame <= _lottieAnimation.TotalFramesCount) ||
                 _lottieAnimation.CurrentFrame < nextState.FrameNumber)
             {
-                _lottieAnimation.Update();
+                _lottieAnimation.Update(_animationSpeed);
                 if (_lottieAnimation.CurrentFrame == 0)
                 {
                     _updateAnimationCoroutine = null;

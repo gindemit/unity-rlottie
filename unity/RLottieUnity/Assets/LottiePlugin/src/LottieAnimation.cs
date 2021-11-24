@@ -46,11 +46,11 @@ namespace LottiePlugin
             UnityEngine.Object.DestroyImmediate(Texture);
             Texture = null;
         }
-        public void Update()
+        public void Update(float animationSpeed = 1f)
         {
             if (_isInPlayState)
             {
-                _timeSinceLastRenderCall += Time.deltaTime;
+                _timeSinceLastRenderCall += Time.deltaTime * animationSpeed;
             }
             if (_timeSinceLastRenderCall > _frameDelta)
             {

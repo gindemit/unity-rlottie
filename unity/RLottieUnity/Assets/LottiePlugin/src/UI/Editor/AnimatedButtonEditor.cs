@@ -14,6 +14,7 @@ namespace LottiePlugin.UI.Editor
     {
         //Own
         private SerializedProperty _animationJsonProperty;
+        private SerializedProperty _animationSpeedProperty;
         private SerializedProperty _widthProperty;
         private SerializedProperty _heightProperty;
         private SerializedProperty _graphicProperty;
@@ -33,6 +34,7 @@ namespace LottiePlugin.UI.Editor
             base.OnEnable();
 
             _animationJsonProperty = serializedObject.FindProperty("_animationJson");
+            _animationSpeedProperty = serializedObject.FindProperty("_animationSpeed");
             _widthProperty = serializedObject.FindProperty("_textureWidth");
             _heightProperty = serializedObject.FindProperty("_textureHeight");
             _graphicProperty = serializedObject.FindProperty("_graphic");
@@ -106,6 +108,7 @@ namespace LottiePlugin.UI.Editor
             {
                 _heightProperty.intValue = 128;
             }
+            EditorGUILayout.PropertyField(_animationSpeedProperty);
             EditorGUILayout.BeginHorizontal();
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_widthProperty);
