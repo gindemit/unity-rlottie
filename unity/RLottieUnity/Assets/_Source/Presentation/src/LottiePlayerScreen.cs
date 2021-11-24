@@ -42,6 +42,10 @@ namespace Presentation
             if (_lottieAnimation != null)
             {
                 _lottieAnimation.Update();
+                if (_lottieAnimation.IsPlaying)
+                {
+                    _playPositionSlider.value = _lottieAnimation.CurrentFrame;
+                }
             }
         }
 
@@ -63,9 +67,15 @@ namespace Presentation
             _frameRateText.text = _lottieAnimation.FrameRate.ToString();
             _totalFramesCountText.text = _lottieAnimation.TotalFramesCount.ToString();
             _durationSecondsText.text = _lottieAnimation.DurationSeconds.ToString("F3");
+            _playPositionSlider.maxValue = _lottieAnimation.TotalFramesCount;
         }
         private void OnPlayPositionSliderValueChanged(float newValue)
         {
+            if (newValue != _lottieAnimation.CurrentFrame)
+            {
+                _lottieAnimation.Pause();
+                _lottieAnimation.DrawOneFrame(Mathf.RoundToInt(newValue));
+            }
         }
         private void OnPlayPauseButtonClick(int currentStateIndex, LottiePlugin.UI.AnimatedButton.State state)
         {

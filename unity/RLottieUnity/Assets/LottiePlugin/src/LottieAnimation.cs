@@ -13,6 +13,7 @@ namespace LottiePlugin
         public double FrameRate => _animationWrapper.frameRate;
         public long TotalFramesCount => _animationWrapper.totalFrames;
         public double DurationSeconds => _animationWrapper.duration;
+        public bool IsPlaying { get; private set; }
 
         private IntPtr _animationWrapperIntPtr;
         private LottieAnimationWrapper _animationWrapper;
@@ -22,21 +23,20 @@ namespace LottiePlugin
         private NativeArray<byte> _pixelData;
         private float _timeSinceLastRenderCall;
         private double _frameDelta;
-        private bool _isInPlayState;
 
         private LottieAnimation(string jsonData, string resourcesPath, uint width, uint height)
         {
             _animationWrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animationWrapperIntPtr);
             _frameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
             CreateRenderDataTexture2DMarshalToNative(width, height);
-            _isInPlayState = true;
+            IsPlaying = true;
         }
         private LottieAnimation(string jsonFilePath, uint width, uint height)
         {
             _animationWrapper = NativeBridge.LoadFromFile(jsonFilePath, out _animationWrapperIntPtr);
             _frameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
             CreateRenderDataTexture2DMarshalToNative(width, height);
-            _isInPlayState = true;
+            IsPlaying = true;
         }
         public void Dispose()
         {
@@ -48,7 +48,7 @@ namespace LottiePlugin
         }
         public void Update(float animationSpeed = 1f)
         {
-            if (_isInPlayState)
+            if (IsPlaying)
             {
                 _timeSinceLastRenderCall += Time.deltaTime * animationSpeed;
             }
@@ -66,16 +66,16 @@ namespace LottiePlugin
         }
         public void TogglePlay()
         {
-            _isInPlayState = !_isInPlayState;
+            IsPlaying = !IsPlaying;
         }
         public void Play()
         {
-            _isInPlayState = true;
+            IsPlaying = true;
             DrawOneFrame(++CurrentFrame);
         }
         public void Pause()
         {
-            _isInPlayState = false;
+            IsPlaying = false;
         }
         public void Stop()
         {
