@@ -16,6 +16,7 @@ namespace LottiePlugin.UI
         [System.Serializable]
         public class ButtonClickedEvent : UnityEngine.Events.UnityEvent<int, State> { }
 
+        public ButtonClickedEvent OnClick => _onClick;
 
         internal TextAsset AnimationJson => _animationJson;
         internal uint TextureWidth => _textureWidth;

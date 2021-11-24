@@ -12,17 +12,23 @@ namespace Presentation
         [SerializeField] private TMP_Text _frameRateText;
         [SerializeField] private TMP_Text _totalFramesCountText;
         [SerializeField] private TMP_Text _durationSecondsText;
+        [SerializeField] private Slider _playPositionSlider;
+        [SerializeField] private LottiePlugin.UI.AnimatedButton _playPauseButton;
 
         private LottiePlugin.LottieAnimation _lottieAnimation;
 
         internal void Init()
         {
             _animationDropdown.onValueChanged.AddListener(OnAnimationDropdownValueChanged);
+            _playPositionSlider.onValueChanged.AddListener(OnPlayPositionSliderValueChanged);
+            _playPauseButton.OnClick.AddListener(OnPlayPauseButtonClick);
             OnAnimationDropdownValueChanged(0);
         }
         public void Dispose()
         {
             _animationDropdown.onValueChanged.RemoveListener(OnAnimationDropdownValueChanged);
+            _playPositionSlider.onValueChanged.RemoveListener(OnPlayPositionSliderValueChanged);
+            _playPauseButton.OnClick.RemoveListener(OnPlayPauseButtonClick);
             _animationImage.texture = null;
             if (_lottieAnimation != null)
             {
@@ -52,11 +58,18 @@ namespace Presentation
             {
                 _lottieAnimation.Dispose();
             }
-            _lottieAnimation = new LottiePlugin.LottieAnimation(targetFilePath, 512, 512);
+            _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonFile(targetFilePath, 512, 512);
             _animationImage.texture = _lottieAnimation.Texture;
             _frameRateText.text = _lottieAnimation.FrameRate.ToString();
             _totalFramesCountText.text = _lottieAnimation.TotalFramesCount.ToString();
             _durationSecondsText.text = _lottieAnimation.DurationSeconds.ToString("F3");
+        }
+        private void OnPlayPositionSliderValueChanged(float newValue)
+        {
+        }
+        private void OnPlayPauseButtonClick(int currentStateIndex, LottiePlugin.UI.AnimatedButton.State state)
+        {
+            _lottieAnimation.TogglePlay();
         }
         private void CopyFileFromStreamingAssetsToPersistentData(string streamingAssetsFilePath, string targetFilePath)
         {
