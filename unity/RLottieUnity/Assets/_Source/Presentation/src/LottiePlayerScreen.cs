@@ -14,14 +14,17 @@ namespace Presentation
         [SerializeField] private TMP_Text _durationSecondsText;
         [SerializeField] private Slider _playPositionSlider;
         [SerializeField] private LottiePlugin.UI.AnimatedButton _playPauseButton;
+        [SerializeField] private LottiePlugin.UI.AnimatedButton _nextAnimationButton;
 
         private LottiePlugin.LottieAnimation _lottieAnimation;
+        private bool _ignoreSliderCallback;
 
         internal void Init()
         {
             _animationDropdown.onValueChanged.AddListener(OnAnimationDropdownValueChanged);
             _playPositionSlider.onValueChanged.AddListener(OnPlayPositionSliderValueChanged);
             _playPauseButton.OnClick.AddListener(OnPlayPauseButtonClick);
+            _nextAnimationButton.OnClick.AddListener(OnNextAnimationClick);
             OnAnimationDropdownValueChanged(0);
         }
         public void Dispose()
@@ -29,6 +32,7 @@ namespace Presentation
             _animationDropdown.onValueChanged.RemoveListener(OnAnimationDropdownValueChanged);
             _playPositionSlider.onValueChanged.RemoveListener(OnPlayPositionSliderValueChanged);
             _playPauseButton.OnClick.RemoveListener(OnPlayPauseButtonClick);
+            _nextAnimationButton.OnClick.RemoveListener(OnNextAnimationClick);
             _animationImage.texture = null;
             if (_lottieAnimation != null)
             {
@@ -67,11 +71,14 @@ namespace Presentation
             _frameRateText.text = _lottieAnimation.FrameRate.ToString();
             _totalFramesCountText.text = _lottieAnimation.TotalFramesCount.ToString();
             _durationSecondsText.text = _lottieAnimation.DurationSeconds.ToString("F3");
+            _ignoreSliderCallback = true;
             _playPositionSlider.maxValue = _lottieAnimation.TotalFramesCount;
+            _ignoreSliderCallback = false;
+            _playPauseButton.ResetState();
         }
         private void OnPlayPositionSliderValueChanged(float newValue)
         {
-            if (newValue != _lottieAnimation.CurrentFrame)
+            if (!_ignoreSliderCallback && newValue != _lottieAnimation.CurrentFrame)
             {
                 _lottieAnimation.Pause();
                 _lottieAnimation.DrawOneFrame(Mathf.RoundToInt(newValue));
@@ -80,6 +87,15 @@ namespace Presentation
         private void OnPlayPauseButtonClick(int currentStateIndex, LottiePlugin.UI.AnimatedButton.State state)
         {
             _lottieAnimation.TogglePlay();
+        }
+        private void OnNextAnimationClick(int currentStateIndex, LottiePlugin.UI.AnimatedButton.State state)
+        {
+            int animationToSelectAsNext = _animationDropdown.value;
+            if (++animationToSelectAsNext >= _animationDropdown.options.Count)
+            {
+                animationToSelectAsNext = 0;
+            }
+            _animationDropdown.value = animationToSelectAsNext;
         }
         private void CopyFileFromStreamingAssetsToPersistentData(string streamingAssetsFilePath, string targetFilePath)
         {

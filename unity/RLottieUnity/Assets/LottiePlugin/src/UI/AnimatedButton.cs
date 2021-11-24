@@ -55,6 +55,11 @@ namespace LottiePlugin.UI
             _lottieAnimation?.Dispose();
             _lottieAnimation = null;
         }
+        public void ResetState()
+        {
+            _currentStateIndex = 0;
+            _lottieAnimation?.DrawOneFrame(_states[0].FrameNumber);
+        }
 
         public void OnPointerClick(PointerEventData eventData)
         {
