@@ -100,6 +100,7 @@ namespace Presentation
         private void CopyFileFromStreamingAssetsToPersistentData(string streamingAssetsFilePath, string targetFilePath)
         {
             byte[] file = Support.StreamingAssets.StreamingAssetsHelper.LoadFileFromStreamingAssets(streamingAssetsFilePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath));
             File.WriteAllBytes(targetFilePath, file);
         }
     }
