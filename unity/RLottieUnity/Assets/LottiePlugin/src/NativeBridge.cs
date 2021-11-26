@@ -63,6 +63,21 @@ namespace LottiePlugin
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_render_create_future_async")]
+        internal static extern int LottieRenderCreateFutureAsync(
+            IntPtr animationWrapper,
+            IntPtr renderData,
+            int frameNumber,
+            bool keepAspectRatio);
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_render_get_future_result")]
+        internal static extern int LottieRenderGetFutureResult(
+            IntPtr animationWrapper,
+            IntPtr renderData);
+
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_allocate_render_data")]
         internal static extern int LottieAllocateRenderData(
             ref IntPtr animationWrapper);
