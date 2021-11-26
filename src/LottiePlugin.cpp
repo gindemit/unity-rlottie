@@ -49,6 +49,27 @@ extern "C" {
         return 0;
     }
 
+
+    EXPORT_API int32_t lottie_render_create_future_async(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data,
+        uint32_t frame_number,
+        bool keep_aspect_ratio) {
+        rlottie::Surface surface(
+            render_data->buffer,
+            render_data->width,
+            render_data->height,
+            render_data->bytesPerLine);
+        render_data->render_future = animation_wrapper->animation->render(frame_number, surface, keep_aspect_ratio);
+        return 0;
+    }
+    EXPORT_API int32_t lottie_render_get_future_result(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data) {
+        render_data->render_future.get();
+        return 0;
+    }
+
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data) {
         *render_data = new lottie_render_data();
         return 0;

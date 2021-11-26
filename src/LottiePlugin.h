@@ -21,6 +21,7 @@ typedef struct lottie_render_data {
     uint32_t width;
     uint32_t height;
     uint32_t bytesPerLine;
+    std::future<rlottie::Surface> render_future;
 } lottie_render_data;
 
 extern "C" {
@@ -32,6 +33,16 @@ extern "C" {
         lottie_render_data* render_data,
         uint32_t frame_number,
         bool keep_aspect_ratio);
+
+    EXPORT_API int32_t lottie_render_create_future_async(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data,
+        uint32_t frame_number,
+        bool keep_aspect_ratio);
+    EXPORT_API int32_t lottie_render_get_future_result(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data);
+
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data);
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data);
 }
