@@ -12,4 +12,49 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8d72c9f5198d886458e524749ed49d6b, type: 3}
   m_Name: LottieAnimationsArray
   m_EditorClassIdentifier: 
-  _animations: []
+  _animations:
+  - alright_sticker
+  - black_friday_animation
+  - body_movin
+  - butterfly_loading
+  - check_animation
+  - concept_floral_branch_butterfly_and_tree
+  - confetti
+  - favourite_app_icon
+  - glow_loading
+  - hamburger_arrow_transition
+  - hubit
+  - lottiefiles_sticker_2
+  - lottiefiles_sticker_5
+  - marketing
+  - motorcycle
+  - phone
+  - power_sticker
+  - preloader
+  - squid_game\0
+  - squid_game\1
+  - squid_game\10
+  - squid_game\11
+  - squid_game\12
+  - squid_game\13
+  - squid_game\14
+  - squid_game\15
+  - squid_game\16
+  - squid_game\17
+  - squid_game\18
+  - squid_game\19
+  - squid_game\2
+  - squid_game\20
+  - squid_game\21
+  - squid_game\22
+  - squid_game\23
+  - squid_game\24
+  - squid_game\3
+  - squid_game\4
+  - squid_game\5
+  - squid_game\6
+  - squid_game\7
+  - squid_game\8
+  - squid_game\9
+  - sticker
+  - taking_the_duggy_out
