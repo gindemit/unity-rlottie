@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Presentation
+namespace Presentation.UI
 {
     public class LottiePlayerScreen : MonoBehaviour, System.IDisposable
     {

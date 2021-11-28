@@ -1,8 +1,7 @@
-using System;
 using LottiePlugin.UI;
 using UnityEngine;
 
-namespace Presentation
+namespace Presentation.UI
 {
     internal sealed class MainMenu : MonoBehaviour
     {
