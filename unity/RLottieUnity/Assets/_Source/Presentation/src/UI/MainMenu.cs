@@ -6,6 +6,7 @@ namespace Presentation.UI
     internal sealed class MainMenu : MonoBehaviour, System.IDisposable
     {
         [SerializeField] private LottiePlayerScreen _lottiePlayerScreen;
+        [SerializeField] private LottieAnimationsPreview _lottieAnimationsPreview;
         [SerializeField] private AnimatedButton _homeButton;
         [SerializeField] private AnimatedButton _playerButton;
         [SerializeField] private AnimatedButton _exploreButton;
@@ -15,14 +16,17 @@ namespace Presentation.UI
             _homeButton.OnClick.AddListener(OnHomeButtonClick);
             _playerButton.OnClick.AddListener(OnPlayerButtonClick);
             _exploreButton.OnClick.AddListener(OnExploreButtonClick);
-            _lottiePlayerScreen.Init(lottieAnimations);
+            _lottieAnimationsPreview.Init(lottieAnimations);
+            _lottiePlayerScreen.gameObject.SetActive(false);
+            //_lottiePlayerScreen.Init(lottieAnimations);
         }
         public void Dispose()
         {
             _homeButton.OnClick.RemoveListener(OnHomeButtonClick);
             _playerButton.OnClick.RemoveListener(OnPlayerButtonClick);
             _exploreButton.OnClick.RemoveListener(OnExploreButtonClick);
-            _lottiePlayerScreen.Dispose();
+            _lottieAnimationsPreview.Dispose();
+            //_lottiePlayerScreen.Dispose();
         }
 
         private void OnHomeButtonClick(int stateIndex, AnimatedButton.State state)

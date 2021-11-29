@@ -41,7 +41,10 @@ namespace Presentation.UI
             _playPositionSlider.onValueChanged.RemoveListener(OnPlayPositionSliderValueChanged);
             _playPauseButton.OnClick.RemoveListener(OnPlayPauseButtonClick);
             _nextAnimationButton.OnClick.RemoveListener(OnNextAnimationClick);
-            _animationImage.texture = null;
+            if (_animationImage != null)
+            {
+                _animationImage.texture = null;
+            }
             if (_lottieAnimation != null)
             {
                 _lottieAnimation.Dispose();
@@ -105,7 +108,7 @@ namespace Presentation.UI
             }
             _animationDropdown.value = animationToSelectAsNext;
         }
-        private void CopyFileFromStreamingAssetsToPersistentData(string streamingAssetsFilePath, string targetFilePath)
+        internal static void CopyFileFromStreamingAssetsToPersistentData(string streamingAssetsFilePath, string targetFilePath)
         {
             byte[] file = Support.StreamingAssets.StreamingAssetsHelper.LoadFileFromStreamingAssets(streamingAssetsFilePath);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath));
