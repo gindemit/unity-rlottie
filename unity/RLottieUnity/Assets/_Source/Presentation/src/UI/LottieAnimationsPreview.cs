@@ -49,7 +49,14 @@ namespace Presentation.UI
         {
             for (int i = 0; i < _animationPreviews.Count; ++i)
             {
-                _animationPreviews[i].DoUpdate();
+                _animationPreviews[i].DoUpdateAsync();
+            }
+        }
+        private void LateUpdate()
+        {
+            for (int i = 0; i < _animationPreviews.Count; ++i)
+            {
+                _animationPreviews[i].DoDrawOneFrameAsyncGetResult();
             }
         }
     }

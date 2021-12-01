@@ -34,5 +34,13 @@ namespace Presentation.UI
         {
             _lottieAnimation.Update();
         }
+        internal void DoUpdateAsync()
+        {
+            _lottieAnimation.UpdateAsync();
+        }
+        internal void DoDrawOneFrameAsyncGetResult()
+        {
+            _lottieAnimation.DrawOneFrameAsyncGetResult();
+        }
     }
 }
