@@ -15,11 +15,9 @@ namespace Presentation.UI
 
         private List<AnimationPreview> _animationPreviews;
 
-        internal void Init(Data.LottieAnimations lottieAnimations)
+        internal void Init(string[] animations)
         {
-            string[] animations = lottieAnimations.Animations;
             _animationPreviews = new List<AnimationPreview>(animations.Length);
-            
             Vector2 viewPortSize = _scrollRectViewPort.rect.size;
             float oneItemSize = (viewPortSize.x / _columns) - (_gabBetweenItems * _columns);
             for (int i = 0; i < animations.Length; ++i)

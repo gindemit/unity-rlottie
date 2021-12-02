@@ -66,13 +66,7 @@ namespace Presentation.UI
 
         private void OnAnimationDropdownValueChanged(int newValue)
         {
-            string selectedFileName = _animationDropdown.options[newValue].text;
-            selectedFileName += ".json";
-            string targetFilePath = Path.Combine(Application.persistentDataPath, selectedFileName);
-            if (!File.Exists(targetFilePath))
-            {
-                CopyFileFromStreamingAssetsToPersistentData(selectedFileName, targetFilePath);
-            }
+            string targetFilePath = Utility.FilesHelper.GetPersistentAnimationPath(_animationDropdown.options[newValue].text);
             if (_lottieAnimation != null)
             {
                 _lottieAnimation.Dispose();
@@ -107,12 +101,6 @@ namespace Presentation.UI
                 animationToSelectAsNext = 0;
             }
             _animationDropdown.value = animationToSelectAsNext;
-        }
-        internal static void CopyFileFromStreamingAssetsToPersistentData(string streamingAssetsFilePath, string targetFilePath)
-        {
-            byte[] file = Support.StreamingAssets.StreamingAssetsHelper.LoadFileFromStreamingAssets(streamingAssetsFilePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath));
-            File.WriteAllBytes(targetFilePath, file);
         }
     }
 }

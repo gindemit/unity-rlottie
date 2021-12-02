@@ -13,15 +13,9 @@ namespace Presentation.UI
 
         private LottiePlugin.LottieAnimation _lottieAnimation;
 
-        internal void Init(string animation, uint width, uint height)
+        internal void Init(string jsonFilePath, uint width, uint height)
         {
-            animation += ".json";
-            string targetFilePath = Path.Combine(Application.persistentDataPath, animation);
-            if (!File.Exists(targetFilePath))
-            {
-                LottiePlayerScreen.CopyFileFromStreamingAssetsToPersistentData(animation, targetFilePath);
-            }
-            _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonFile(targetFilePath, width, height);
+            _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonFile(jsonFilePath, width, height);
             _animationPreview.texture = _lottieAnimation.Texture;
             DoUpdate();
         }
