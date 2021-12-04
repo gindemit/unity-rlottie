@@ -11,8 +11,9 @@ namespace Presentation.Utility
         {
             for (int i = 0; i < animations.Length; ++i)
             {
-                string jsonFilePath = Path.Combine(Application.streamingAssetsPath, animations[i] + JSON_EXTENTION);
-                string targetFilePath = Path.Combine(Application.persistentDataPath, jsonFilePath);
+                string fileName = animations[i] + JSON_EXTENTION;
+                string jsonFilePath = Path.Combine(Application.streamingAssetsPath, fileName);
+                string targetFilePath = Path.Combine(Application.persistentDataPath, fileName);
                 if (!File.Exists(targetFilePath))
                 {
                     CopyFileFromStreamingAssetsToPersistentData(jsonFilePath, targetFilePath);
