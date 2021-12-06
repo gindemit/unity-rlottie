@@ -139,10 +139,18 @@ namespace LottiePlugin
 
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)
         {
+            if (!System.IO.File.Exists(filePath))
+            {
+                throw new System.ArgumentException($"Can not find file at path: \"{filePath}\"");
+            }
             return new LottieAnimation(filePath, width, height);
         }
         public static LottieAnimation LoadFromJsonData(string jsonData, string resourcesPath, uint width, uint height)
         {
+            if (string.IsNullOrWhiteSpace(jsonData))
+            {
+                throw new System.ArgumentException($"The provided json animation file is empty");
+            }
             return new LottieAnimation(jsonData, resourcesPath, width, height);
         }
     }
