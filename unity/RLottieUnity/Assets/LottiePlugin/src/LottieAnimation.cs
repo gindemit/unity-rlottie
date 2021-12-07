@@ -113,7 +113,7 @@ namespace LottiePlugin
                 0,
                 false);
             _pixelData = Texture.GetRawTextureData<byte>();
-            _lottieRenderData.buffer = NativeArrayUnsafeUtility.GetUnsafePtr(_pixelData);
+            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
             NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
         }
