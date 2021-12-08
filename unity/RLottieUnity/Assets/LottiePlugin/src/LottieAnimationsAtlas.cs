@@ -42,7 +42,16 @@ namespace LottiePlugin
         //}
         private LottieAnimationsAtlas(string[] jsonFilePaths, uint width, uint height)
         {
-            _animationWrappers = new LottieAnimationWrapper[jsonFilePaths.Length];
+            int animationsCount = jsonFilePaths.Length;
+            CurrentFrame = new int[animationsCount];
+            _animationWrappers = new LottieAnimationWrapper[animationsCount];
+            _animationWrapperIntPtrs = new IntPtr[animationsCount];
+            _lottieRenderDataIntPtrs = new IntPtr[animationsCount];
+            _lottieRenderDatas = new LottieRenderData[animationsCount];
+            _pixelDatas = new NativeArray<byte>[animationsCount];
+            _timesSinceLastRenderCall = new float[animationsCount];
+            _frameDeltas = new double[animationsCount];
+            _asyncDrawsWasCalled = new bool[animationsCount];
             for (int i = 0; i < jsonFilePaths.Length; ++i)
             {
                 string jsonFilePath = jsonFilePaths[i];
@@ -112,13 +121,21 @@ namespace LottiePlugin
         {
             NativeBridge.LottieRenderCreateFutureAsync(_animationWrapperIntPtrs[index], _lottieRenderDataIntPtrs[index], frameNumber, true);
         }
-        public void DrawOneFrameAsyncGetResult(int index)
+        public void DrawOneFrameAsyncGetResult()
         {
-            if (_asyncDrawsWasCalled[index])
+            bool needToApplyTexture = false;
+            for (int i = 0; i < _asyncDrawsWasCalled.Length; ++i)
             {
-                NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtrs[index], _lottieRenderDataIntPtrs[index]);
+                if (_asyncDrawsWasCalled[i])
+                {
+                    NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtrs[i], _lottieRenderDataIntPtrs[i]);
+                    _asyncDrawsWasCalled[i] = false;
+                    needToApplyTexture = true;
+                }
+            }
+            if (needToApplyTexture)
+            {
                 Texture.Apply();
-                _asyncDrawsWasCalled[index] = false;
             }
         }
 
