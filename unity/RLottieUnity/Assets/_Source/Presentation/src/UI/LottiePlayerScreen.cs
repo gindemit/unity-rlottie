@@ -19,7 +19,7 @@ namespace Presentation.UI
         private LottiePlugin.LottieAnimation _lottieAnimation;
         private bool _ignoreSliderCallback;
 
-        internal void Init(Data.LottieAnimations lottieAnimations)
+        internal void Init(string[] animationPaths)
         {
             _animationDropdown.onValueChanged.AddListener(OnAnimationDropdownValueChanged);
             _playPositionSlider.onValueChanged.AddListener(OnPlayPositionSliderValueChanged);
@@ -27,12 +27,13 @@ namespace Presentation.UI
             _nextAnimationButton.OnClick.AddListener(OnNextAnimationClick);
             OnAnimationDropdownValueChanged(0);
 
-            string[] animations = lottieAnimations.Animations;
-            TMP_Dropdown.OptionData[] options = new TMP_Dropdown.OptionData[animations.Length];
+            TMP_Dropdown.OptionData[] options = new TMP_Dropdown.OptionData[animationPaths.Length];
             _animationDropdown.options.Clear();
-            for (int i = 0; i < animations.Length; ++i)
+            for (int i = 0; i < animationPaths.Length; ++i)
             {
-                _animationDropdown.options.Add(new TMP_Dropdown.OptionData(animations[i]));
+                _animationDropdown.options.Add(
+                    new TMP_Dropdown.OptionData(
+                        Path.GetFileNameWithoutExtension(animationPaths[i])));
             }
     }
         public void Dispose()
