@@ -17,8 +17,8 @@ namespace Presentation.UI
             _playerButton.OnClick.AddListener(OnPlayerButtonClick);
             _exploreButton.OnClick.AddListener(OnExploreButtonClick);
             _lottieAnimationsPreview.Init(animations);
+            _lottiePlayerScreen.Init(animations);
             _lottiePlayerScreen.gameObject.SetActive(false);
-            //_lottiePlayerScreen.Init(lottieAnimations);
         }
         public void Dispose()
         {
@@ -26,16 +26,18 @@ namespace Presentation.UI
             _playerButton.OnClick.RemoveListener(OnPlayerButtonClick);
             _exploreButton.OnClick.RemoveListener(OnExploreButtonClick);
             _lottieAnimationsPreview.Dispose();
-            //_lottiePlayerScreen.Dispose();
+            _lottiePlayerScreen.Dispose();
         }
 
         private void OnHomeButtonClick(int stateIndex, AnimatedButton.State state)
         {
-
+            _lottiePlayerScreen.gameObject.SetActive(false);
+            _lottieAnimationsPreview.gameObject.SetActive(true);
         }
         private void OnPlayerButtonClick(int stateIndex, AnimatedButton.State state)
         {
-
+            _lottiePlayerScreen.gameObject.SetActive(true);
+            _lottieAnimationsPreview.gameObject.SetActive(false);
         }
         private void OnExploreButtonClick(int stateIndex, AnimatedButton.State state)
         {
