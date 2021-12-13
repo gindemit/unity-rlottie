@@ -42,7 +42,7 @@ namespace MyEditor.Menu
                 ReadOnlySpan<char> final = filePath.Slice(
                     ASSETS_STREAMINGASSETS_FOLDER_PREFIX_LENGTH,
                     filePath.Length - ASSETS_STREAMINGASSETS_FOLDER_PREFIX_LENGTH - DOT_JSON_EXTENTION_LENGTH);
-                finalFilePaths[i] = final.ToString();
+                finalFilePaths[i] = final.ToString().Replace("\\", "/");//TODO: find a better solution than "Replace"
             }
             lottieAnimations.SetAnimationsEditorCall(finalFilePaths);
         }
