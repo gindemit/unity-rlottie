@@ -15,14 +15,14 @@ namespace Presentation.UI
 
         private List<AnimationPreview> _animationPreviews;
 
-        internal void Init(string[] animations)
+        internal void Init(string[] animationPaths)
         {
-            _animationPreviews = new List<AnimationPreview>(animations.Length);
+            _animationPreviews = new List<AnimationPreview>(animationPaths.Length);
             Vector2 viewPortSize = _scrollRectViewPort.rect.size;
             float oneItemSize = (viewPortSize.x / _columns) - (_gabBetweenItems * _columns);
-            for (int i = 0; i < animations.Length; ++i)
+            for (int i = 0; i < animationPaths.Length; ++i)
             {
-                string animation = animations[i];
+                string animation = animationPaths[i];
                 AnimationPreview animationPreview = Instantiate(_animationPreviewPrefab, _scrollRectContent);
                 animationPreview.Init(animation, 128, 128);
                 animationPreview.RectTransform.anchoredPosition = new Vector3(
@@ -33,7 +33,7 @@ namespace Presentation.UI
             }
             _scrollRectContent.sizeDelta = new Vector2(
                 _scrollRectContent.sizeDelta.x,
-                (animations.Length / _columns * oneItemSize) + (animations.Length / _columns * _gabBetweenItems));
+                (animationPaths.Length / _columns * oneItemSize) + (animationPaths.Length / _columns * _gabBetweenItems));
         }
         public void Dispose()
         {

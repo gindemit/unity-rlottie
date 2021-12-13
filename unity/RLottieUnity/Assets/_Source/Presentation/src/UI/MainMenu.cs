@@ -11,13 +11,13 @@ namespace Presentation.UI
         [SerializeField] private AnimatedButton _playerButton;
         [SerializeField] private AnimatedButton _exploreButton;
 
-        internal void Init(string[] animations)
+        internal void Init(string[] animationPaths, string[] animations)
         {
             _homeButton.OnClick.AddListener(OnHomeButtonClick);
             _playerButton.OnClick.AddListener(OnPlayerButtonClick);
             _exploreButton.OnClick.AddListener(OnExploreButtonClick);
-            _lottieAnimationsPreview.Init(animations);
-            _lottiePlayerScreen.Init(animations);
+            _lottieAnimationsPreview.Init(animationPaths);
+            _lottiePlayerScreen.Init(animationPaths, animations);
             _lottiePlayerScreen.gameObject.SetActive(false);
         }
         public void Dispose()

@@ -1,4 +1,3 @@
-using System.IO;
 using UnityEngine;
 
 namespace Presentation.State
@@ -12,7 +11,9 @@ namespace Presentation.State
         {
             Utility.FilesHelper.CopyAnimationsJsonsFromStreamingAssetsToPersistentData(
                 _lottieAnimations.Animations);
-            _mainMenu.Init(Utility.FilesHelper.GetPersistentAnimationsPaths(_lottieAnimations.Animations));
+            _mainMenu.Init(
+                Utility.FilesHelper.GetPersistentAnimationsPaths(_lottieAnimations.Animations),
+                _lottieAnimations.Animations);
         }
         private void OnDestroy()
         {
