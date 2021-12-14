@@ -18,22 +18,29 @@ namespace Presentation.UI
 
         private LottiePlugin.LottieAnimation _lottieAnimation;
         private bool _ignoreSliderCallback;
+        private string[] _animationPaths;
 
-        internal void Init(string[] animationPaths)
+        internal void Init(string[] animationPaths, string[] animations)
         {
+            if (animationPaths == null ||
+                animations == null ||
+                animations.Length != animationPaths.Length)
+            {
+                throw new System.ArgumentException(nameof(animationPaths));
+            }
+            _animationPaths = animationPaths;
             _animationDropdown.onValueChanged.AddListener(OnAnimationDropdownValueChanged);
             _playPositionSlider.onValueChanged.AddListener(OnPlayPositionSliderValueChanged);
             _playPauseButton.OnClick.AddListener(OnPlayPauseButtonClick);
             _nextAnimationButton.OnClick.AddListener(OnNextAnimationClick);
             OnAnimationDropdownValueChanged(0);
 
-            TMP_Dropdown.OptionData[] options = new TMP_Dropdown.OptionData[animationPaths.Length];
+            TMP_Dropdown.OptionData[] options = new TMP_Dropdown.OptionData[animations.Length];
             _animationDropdown.options.Clear();
-            for (int i = 0; i < animationPaths.Length; ++i)
+            for (int i = 0; i < animations.Length; ++i)
             {
                 _animationDropdown.options.Add(
-                    new TMP_Dropdown.OptionData(
-                        Path.GetFileNameWithoutExtension(animationPaths[i])));
+                    new TMP_Dropdown.OptionData(animations[i]));
             }
     }
         public void Dispose()
@@ -67,10 +74,11 @@ namespace Presentation.UI
 
         private void OnAnimationDropdownValueChanged(int newValue)
         {
-            string targetFilePath = Utility.FilesHelper.GetPersistentAnimationPath(_animationDropdown.options[newValue].text);
+            string targetFilePath = _animationPaths[newValue];
             if (_lottieAnimation != null)
             {
                 _lottieAnimation.Dispose();
+                _lottieAnimation = null;
             }
             _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonFile(targetFilePath, 512, 512);
             _animationImage.texture = _lottieAnimation.Texture;
