@@ -8,6 +8,9 @@ namespace Presentation.Storage
 {
     internal sealed class TelegramStickerStorage : System.IDisposable
     {
+        private const string TGS_FILE_EXTENTION = ".tgs";
+        private const string ANY_TGS_FILE = "*.tgs";
+
         private readonly TelegramBotClient mTelegramClient;
         private readonly string mTgsFilesDirectoryPath;
         private readonly string mJsonFilesDirectoryPath;
@@ -37,7 +40,7 @@ namespace Presentation.Storage
             for (int i = 0; i < stickerSet.Stickers.Length; ++i)
             {
                 Telegram.Bot.Types.Sticker sticker = stickerSet.Stickers[i];
-                string tgsFilePath = Path.Combine(tgsFinalDirectoryPath, sticker.FileUniqueId + ".tgs");
+                string tgsFilePath = Path.Combine(tgsFinalDirectoryPath, sticker.FileUniqueId + TGS_FILE_EXTENTION);
                 if (!File.Exists(tgsFilePath))
                 {
                     using FileStream downloadedFile = File.OpenWrite(tgsFilePath);
@@ -46,6 +49,27 @@ namespace Presentation.Storage
                 pathsToTgsFiles[i] = tgsFilePath;
             }
             return pathsToTgsFiles;
+        }
+        /// <summary>
+        /// Downloads to local storage telegram stickers by pack name if the pack is not yet there
+        /// </summary>
+        /// <param name="packName">Name of Telegram sticker pack</param>
+        /// <returns>Paths to local downloaded tgs files</returns>
+        public Task<string[]> DownloadTelegramStickersPackIfNotThereAsync(string packName)
+        {
+            string tgsFinalDirectoryPath = Path.Combine(mTgsFilesDirectoryPath, packName);
+            if (Directory.Exists(tgsFinalDirectoryPath))
+            {
+                string[] pathsToTgsFiles = Directory.GetFiles(
+                    tgsFinalDirectoryPath,
+                    ANY_TGS_FILE,
+                    SearchOption.TopDirectoryOnly);
+                if (pathsToTgsFiles.Length > 0)
+                {
+                    return Task.FromResult(pathsToTgsFiles);
+                }
+            }
+            return DownloadTelegramStickersPackAsync(packName);
         }
         /// <summary>
         /// Unpacks already downloaded tgs files to json local files
