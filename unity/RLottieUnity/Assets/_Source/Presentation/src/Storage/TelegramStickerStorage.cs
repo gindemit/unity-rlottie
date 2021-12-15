@@ -8,8 +8,12 @@ namespace Presentation.Storage
 {
     internal sealed class TelegramStickerStorage : System.IDisposable
     {
-        private const string TGS_FILE_EXTENTION = ".tgs";
-        private const string ANY_TGS_FILE = "*.tgs";
+        private const string JSON = "json";
+        private const string TGS = "tgs";
+        private const string JSON_FILE_EXTENTION = "." + JSON;
+        private const string TGS_FILE_EXTENTION = "." + TGS;
+        private const string ANY_TGS_FILE = "*." + TGS;
+        private const string ANY_JSON_FILE = "*." + JSON;
 
         private readonly TelegramBotClient mTelegramClient;
         private readonly string mTgsFilesDirectoryPath;
@@ -17,9 +21,9 @@ namespace Presentation.Storage
 
         internal TelegramStickerStorage(string botKey)
         {
-            mTelegramClient = new Telegram.Bot.TelegramBotClient(botKey);
-            mTgsFilesDirectoryPath = Path.Combine(Application.persistentDataPath, "tgs");
-            mJsonFilesDirectoryPath = Path.Combine(Application.persistentDataPath, "json");
+            mTelegramClient = new TelegramBotClient(botKey);
+            mTgsFilesDirectoryPath = Path.Combine(Application.persistentDataPath, TGS);
+            mJsonFilesDirectoryPath = Path.Combine(Application.persistentDataPath, JSON);
         }
         public void Dispose()
         {
@@ -30,7 +34,7 @@ namespace Presentation.Storage
         /// Downloads to local storage telegram stickers by pack name
         /// </summary>
         /// <param name="packName">Name of Telegram sticker pack</param>
-        /// <returns>Paths to local downloaded tgs files</returns>
+        /// <returns>Paths to local tgs files</returns>
         public async Task<string[]> DownloadTelegramStickersPackAsync(string packName)
         {
             Telegram.Bot.Types.StickerSet stickerSet = await mTelegramClient.GetStickerSetAsync(packName);
@@ -54,8 +58,8 @@ namespace Presentation.Storage
         /// Downloads to local storage telegram stickers by pack name if the pack is not yet there
         /// </summary>
         /// <param name="packName">Name of Telegram sticker pack</param>
-        /// <returns>Paths to local downloaded tgs files</returns>
-        public Task<string[]> DownloadTelegramStickersPackIfNotThereAsync(string packName)
+        /// <returns>Paths to local tgs files</returns>
+        public Task<string[]> DownloadTelegramStickersPackIfNecessaryAsync(string packName)
         {
             string tgsFinalDirectoryPath = Path.Combine(mTgsFilesDirectoryPath, packName);
             if (Directory.Exists(tgsFinalDirectoryPath))
@@ -76,10 +80,9 @@ namespace Presentation.Storage
         /// </summary>
         /// <param name="packName">Name of Telegram sticker pack</param>
         /// <param name="tgsLocalFilesPaths">Paths to local tgs files</param>
-        /// <returns></returns>
-        public async Task<string[]> UnpackLocalTgsFilesToJsonFiles(string packName, string[] tgsLocalFilesPaths)
+        /// <returns>Paths to local json files</returns>
+        public async Task<string[]> UnpackLocalTgsFilesToJsonFilesAsync(string packName, string[] tgsLocalFilesPaths)
         {
-            string tgsFinalDirectoryPath = Path.Combine(mTgsFilesDirectoryPath, packName);
             string jsonFinalDirectoryPath = Path.Combine(mJsonFilesDirectoryPath, packName);
             Directory.CreateDirectory(jsonFinalDirectoryPath);
             string[] jsonFiles = new string[tgsLocalFilesPaths.Length];
@@ -87,7 +90,7 @@ namespace Presentation.Storage
             {
                 string tgsFilePath = tgsLocalFilesPaths[i];
                 string stickerUniqueId = Path.GetFileNameWithoutExtension(tgsFilePath);
-                string jsonFilePath = Path.Combine(jsonFinalDirectoryPath, stickerUniqueId + ".json");
+                string jsonFilePath = Path.Combine(jsonFinalDirectoryPath, stickerUniqueId + JSON_FILE_EXTENTION);
                 using FileStream downloadedFile = File.OpenRead(tgsFilePath);
                 using FileStream outputFileStream = File.OpenWrite(jsonFilePath);
                 using GZipStream decompressor = new GZipStream(downloadedFile, CompressionMode.Decompress);
@@ -96,6 +99,28 @@ namespace Presentation.Storage
                 jsonFiles[i] = jsonFilePath;
             }
             return jsonFiles;
+        }
+        /// <summary>
+        /// Unpacks already downloaded tgs files to json local files if the json files does not exist
+        /// </summary>
+        /// <param name="packName">Name of Telegram sticker pack</param>
+        /// <param name="tgsLocalFilesPaths">Paths to local tgs files</param>
+        /// <returns>Paths to local json files</returns>
+        public Task<string[]> UnpackLocalTgsFilesToJsonFilesIfNecessaryAsync(string packName, string[] tgsLocalFilesPaths)
+        {
+            string jsonFinalDirectoryPath = Path.Combine(mJsonFilesDirectoryPath, packName);
+            if (Directory.Exists(jsonFinalDirectoryPath))
+            {
+                string[] pathsToJsonFiles = Directory.GetFiles(
+                    jsonFinalDirectoryPath,
+                    ANY_TGS_FILE,
+                    SearchOption.TopDirectoryOnly);
+                if (pathsToJsonFiles.Length > 0)
+                {
+                    return Task.FromResult(pathsToJsonFiles);
+                }
+            }
+            return UnpackLocalTgsFilesToJsonFilesAsync(packName, tgsLocalFilesPaths);
         }
     }
 }
