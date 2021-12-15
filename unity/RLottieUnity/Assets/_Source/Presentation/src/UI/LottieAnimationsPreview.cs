@@ -45,6 +45,10 @@ namespace Presentation.UI
         }
         private void Update()
         {
+            if (_animationPreviews == null)
+            {
+                return;
+            }
             for (int i = 0; i < _animationPreviews.Count; ++i)
             {
                 _animationPreviews[i].DoUpdateAsync();
@@ -52,6 +56,10 @@ namespace Presentation.UI
         }
         private void LateUpdate()
         {
+            if (_animationPreviews == null)
+            {
+                return;
+            }
             for (int i = 0; i < _animationPreviews.Count; ++i)
             {
                 _animationPreviews[i].DoDrawOneFrameAsyncGetResult();

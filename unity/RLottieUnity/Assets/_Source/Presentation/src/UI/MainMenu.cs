@@ -7,6 +7,7 @@ namespace Presentation.UI
     {
         [SerializeField] private LottiePlayerScreen _lottiePlayerScreen;
         [SerializeField] private LottieAnimationsPreview _lottieAnimationsPreview;
+        [SerializeField] private ExploreTelegramStickers _exploreTelegramStickers;
         [SerializeField] private AnimatedButton _homeButton;
         [SerializeField] private AnimatedButton _playerButton;
         [SerializeField] private AnimatedButton _exploreButton;
@@ -19,6 +20,7 @@ namespace Presentation.UI
             _lottieAnimationsPreview.Init(animationPaths);
             _lottiePlayerScreen.Init(animationPaths, animations);
             _lottiePlayerScreen.gameObject.SetActive(false);
+            _exploreTelegramStickers.gameObject.SetActive(false);
         }
         public void Dispose()
         {
@@ -31,17 +33,21 @@ namespace Presentation.UI
 
         private void OnHomeButtonClick(int stateIndex, AnimatedButton.State state)
         {
-            _lottiePlayerScreen.gameObject.SetActive(false);
             _lottieAnimationsPreview.gameObject.SetActive(true);
+            _lottiePlayerScreen.gameObject.SetActive(false);
+            _exploreTelegramStickers.gameObject.SetActive(false);
         }
         private void OnPlayerButtonClick(int stateIndex, AnimatedButton.State state)
         {
-            _lottiePlayerScreen.gameObject.SetActive(true);
             _lottieAnimationsPreview.gameObject.SetActive(false);
+            _lottiePlayerScreen.gameObject.SetActive(true);
+            _exploreTelegramStickers.gameObject.SetActive(false);
         }
         private void OnExploreButtonClick(int stateIndex, AnimatedButton.State state)
         {
-
+            _lottieAnimationsPreview.gameObject.SetActive(false);
+            _lottiePlayerScreen.gameObject.SetActive(false);
+            _exploreTelegramStickers.gameObject.SetActive(true);
         }
     }
 }
