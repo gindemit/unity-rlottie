@@ -5,8 +5,8 @@ namespace Presentation.UI
 {
     internal sealed class MainMenu : MonoBehaviour, System.IDisposable
     {
+        [SerializeField] private AnimationsHomeScreen _animationsHomeScreen;
         [SerializeField] private LottiePlayerScreen _lottiePlayerScreen;
-        [SerializeField] private LottieAnimationsPreview _lottieAnimationsPreview;
         [SerializeField] private ExploreTelegramStickers _exploreTelegramStickers;
         [SerializeField] private AnimatedButton _homeButton;
         [SerializeField] private AnimatedButton _playerButton;
@@ -17,7 +17,7 @@ namespace Presentation.UI
             _homeButton.OnClick.AddListener(OnHomeButtonClick);
             _playerButton.OnClick.AddListener(OnPlayerButtonClick);
             _exploreButton.OnClick.AddListener(OnExploreButtonClick);
-            _lottieAnimationsPreview.Init(animationPaths);
+            _animationsHomeScreen.Init(animationPaths);
             _lottiePlayerScreen.Init(animationPaths, animations);
             _lottiePlayerScreen.gameObject.SetActive(false);
             _exploreTelegramStickers.gameObject.SetActive(false);
@@ -27,25 +27,25 @@ namespace Presentation.UI
             _homeButton.OnClick.RemoveListener(OnHomeButtonClick);
             _playerButton.OnClick.RemoveListener(OnPlayerButtonClick);
             _exploreButton.OnClick.RemoveListener(OnExploreButtonClick);
-            _lottieAnimationsPreview.Dispose();
+            _animationsHomeScreen.Dispose();
             _lottiePlayerScreen.Dispose();
         }
 
         private void OnHomeButtonClick(int stateIndex, AnimatedButton.State state)
         {
-            _lottieAnimationsPreview.gameObject.SetActive(true);
+            _animationsHomeScreen.gameObject.SetActive(true);
             _lottiePlayerScreen.gameObject.SetActive(false);
             _exploreTelegramStickers.gameObject.SetActive(false);
         }
         private void OnPlayerButtonClick(int stateIndex, AnimatedButton.State state)
         {
-            _lottieAnimationsPreview.gameObject.SetActive(false);
+            _animationsHomeScreen.gameObject.SetActive(false);
             _lottiePlayerScreen.gameObject.SetActive(true);
             _exploreTelegramStickers.gameObject.SetActive(false);
         }
         private void OnExploreButtonClick(int stateIndex, AnimatedButton.State state)
         {
-            _lottieAnimationsPreview.gameObject.SetActive(false);
+            _animationsHomeScreen.gameObject.SetActive(false);
             _lottiePlayerScreen.gameObject.SetActive(false);
             _exploreTelegramStickers.gameObject.SetActive(true);
         }
