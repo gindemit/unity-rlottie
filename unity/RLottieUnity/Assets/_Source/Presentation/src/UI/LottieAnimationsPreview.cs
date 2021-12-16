@@ -15,7 +15,7 @@ namespace Presentation.UI
 
         private List<AnimationPreview> _animationPreviews;
 
-        internal void Init(string[] animationPaths)
+        internal void Init(string[] animationPaths, uint textureSize)
         {
             _animationPreviews = new List<AnimationPreview>(animationPaths.Length);
             Vector2 viewPortSize = _scrollRectViewPort.rect.size;
@@ -24,7 +24,7 @@ namespace Presentation.UI
             {
                 string animation = animationPaths[i];
                 AnimationPreview animationPreview = Instantiate(_animationPreviewPrefab, _scrollRectContent);
-                animationPreview.Init(animation, 128, 128);
+                animationPreview.Init(animation, textureSize, textureSize);
                 animationPreview.RectTransform.anchoredPosition = new Vector3(
                     i % _columns * oneItemSize + _gabBetweenItems,
                     -i / _columns * oneItemSize - _gabBetweenItems);
@@ -37,6 +37,10 @@ namespace Presentation.UI
         }
         public void Dispose()
         {
+            if (_animationPreviews == null)
+            {
+                return;
+            }
             for (int i = 0; i < _animationPreviews.Count; ++i)
             {
                 _animationPreviews[i].Dispose();
