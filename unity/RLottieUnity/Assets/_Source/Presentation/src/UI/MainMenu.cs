@@ -19,6 +19,7 @@ namespace Presentation.UI
             _exploreButton.OnClick.AddListener(OnExploreButtonClick);
             _animationsHomeScreen.Init(animationPaths);
             _lottiePlayerScreen.Init(animationPaths, animations);
+            _exploreTelegramStickers.Init();
             _lottiePlayerScreen.gameObject.SetActive(false);
             _exploreTelegramStickers.gameObject.SetActive(false);
         }
@@ -29,6 +30,7 @@ namespace Presentation.UI
             _exploreButton.OnClick.RemoveListener(OnExploreButtonClick);
             _animationsHomeScreen.Dispose();
             _lottiePlayerScreen.Dispose();
+            _exploreTelegramStickers.Dispose();
         }
 
         private void OnHomeButtonClick(int stateIndex, AnimatedButton.State state)
