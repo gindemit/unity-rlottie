@@ -16,16 +16,21 @@ namespace Presentation.UI
             _tokenInputField.text = botToken;
 
             _tokenInputField.onValueChanged.AddListener(OnTokenInputFieldValueChanged);
+            _stickerPackNameInputField.onSubmit.AddListener(OnStickerPackNameInputFieldSubmit);
         }
         public void Dispose()
         {
             _tokenInputField.onValueChanged.RemoveListener(OnTokenInputFieldValueChanged);
-
+            _stickerPackNameInputField.onSubmit.RemoveListener(OnStickerPackNameInputFieldSubmit);
         }
 
         private void OnTokenInputFieldValueChanged(string value)
         {
             PlayerPrefs.SetString(TELEGRAM_BOT_TOKEN_PLAYER_PREFS_KEY, value);
+        }
+        private void OnStickerPackNameInputFieldSubmit(string value)
+        {
+            Debug.Log(value);
         }
     }
 }
