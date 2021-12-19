@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Presentation.UI
 {
@@ -9,6 +10,7 @@ namespace Presentation.UI
         [SerializeField] private LottieAnimationsPreview _lottieAnimationsPreview;
         [SerializeField] private TMPro.TMP_InputField _tokenInputField;
         [SerializeField] private TMPro.TMP_InputField _stickerPackNameInputField;
+        [SerializeField] private Button _findButton;
 
         internal void Init()
         {
@@ -17,11 +19,13 @@ namespace Presentation.UI
 
             _tokenInputField.onValueChanged.AddListener(OnTokenInputFieldValueChanged);
             _stickerPackNameInputField.onSubmit.AddListener(OnStickerPackNameInputFieldSubmit);
+            _findButton.onClick.AddListener(OnFindButtonClick);
         }
         public void Dispose()
         {
             _tokenInputField.onValueChanged.RemoveListener(OnTokenInputFieldValueChanged);
             _stickerPackNameInputField.onSubmit.RemoveListener(OnStickerPackNameInputFieldSubmit);
+            _findButton.onClick.RemoveListener(OnFindButtonClick);
         }
 
         private void OnTokenInputFieldValueChanged(string value)
@@ -31,6 +35,10 @@ namespace Presentation.UI
         private void OnStickerPackNameInputFieldSubmit(string value)
         {
             Debug.Log(value);
+        }
+        private void OnFindButtonClick()
+        {
+            Debug.Log("On Find Button Click");
         }
     }
 }
