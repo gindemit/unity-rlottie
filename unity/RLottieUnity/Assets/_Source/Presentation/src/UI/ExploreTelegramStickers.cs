@@ -12,10 +12,14 @@ namespace Presentation.UI
         [SerializeField] private TMPro.TMP_InputField _stickerPackNameInputField;
         [SerializeField] private Button _findButton;
 
+        private Storage.TelegramStickerStorage _storage;
+        private string _lastLoadedStickerPackName;
+
         internal void Init()
         {
             string botToken = PlayerPrefs.GetString(TELEGRAM_BOT_TOKEN_PLAYER_PREFS_KEY, string.Empty);
             _tokenInputField.text = botToken;
+            CreateStorageIfTokenIsNotEmpty();
 
             _tokenInputField.onValueChanged.AddListener(OnTokenInputFieldValueChanged);
             _stickerPackNameInputField.onSubmit.AddListener(OnStickerPackNameInputFieldSubmit);
@@ -23,6 +27,8 @@ namespace Presentation.UI
         }
         public void Dispose()
         {
+            DisposeStorageIfNecessary();
+            _lastLoadedStickerPackName = null;
             _tokenInputField.onValueChanged.RemoveListener(OnTokenInputFieldValueChanged);
             _stickerPackNameInputField.onSubmit.RemoveListener(OnStickerPackNameInputFieldSubmit);
             _findButton.onClick.RemoveListener(OnFindButtonClick);
@@ -31,6 +37,7 @@ namespace Presentation.UI
         private void OnTokenInputFieldValueChanged(string value)
         {
             PlayerPrefs.SetString(TELEGRAM_BOT_TOKEN_PLAYER_PREFS_KEY, value);
+            CreateStorageIfTokenIsNotEmpty();
         }
         private void OnStickerPackNameInputFieldSubmit(string value)
         {
@@ -39,6 +46,35 @@ namespace Presentation.UI
         private void OnFindButtonClick()
         {
             Debug.Log("On Find Button Click");
+        }
+        private void CreateStorageIfTokenIsNotEmpty()
+        {
+            string token = _tokenInputField.text;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+            DisposeStorageIfNecessary();
+            _storage = new Storage.TelegramStickerStorage(token);
+        }
+        private void DisposeStorageIfNecessary()
+        {
+            if (_storage != null)
+            {
+                _storage.Dispose();
+                _storage = null;
+            }
+        }
+        private void LoadTelegramStickersIfNecessary()
+        {
+            string stickerPackToLoad = _stickerPackNameInputField.text;
+            if (_lastLoadedStickerPackName == stickerPackToLoad)
+            {
+                Debug.LogWarning("Trying to load already loaded Sticker pack " + stickerPackToLoad);
+                return;
+            }
+            
+
         }
     }
 }
