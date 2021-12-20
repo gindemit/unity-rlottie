@@ -5141,6 +5141,7 @@ MonoBehaviour:
   _lottieAnimationsPreview: {fileID: 370441629}
   _tokenInputField: {fileID: 5981490}
   _stickerPackNameInputField: {fileID: 1366503233}
+  _findButton: {fileID: 1167301781}
 --- !u!1 &1402997058
 GameObject:
   m_ObjectHideFlags: 0
