@@ -17,10 +17,11 @@ namespace Presentation.UI
 
         internal void Init(string[] animationPaths, uint textureSize)
         {
-            _animationPreviews = new List<AnimationPreview>(animationPaths.Length);
+            int animationsCount = animationPaths.Length;
+            _animationPreviews = new List<AnimationPreview>(animationsCount);
             Vector2 viewPortSize = _scrollRectViewPort.rect.size;
             float oneItemSize = (viewPortSize.x / _columns) - (_gabBetweenItems * _columns);
-            for (int i = 0; i < animationPaths.Length; ++i)
+            for (int i = 0; i < animationsCount; ++i)
             {
                 string animation = animationPaths[i];
                 AnimationPreview animationPreview = Instantiate(_animationPreviewPrefab, _scrollRectContent);
@@ -31,9 +32,11 @@ namespace Presentation.UI
                 animationPreview.RectTransform.sizeDelta = new Vector2(oneItemSize, oneItemSize);
                 _animationPreviews.Add(animationPreview);
             }
+            int rows = Mathf.CeilToInt((float)animationsCount / _columns);
             _scrollRectContent.sizeDelta = new Vector2(
                 _scrollRectContent.sizeDelta.x,
-                (animationPaths.Length / _columns * oneItemSize) + (animationPaths.Length / _columns * _gabBetweenItems));
+                (rows * oneItemSize) +
+                (rows * _gabBetweenItems));
         }
         public void Dispose()
         {
