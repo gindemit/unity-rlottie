@@ -41,11 +41,11 @@ namespace Presentation.UI
         }
         private void OnStickerPackNameInputFieldSubmit(string value)
         {
-            Debug.Log(value);
+            LoadTelegramStickersIfNecessary();
         }
         private void OnFindButtonClick()
         {
-            Debug.Log("On Find Button Click");
+            LoadTelegramStickersIfNecessary();
         }
         private void CreateStorageIfTokenIsNotEmpty()
         {
@@ -65,7 +65,7 @@ namespace Presentation.UI
                 _storage = null;
             }
         }
-        private void LoadTelegramStickersIfNecessary()
+        private async void LoadTelegramStickersIfNecessary()
         {
             string stickerPackToLoad = _stickerPackNameInputField.text;
             if (_lastLoadedStickerPackName == stickerPackToLoad)
@@ -73,8 +73,13 @@ namespace Presentation.UI
                 Debug.LogWarning("Trying to load already loaded Sticker pack " + stickerPackToLoad);
                 return;
             }
-            
-
+            string[] stickerTgsPaths =
+                await _storage.DownloadTelegramStickersPackIfNecessaryAsync(stickerPackToLoad);
+            string[] stickerJsonPaths =
+                await _storage.UnpackLocalTgsFilesToJsonFilesIfNecessaryAsync(stickerPackToLoad, stickerTgsPaths);
+            _lottieAnimationsPreview.Dispose();
+            _lottieAnimationsPreview.Init(stickerJsonPaths, 128);
+            _lastLoadedStickerPackName = stickerPackToLoad;
         }
     }
 }
