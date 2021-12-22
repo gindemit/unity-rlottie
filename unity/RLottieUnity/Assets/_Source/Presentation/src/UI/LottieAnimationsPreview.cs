@@ -10,6 +10,7 @@ namespace Presentation.UI
         [SerializeField] private ScrollRect _scrollRect;
         [SerializeField] private RectTransform _scrollRectViewPort;
         [SerializeField] private RectTransform _scrollRectContent;
+        [SerializeField] private TMPro.TextMeshProUGUI _noItemsText;
         [SerializeField] private int _columns;
         [SerializeField] private int _gabBetweenItems;
 
@@ -18,6 +19,11 @@ namespace Presentation.UI
         internal void Init(string[] animationPaths, uint textureSize)
         {
             int animationsCount = animationPaths.Length;
+            _noItemsText.gameObject.SetActive(animationsCount == 0);
+            if (animationsCount == 0)
+            {
+                return;
+            }
             _animationPreviews = new List<AnimationPreview>(animationsCount);
             Vector2 viewPortSize = _scrollRectViewPort.rect.size;
             float oneItemSize = (viewPortSize.x / _columns) - (_gabBetweenItems * _columns);
