@@ -11,6 +11,7 @@ namespace Presentation.UI
         [SerializeField] private TMPro.TMP_InputField _tokenInputField;
         [SerializeField] private TMPro.TMP_InputField _stickerPackNameInputField;
         [SerializeField] private Button _findButton;
+        [SerializeField] private AnimationPreview _loadingAnimation;
 
         private Storage.TelegramStickerStorage _storage;
         private string _lastLoadedStickerPackName;
@@ -20,6 +21,8 @@ namespace Presentation.UI
             string botToken = PlayerPrefs.GetString(TELEGRAM_BOT_TOKEN_PLAYER_PREFS_KEY, string.Empty);
             _tokenInputField.text = botToken;
             CreateStorageIfTokenIsNotEmpty();
+            _loadingAnimation.InitFromData(256, 256);
+            _loadingAnimation.gameObject.SetActive(false);
 
             _tokenInputField.onValueChanged.AddListener(OnTokenInputFieldValueChanged);
             _stickerPackNameInputField.onSubmit.AddListener(OnStickerPackNameInputFieldSubmit);
@@ -32,6 +35,14 @@ namespace Presentation.UI
             _tokenInputField.onValueChanged.RemoveListener(OnTokenInputFieldValueChanged);
             _stickerPackNameInputField.onSubmit.RemoveListener(OnStickerPackNameInputFieldSubmit);
             _findButton.onClick.RemoveListener(OnFindButtonClick);
+        }
+
+        private void Update()
+        {
+            if (_loadingAnimation.gameObject.activeInHierarchy)
+            {
+                _loadingAnimation.DoUpdate();
+            }
         }
 
         private void OnTokenInputFieldValueChanged(string value)
@@ -73,6 +84,12 @@ namespace Presentation.UI
                 Debug.LogWarning("Trying to load already loaded Sticker pack " + stickerPackToLoad);
                 return;
             }
+            if (_loadingAnimation.isActiveAndEnabled)
+            {
+                Debug.LogWarning("There is already a find operation in progress, ignoring this request");
+                return;
+            }
+            _loadingAnimation.gameObject.SetActive(true);
             string[] stickerTgsPaths =
                 await _storage.DownloadTelegramStickersPackIfNecessaryAsync(stickerPackToLoad);
             string[] stickerJsonPaths =
@@ -80,6 +97,7 @@ namespace Presentation.UI
             _lottieAnimationsPreview.Dispose();
             _lottieAnimationsPreview.Init(stickerJsonPaths, 128);
             _lastLoadedStickerPackName = stickerPackToLoad;
+            _loadingAnimation.gameObject.SetActive(false);
         }
     }
 }
