@@ -65,7 +65,6 @@ namespace LottiePlugin.UI
         {
             if (eventData.button != PointerEventData.InputButton.Left)
                 return;
-
             Press();
         }
         public void OnSubmit(BaseEventData eventData)

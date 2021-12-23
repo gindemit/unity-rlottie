@@ -31,7 +31,7 @@ namespace Presentation.UI
             {
                 string animation = animationPaths[i];
                 AnimationPreview animationPreview = Instantiate(_animationPreviewPrefab, _scrollRectContent);
-                animationPreview.Init(animation, textureSize, textureSize);
+                animationPreview.InitFromFile(animation, textureSize, textureSize);
                 animationPreview.RectTransform.anchoredPosition = new Vector3(
                     i % _columns * oneItemSize + _gabBetweenItems,
                     -i / _columns * oneItemSize - _gabBetweenItems);

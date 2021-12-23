@@ -1,4 +1,3 @@
-using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,12 +9,24 @@ namespace Presentation.UI
 
         [SerializeField] private RectTransform _rectTransform;
         [SerializeField] private RawImage _animationPreview;
+        [SerializeField] private TextAsset _animationJsonData;
 
         private LottiePlugin.LottieAnimation _lottieAnimation;
 
-        internal void Init(string jsonFilePath, uint width, uint height)
+        internal void InitFromFile(string jsonFilePath, uint width, uint height)
         {
             _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonFile(jsonFilePath, width, height);
+            _animationPreview.texture = _lottieAnimation.Texture;
+            DoUpdate();
+        }
+        internal void InitFromData(uint width, uint height)
+        {
+            if (_animationJsonData == null || string.IsNullOrWhiteSpace(_animationJsonData.text))
+            {
+                Debug.LogError($"Can not initialize {nameof(AnimationPreview)} from null or empty jsong file");
+                return;
+            }
+            _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonData(_animationJsonData.text, string.Empty, width, height);
             _animationPreview.texture = _lottieAnimation.Texture;
             DoUpdate();
         }
