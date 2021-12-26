@@ -12,6 +12,7 @@ namespace Presentation.UI
         [SerializeField] private TMPro.TMP_InputField _stickerPackNameInputField;
         [SerializeField] private Button _findButton;
         [SerializeField] private AnimationPreview _loadingAnimation;
+        [SerializeField] private AnimationPreview _noDataFoundAnimation;
 
         private Storage.TelegramStickerStorage _storage;
         private string _lastLoadedStickerPackName;
@@ -23,6 +24,8 @@ namespace Presentation.UI
             CreateStorageIfTokenIsNotEmpty();
             _loadingAnimation.InitFromData(256, 256);
             _loadingAnimation.gameObject.SetActive(false);
+            _noDataFoundAnimation.InitFromData(256, 256);
+            _noDataFoundAnimation.gameObject.SetActive(false);
 
             _tokenInputField.onValueChanged.AddListener(OnTokenInputFieldValueChanged);
             _stickerPackNameInputField.onSubmit.AddListener(OnStickerPackNameInputFieldSubmit);
@@ -42,6 +45,10 @@ namespace Presentation.UI
             if (_loadingAnimation.gameObject.activeInHierarchy)
             {
                 _loadingAnimation.DoUpdate();
+            }
+            if (_noDataFoundAnimation.gameObject.activeInHierarchy)
+            {
+                _noDataFoundAnimation.DoUpdate();
             }
         }
 
@@ -79,6 +86,7 @@ namespace Presentation.UI
         private async void LoadTelegramStickersIfNecessary()
         {
             string stickerPackToLoad = _stickerPackNameInputField.text;
+            _noDataFoundAnimation.gameObject.SetActive(false);
             if (_lastLoadedStickerPackName == stickerPackToLoad)
             {
                 Debug.LogWarning("Trying to load already loaded Sticker pack " + stickerPackToLoad);
@@ -89,15 +97,24 @@ namespace Presentation.UI
                 Debug.LogWarning("There is already a find operation in progress, ignoring this request");
                 return;
             }
-            _loadingAnimation.gameObject.SetActive(true);
-            string[] stickerTgsPaths =
-                await _storage.DownloadTelegramStickersPackIfNecessaryAsync(stickerPackToLoad);
-            string[] stickerJsonPaths =
-                await _storage.UnpackLocalTgsFilesToJsonFilesIfNecessaryAsync(stickerPackToLoad, stickerTgsPaths);
-            _lottieAnimationsPreview.Dispose();
-            _lottieAnimationsPreview.Init(stickerJsonPaths, 128);
-            _lastLoadedStickerPackName = stickerPackToLoad;
-            _loadingAnimation.gameObject.SetActive(false);
+            try
+            {
+                _noDataFoundAnimation.gameObject.SetActive(false);
+                _loadingAnimation.gameObject.SetActive(true);
+                string[] stickerTgsPaths =
+                    await _storage.DownloadTelegramStickersPackIfNecessaryAsync(stickerPackToLoad);
+                string[] stickerJsonPaths =
+                    await _storage.UnpackLocalTgsFilesToJsonFilesIfNecessaryAsync(stickerPackToLoad, stickerTgsPaths);
+                _lottieAnimationsPreview.Dispose();
+                _lottieAnimationsPreview.Init(stickerJsonPaths, 128);
+                _loadingAnimation.gameObject.SetActive(false);
+                _lastLoadedStickerPackName = stickerPackToLoad;
+            }
+            catch (Storage.CanNotFindStickerPackException)
+            {
+                _noDataFoundAnimation.gameObject.SetActive(true);
+                _loadingAnimation.gameObject.SetActive(false);
+            }
         }
     }
 }
