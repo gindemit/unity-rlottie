@@ -38,26 +38,33 @@ namespace Presentation.Storage
         /// <returns>Paths to local tgs files</returns>
         public async Task<string[]> DownloadTelegramStickersPackAsync(string packName)
         {
-            Telegram.Bot.Types.StickerSet stickerSet = await mTelegramClient.GetStickerSetAsync(packName);
-            string tgsFinalDirectoryPath = Path.Combine(mTgsFilesDirectoryPath, packName);
-            Directory.CreateDirectory(tgsFinalDirectoryPath);
-            List<string> pathsToTgsFiles = new List<string>(stickerSet.Stickers.Length);
-            for (int i = 0; i < stickerSet.Stickers.Length; ++i)
+            try
             {
-                Telegram.Bot.Types.Sticker sticker = stickerSet.Stickers[i];
-                if (!sticker.IsAnimated)
+                Telegram.Bot.Types.StickerSet stickerSet = await mTelegramClient.GetStickerSetAsync(packName);
+                string tgsFinalDirectoryPath = Path.Combine(mTgsFilesDirectoryPath, packName);
+                Directory.CreateDirectory(tgsFinalDirectoryPath);
+                List<string> pathsToTgsFiles = new List<string>(stickerSet.Stickers.Length);
+                for (int i = 0; i < stickerSet.Stickers.Length; ++i)
                 {
-                    continue;
+                    Telegram.Bot.Types.Sticker sticker = stickerSet.Stickers[i];
+                    if (!sticker.IsAnimated)
+                    {
+                        continue;
+                    }
+                    string tgsFilePath = Path.Combine(tgsFinalDirectoryPath, sticker.FileUniqueId + TGS_FILE_EXTENTION);
+                    if (!File.Exists(tgsFilePath))
+                    {
+                        using FileStream downloadedFile = File.OpenWrite(tgsFilePath);
+                        await mTelegramClient.GetInfoAndDownloadFileAsync(sticker.FileId, downloadedFile);
+                    }
+                    pathsToTgsFiles.Add(tgsFilePath);
                 }
-                string tgsFilePath = Path.Combine(tgsFinalDirectoryPath, sticker.FileUniqueId + TGS_FILE_EXTENTION);
-                if (!File.Exists(tgsFilePath))
-                {
-                    using FileStream downloadedFile = File.OpenWrite(tgsFilePath);
-                    await mTelegramClient.GetInfoAndDownloadFileAsync(sticker.FileId, downloadedFile);
-                }
-                pathsToTgsFiles.Add(tgsFilePath);
+                return pathsToTgsFiles.ToArray();
             }
-            return pathsToTgsFiles.ToArray();
+            catch (Telegram.Bot.Exceptions.ApiRequestException)
+            {
+                throw new CanNotFindStickerPackException();
+            }
         }
         /// <summary>
         /// Downloads to local storage telegram stickers by pack name if the pack is not yet there
