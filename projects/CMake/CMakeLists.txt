@@ -36,17 +36,44 @@ if (WIN32)
   set(RLOTTIE_LIBRARY_NAME rlottie.lib)
 elseif(RLOTTIE_OSX)
   set(RLOTTIE_LIBRARY_NAME Release/rlottie.a)
+  add_compile_definitions(RLOTTIE_OSX)
   #set_target_properties(LottiePlugin PROPERTIES BUNDLE TRUE)
   #set_target_properties(LottiePlugin PROPERTIES SUFFIX ".bundle")
 else()
   set(RLOTTIE_LIBRARY_NAME librlottie.a)
 endif()
 
+#declare common target compilation options
+if(MSVC)
+    target_compile_options(LottiePlugin
+                        PUBLIC
+                        PRIVATE
+                            /std:c++14
+                            /EHs-c- # disable exceptions
+                            /GR- # disable RTTI
+                            /W3
+                        )
+else()
+    target_compile_options(LottiePlugin
+                        PUBLIC
+                        PRIVATE
+                            -std=c++14
+                            -fno-exceptions
+                            -fno-unwind-tables
+                            -fno-asynchronous-unwind-tables
+                            -fno-rtti
+                            -Wall
+                            -fvisibility=hidden
+                            -Wnon-virtual-dtor
+                            -Woverloaded-virtual
+                            -Wno-unused-parameter
+                        )
+endif()
+
 add_dependencies(LottiePlugin rlottie)
 #target_link_libraries(LottiePlugin ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build/${RLOTTIE_LIBRARY_NAME})
 target_link_libraries(LottiePlugin rlottie)
 message(${CMAKE_CURRENT_BINARY_DIR}/rlottie_build/${RLOTTIE_LIBRARY_NAME})
-
 
 #Adding simple test program:
 #add_executable(LottiePluginTest ../../src/PluginTest.c)
