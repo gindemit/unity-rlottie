@@ -45,6 +45,7 @@ namespace MyEditor.Menu
                 finalFilePaths[i] = final.ToString().Replace("\\", "/");//TODO: find a better solution than "Replace"
             }
             lottieAnimations.SetAnimationsEditorCall(finalFilePaths);
+            EditorUtility.SetDirty(lottieAnimations);
         }
     }
 }
