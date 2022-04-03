@@ -18,6 +18,7 @@ namespace LottiePlugin.UI
 
         public ButtonClickedEvent OnClick => _onClick;
 
+        public Transform Transform { get; private set; }
         internal TextAsset AnimationJson => _animationJson;
         internal uint TextureWidth => _textureWidth;
         internal uint TextureHeight => _textureHeight;
@@ -37,6 +38,11 @@ namespace LottiePlugin.UI
         private int _currentStateIndex;
         private LottieAnimation _lottieAnimation;
         private Coroutine _updateAnimationCoroutine;
+
+        protected override void Awake()
+        {
+            Transform = transform;
+        }
 
         protected override void Start()
         {
