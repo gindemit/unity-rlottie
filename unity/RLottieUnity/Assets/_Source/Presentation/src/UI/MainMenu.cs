@@ -5,6 +5,9 @@ namespace Presentation.UI
 {
     internal sealed class MainMenu : MonoBehaviour, System.IDisposable
     {
+        private const int BUTTONS_COUNT = 4;
+
+        [SerializeField] private RectTransform _rectTransform;
         [SerializeField] private AnimationsHomeScreen _animationsHomeScreen;
         [SerializeField] private LottiePlayerScreen _lottiePlayerScreen;
         [SerializeField] private ExploreTelegramStickers _exploreTelegramStickers;
@@ -25,6 +28,7 @@ namespace Presentation.UI
             _exploreTelegramStickers.Init();
             _lottiePlayerScreen.gameObject.SetActive(false);
             _exploreTelegramStickers.gameObject.SetActive(false);
+            UpdateTheButtonsPositions();
             UpdateActiveButtonPosition(_homeButton.Transform);
         }
         public void Dispose()
@@ -38,6 +42,16 @@ namespace Presentation.UI
             _exploreTelegramStickers.Dispose();
         }
 
+        private void UpdateTheButtonsPositions()
+        {
+            float width = _rectTransform.rect.size.x;
+            float step = width / BUTTONS_COUNT;
+            float fixedYPos = _homeButton.Transform.localPosition.y;
+            _homeButton.Transform.localPosition = new Vector3(-step * 1.5f, fixedYPos, 0);
+            _playerButton.Transform.localPosition = new Vector3(-step * 0.5f, fixedYPos, 0);
+            _exploreButton.Transform.localPosition = new Vector3(step * 0.5f, fixedYPos, 0);
+            _3dObjectsButton.Transform.localPosition = new Vector3(step * 1.5f, fixedYPos, 0);
+        }
         private void UpdateActiveButtonPosition(Transform transform)
         {
             var targetXPos = transform.position.x;
