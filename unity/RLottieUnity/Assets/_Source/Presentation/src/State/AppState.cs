@@ -7,7 +7,7 @@ namespace Presentation.State
         [SerializeField] private Data.LottieAnimations _lottieAnimations;
         [SerializeField] private UI.MainMenu _mainMenu;
 
-        private void Awake()
+        private void Start()
         {
             Utility.FilesHelper.CopyAnimationsJsonsFromStreamingAssetsToPersistentData(
                 _lottieAnimations.Animations);
