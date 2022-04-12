@@ -5,9 +5,8 @@ namespace Support.StreamingAssets
     {
         public static byte[] LoadFileFromStreamingAssets(string streamingAssetsFilePath)
         {
-            string finalPath = Path.Combine(UnityEngine.Application.streamingAssetsPath, streamingAssetsFilePath);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            var loadingRequest = UnityEngine.Networking.UnityWebRequest.Get(finalPath);
+            var loadingRequest = UnityEngine.Networking.UnityWebRequest.Get(streamingAssetsFilePath);
             loadingRequest.SendWebRequest();
             while (!loadingRequest.isDone)
             {
@@ -21,11 +20,11 @@ namespace Support.StreamingAssets
             if (loadingRequest.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
                 throw new System.InvalidOperationException(
-                    $"Failed to load file at path \"{finalPath}\", result: \"{loadingRequest.result}\"");
+                    $"Failed to load file at path \"{streamingAssetsFilePath}\", result: \"{loadingRequest.result}\"");
             }
             return loadingRequest.downloadHandler.data;
 #else
-            return File.ReadAllBytes(finalPath);
+            return File.ReadAllBytes(streamingAssetsFilePath);
 #endif
         }
     }
