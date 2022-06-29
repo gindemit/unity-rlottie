@@ -5,6 +5,13 @@ extern "C" {
     static lottie_animation_wrapper* create_animation_wrapper(std::unique_ptr<rlottie::Animation>& animation)
     {
         lottie_animation_wrapper *animation_wrapper = new lottie_animation_wrapper();
+
+        if (animation_wrapper == nullptr){
+
+            fprintf(stderr, "Couldnt allocate lottie_animation_wrapper!");
+            return nullptr;
+        }
+
         animation_wrapper->self = animation_wrapper;
         animation_wrapper->frameRate = animation->frameRate();
         animation_wrapper->totalFrame = animation->totalFrame();
@@ -21,11 +28,21 @@ extern "C" {
     EXPORT_API int32_t lottie_load_from_data(const char* json_data, const char* resource_path, lottie_animation_wrapper** animation_wrapper) {
         const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
         auto animation = rlottie::Animation::loadFromData(std::string(json_data), std::string(resource_path), null_func);
+        if(!animation) {
+            fprintf(stderr, "Couldnt load from data '%s'.", resource_path);
+            return -1;
+        }
         *animation_wrapper = create_animation_wrapper(animation);
-        return 0;
+        return *animation_wrapper == nullptr ? -1 : 0;
     }
     EXPORT_API int32_t lottie_load_from_file(const char* file_path, lottie_animation_wrapper** animation_wrapper) {
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
+
+        if(!animation) {
+            fprintf(stderr, "Couldnt load from file '%s'.", file_path);
+            return -1;
+        }
+
         *animation_wrapper = create_animation_wrapper(animation);
         return 0;
     }
@@ -72,6 +89,11 @@ extern "C" {
 
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data) {
         *render_data = new lottie_render_data();
+         if (*render_data == nullptr){
+
+            fprintf(stderr, "Couldnt allocate lottie_render_data!");
+            return -1;
+        }
         return 0;
     }
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data) {
