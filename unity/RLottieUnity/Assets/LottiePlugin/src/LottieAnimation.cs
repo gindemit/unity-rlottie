@@ -48,7 +48,6 @@ namespace LottiePlugin
         }
         public void Dispose()
         {
-            _pixelData.Dispose();
             NativeBridge.Dispose(_animationWrapper);
             NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
             UnityEngine.Object.DestroyImmediate(Texture);

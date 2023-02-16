@@ -258,15 +258,15 @@ namespace LottiePlugin.UI.Editor
         }
         private void OnSelectCallback(ReorderableList list)
         {
-            ReadOnlyCollection<int> selectedIndices = list.selectedIndices;
-            if (selectedIndices.Count != 1)
-            {
-                return;
-            }
-            int selectedElementIndex = selectedIndices[0];
-            SerializedProperty selectedElement = _statesProperty.GetArrayElementAtIndex(selectedElementIndex);
-            SerializedProperty frameNumberProperty = GetFrameNumberProperty(selectedElement);
-            _lottieAnimation?.DrawOneFrame(frameNumberProperty.intValue);
+            //ReadOnlyCollection<int> selectedIndices = list.selectedIndices;
+            //if (selectedIndices.Count != 1)
+            //{
+            //    return;
+            //}
+            //int selectedElementIndex = selectedIndices[0];
+            //SerializedProperty selectedElement = _statesProperty.GetArrayElementAtIndex(selectedElementIndex);
+            //SerializedProperty frameNumberProperty = GetFrameNumberProperty(selectedElement);
+            //_lottieAnimation?.DrawOneFrame(frameNumberProperty.intValue);
         }
         private static SerializedProperty GetStateNameProperty(SerializedProperty element) =>
             element.FindPropertyRelative("Name");

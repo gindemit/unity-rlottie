@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _animations:
   - alright_sticker
+  - attack
   - black_friday_animation
   - body_movin
   - butterfly_loading

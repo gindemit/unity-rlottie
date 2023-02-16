@@ -54,8 +54,10 @@ namespace Presentation.Storage
                     string tgsFilePath = Path.Combine(tgsFinalDirectoryPath, sticker.FileUniqueId + TGS_FILE_EXTENTION);
                     if (!File.Exists(tgsFilePath))
                     {
-                        using FileStream downloadedFile = File.OpenWrite(tgsFilePath);
-                        await mTelegramClient.GetInfoAndDownloadFileAsync(sticker.FileId, downloadedFile);
+                        using (FileStream downloadedFile = File.OpenWrite(tgsFilePath))
+                        {
+                            await mTelegramClient.GetInfoAndDownloadFileAsync(sticker.FileId, downloadedFile);
+                        }
                     }
                     pathsToTgsFiles.Add(tgsFilePath);
                 }
@@ -103,12 +105,18 @@ namespace Presentation.Storage
                 string tgsFilePath = tgsLocalFilesPaths[i];
                 string stickerUniqueId = Path.GetFileNameWithoutExtension(tgsFilePath);
                 string jsonFilePath = Path.Combine(jsonFinalDirectoryPath, stickerUniqueId + JSON_FILE_EXTENTION);
-                using FileStream downloadedFile = File.OpenRead(tgsFilePath);
-                using FileStream outputFileStream = File.OpenWrite(jsonFilePath);
-                using GZipStream decompressor = new GZipStream(downloadedFile, CompressionMode.Decompress);
-                decompressor.CopyTo(outputFileStream);
-                await decompressor.FlushAsync();
-                jsonFiles[i] = jsonFilePath;
+                using (FileStream downloadedFile = File.OpenRead(tgsFilePath))
+                {
+                    using (FileStream outputFileStream = File.OpenWrite(jsonFilePath))
+                    {
+                        using (GZipStream decompressor = new GZipStream(downloadedFile, CompressionMode.Decompress))
+                        {
+                            decompressor.CopyTo(outputFileStream);
+                            await decompressor.FlushAsync();
+                            jsonFiles[i] = jsonFilePath;
+                        }
+                    }
+                }
             }
             return jsonFiles;
         }
