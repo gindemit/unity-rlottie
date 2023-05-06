@@ -28,7 +28,10 @@
     "/Editor",
     "/Editor.meta",
     "/ExternalDlls",
-    "/ExternalDlls.meta"
+    "/ExternalDlls.meta",
+    "/Samples",
+    "/Samples.meta",
+    "/Samples~"
   ],
   "samples": [
     {
