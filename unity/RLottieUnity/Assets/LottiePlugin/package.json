@@ -1,6 +1,6 @@
 {
   "name": "com.gindemit.rlottie",
-  "displayName": "Lottie Animation Plugin for Unity",
+  "displayName": "Lottie Animation",
   "version": "0.1.0",
   "unity": "2019.4",
   "description": "Lottie Animation Plugin for Unity",
@@ -26,7 +26,9 @@
     "/Runtime",
     "/Runtime.meta",
     "/Editor",
-    "/Editor.meta"
+    "/Editor.meta",
+    "/ExternalDlls",
+    "/ExternalDlls.meta"
   ],
   "samples": [
     {
