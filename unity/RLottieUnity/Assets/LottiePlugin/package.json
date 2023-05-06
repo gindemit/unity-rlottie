@@ -35,9 +35,9 @@
   ],
   "samples": [
     {
-      "displayName": "Demo Scene UI",
+      "displayName": "Scene UI",
       "description": "Contains UI to play lottie animations",
-      "path": "Samples~/DemoSceneUI"
+      "path": "Samples~/SceneUI"
     }
   ]
 }
