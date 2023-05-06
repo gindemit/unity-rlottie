@@ -32,7 +32,11 @@ namespace LottiePlugin.Sample.SceneUI.Editor
         {
             EditorGUILayout.LabelField("Select Lottie Animations Array", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
-            lottieAnimations = EditorGUILayout.ObjectField("Lottie Animations Array", lottieAnimations, typeof(LottieAnimations), false) as LottieAnimations;
+            lottieAnimations = EditorGUILayout.ObjectField(
+                "Lottie Animations Array",
+                lottieAnimations,
+                typeof(LottieAnimations),
+                false) as LottieAnimations;
             if (EditorGUI.EndChangeCheck())
             {
                 serializedObject = new SerializedObject(lottieAnimations);
@@ -56,10 +60,12 @@ namespace LottiePlugin.Sample.SceneUI.Editor
                 }
                 else
                 {
-                    EditorUtility.DisplayDialog("Error", "Please select a folder inside of Streaming Assets current projects folder folder", "OK");
+                    EditorUtility.DisplayDialog(
+                        "Error",
+                        "Please select a folder inside of Streaming Assets current projects folder folder",
+                        "OK");
                 }
             }
-
             if (GUILayout.Button("Populate Lottie Animations"))
             {
                 PopulateLottieAnimations();
