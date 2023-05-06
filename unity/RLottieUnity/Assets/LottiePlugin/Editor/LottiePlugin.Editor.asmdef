@@ -1,0 +1,17 @@
+{
+    "name": "LottiePlugin.Editor",
+    "references": [
+        "GUID:2511835434a4c014d9d18a4681bf1136"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

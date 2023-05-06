@@ -1,0 +1,38 @@
+{
+  "name": "com.gindemit.rlottie",
+  "displayName": "Lottie Animation Plugin for Unity",
+  "version": "0.1.0",
+  "unity": "2019.4",
+  "description": "Lottie Animation Plugin for Unity",
+  "author": {
+    "name": "Konstantin Gindemit",
+    "email": "konstantin.gindemit@gmail.com",
+    "url": "https://gindemit.com/"
+  },
+  "keywords": [
+    "rlottie",
+    "mobile",
+    "games",
+    "lottie",
+    "unity",
+    "animation"
+  ],
+  "category": "Unity",
+  "files": [
+    "/package.json",
+    "/package.json.meta",
+    "/Plugins",
+    "/Plugins.meta",
+    "/Runtime",
+    "/Runtime.meta",
+    "/Editor",
+    "/Editor.meta"
+  ],
+  "samples": [
+    {
+      "displayName": "Demo Scene UI",
+      "description": "Contains UI to play lottie animations",
+      "path": "Samples~/DemoSceneUI"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Please unpack StreamingAssets.zip file into your Assets folder. It contains all demo animations
