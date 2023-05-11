@@ -53,19 +53,13 @@ namespace LottiePlugin.UI
             {
                 return;
             }
-            _lottieAnimation = LottieAnimation.LoadFromJsonData(
-                _animationJson.text,
-                string.Empty,
-                _textureWidth,
-                _textureHeight);
+            CreateIfNeededAndReturnLottieAnimation();
             _lottieAnimation.DrawOneFrame(_states[0].FrameNumber);
-            _rawImage.texture = _lottieAnimation.Texture;
         }
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            _lottieAnimation?.Dispose();
-            _lottieAnimation = null;
+            DisposeLottieAnimation();
         }
         public void ResetState()
         {
@@ -82,6 +76,27 @@ namespace LottiePlugin.UI
         public void OnSubmit(BaseEventData eventData)
         {
             Press();
+        }
+        internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
+        {
+            if (_lottieAnimation == null)
+            {
+                _lottieAnimation = LottieAnimation.LoadFromJsonData(
+                _animationJson.text,
+                string.Empty,
+                _textureWidth,
+                _textureHeight);
+                _rawImage.texture = _lottieAnimation.Texture;
+            }
+            return _lottieAnimation;
+        }
+        internal void DisposeLottieAnimation()
+        {
+            if (_lottieAnimation != null)
+            {
+                _lottieAnimation.Dispose();
+                _lottieAnimation = null;
+            }
         }
 
         private void Press()
