@@ -28,6 +28,7 @@ namespace LottiePlugin.UI
         private void Awake()
         {
             Transform = transform;
+            _waitForEndOfFrame = new WaitForEndOfFrame();
         }
 
         private void Start()
@@ -38,7 +39,6 @@ namespace LottiePlugin.UI
             }
             _rawImage = GetComponent<RawImage>();
             CreateIfNeededAndReturnLottieAnimation();
-            _waitForEndOfFrame = new WaitForEndOfFrame();
             if (_playOnAwake)
             {
                 Play();
