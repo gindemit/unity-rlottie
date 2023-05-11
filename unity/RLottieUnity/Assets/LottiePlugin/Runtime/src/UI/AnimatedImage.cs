@@ -9,11 +9,9 @@ namespace LottiePlugin.UI
     {
         public Transform Transform { get; private set; }
         public RawImage RawImage { get => _rawImage; internal set { _rawImage = value; } }
-        public LottieAnimation LottieAnimation { get; private set; }
         internal TextAsset AnimationJson => _animationJson;
         internal uint TextureWidth => _textureWidth;
         internal uint TextureHeight => _textureHeight;
-
 
         [SerializeField] private TextAsset _animationJson;
         [SerializeField] private RawImage _rawImage;
@@ -22,6 +20,8 @@ namespace LottiePlugin.UI
         [SerializeField] private uint _textureHeight;
         [SerializeField] private bool _playOnAwake = true;
         [SerializeField] private bool _loop = true;
+
+        private LottieAnimation _lottieAnimation;
         private Coroutine _renderLottieAnimationCoroutine;
         private WaitForEndOfFrame _waitForEndOfFrame;
 
@@ -37,12 +37,7 @@ namespace LottiePlugin.UI
                 return;
             }
             _rawImage = GetComponent<RawImage>();
-            LottieAnimation = LottieAnimation.LoadFromJsonData(
-                _animationJson.text,
-                string.Empty,
-                _textureWidth,
-                _textureHeight);
-            _rawImage.texture = LottieAnimation.Texture;
+            CreateIfNeededAndReturnLottieAnimation();
             _waitForEndOfFrame = new WaitForEndOfFrame();
             if (_playOnAwake)
             {
@@ -50,13 +45,12 @@ namespace LottiePlugin.UI
             }
             else
             {
-                LottieAnimation.DrawOneFrame(0);
+                _lottieAnimation.DrawOneFrame(0);
             }
         }
         private void OnDestroy()
         {
-            LottieAnimation?.Dispose();
-            LottieAnimation = null;
+            DisposeLottieAnimation();
         }
 
         public void Play()
@@ -65,7 +59,7 @@ namespace LottiePlugin.UI
             {
                 StopCoroutine(_renderLottieAnimationCoroutine);
             }
-            LottieAnimation.Play();
+            _lottieAnimation.Play();
             _renderLottieAnimationCoroutine = StartCoroutine(RenderLottieAnimationCoroutine());
         }
         public void Stop()
@@ -75,18 +69,39 @@ namespace LottiePlugin.UI
                 StopCoroutine(_renderLottieAnimationCoroutine);
                 _renderLottieAnimationCoroutine = null;
             }
-            LottieAnimation.Stop();
-            LottieAnimation.DrawOneFrame(0);
+            _lottieAnimation.Stop();
+            _lottieAnimation.DrawOneFrame(0);
+        }
+        internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
+        {
+            if (_lottieAnimation == null)
+            {
+                _lottieAnimation = LottieAnimation.LoadFromJsonData(
+                _animationJson.text,
+                string.Empty,
+                _textureWidth,
+                _textureHeight);
+                _rawImage.texture = _lottieAnimation.Texture;
+            }
+            return _lottieAnimation;
+        }
+        internal void DisposeLottieAnimation()
+        {
+            if (_lottieAnimation != null)
+            {
+                _lottieAnimation.Dispose();
+                _lottieAnimation = null;
+            }
         }
 
         private IEnumerator RenderLottieAnimationCoroutine()
         {
             while (true)
             {
-                if (LottieAnimation != null)
+                if (_lottieAnimation != null)
                 {
-                    LottieAnimation.Update(_animationSpeed);
-                    if (!_loop && LottieAnimation.CurrentFrame == LottieAnimation.TotalFramesCount - 1)
+                    _lottieAnimation.Update(_animationSpeed);
+                    if (!_loop && _lottieAnimation.CurrentFrame == _lottieAnimation.TotalFramesCount - 1)
                     {
                         Stop();
                     }

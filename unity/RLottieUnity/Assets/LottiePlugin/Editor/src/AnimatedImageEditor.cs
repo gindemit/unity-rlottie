@@ -1,8 +1,6 @@
 #if UNITY_EDITOR
 using UnityEditor;
-using UnityEditorInternal;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace LottiePlugin.UI.Editor
 {
@@ -18,11 +16,14 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty _playOnAwake;
         private SerializedProperty _loop;
 
+        private AnimatedImage _image;
         private LottieAnimation _lottieAnimation;
         private string _animationInfoBoxText;
 
         private void OnEnable()
         {
+            _image = serializedObject.targetObject as AnimatedImage;
+            _lottieAnimation = _image.CreateIfNeededAndReturnLottieAnimation();
             _animationJsonProperty = serializedObject.FindProperty("_animationJson");
             _animationSpeedProperty = serializedObject.FindProperty("_animationSpeed");
             _widthProperty = serializedObject.FindProperty("_textureWidth");
@@ -33,29 +34,22 @@ namespace LottiePlugin.UI.Editor
             CreateAnimationIfNecessaryAndAttachToGraphic();
             UpdateTheAnimationInfoBoxText();
         }
-        private void OnDisable()
-        {
-            _lottieAnimation?.Dispose();
-            _lottieAnimation = null;
-            SetGraphicsTexture(null);
-        }
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
-            AnimatedImage image = serializedObject.targetObject as AnimatedImage;
 
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_animationJsonProperty);
             if (EditorGUI.EndChangeCheck())
             {
-                _lottieAnimation?.Dispose();
+                _image.DisposeLottieAnimation();
                 _lottieAnimation = null;
                 CreateAnimationIfNecessaryAndAttachToGraphic();
                 UpdateTheAnimationInfoBoxText();
             }
-            if (image.AnimationJson == null ||
-                string.IsNullOrEmpty(image.AnimationJson.text) ||
-                !image.AnimationJson.text.StartsWith("{\"v\":"))
+            if (_image.AnimationJson == null ||
+                string.IsNullOrEmpty(_image.AnimationJson.text) ||
+                !_image.AnimationJson.text.StartsWith("{\"v\":"))
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated image.", MessageType.Error);
             }
@@ -84,7 +78,7 @@ namespace LottiePlugin.UI.Editor
             EditorGUILayout.PropertyField(_heightProperty);
             if (EditorGUI.EndChangeCheck())
             {
-                _lottieAnimation?.Dispose();
+                _image.DisposeLottieAnimation();
                 _lottieAnimation = null;
                 CreateAnimationIfNecessaryAndAttachToGraphic();
             }
@@ -104,25 +98,19 @@ namespace LottiePlugin.UI.Editor
                 return;
             }
             serializedObject.ApplyModifiedProperties();
-            AnimatedImage image = serializedObject.targetObject as AnimatedImage;
-            if (image.AnimationJson == null)
+            if (_image.AnimationJson == null)
             {
                 return;
             }
-            string jsonData = image.AnimationJson.text;
+            string jsonData = _image.AnimationJson.text;
             if (string.IsNullOrEmpty(jsonData) ||
                 !jsonData.StartsWith("{\"v\":"))
             {
                 Debug.LogError("Selected file is not a lottie json");
                 return;
             }
-            _lottieAnimation = LottieAnimation.LoadFromJsonData(
-                jsonData,
-                string.Empty,
-                image.TextureWidth,
-                image.TextureHeight);
+            _lottieAnimation = _image.CreateIfNeededAndReturnLottieAnimation();
             _lottieAnimation.DrawOneFrame(0);
-            SetGraphicsTexture(_lottieAnimation.Texture);
         }
         private void UpdateTheAnimationInfoBoxText()
         {
@@ -134,19 +122,6 @@ namespace LottiePlugin.UI.Editor
                     $"Total Frames \"{_lottieAnimation.TotalFramesCount.ToString()}\", " +
                     $"Original Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec. " +
                     $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2")}\" sec. ";
-        }
-        private void SetGraphicsTexture(Texture2D texture)
-        {
-            AnimatedImage image = serializedObject.targetObject as AnimatedImage;
-            if (image == null)
-            {
-                return;
-            }
-            if (image.RawImage == null)
-            {
-                image.RawImage = image.GetComponent<RawImage>();
-            }
-            image.RawImage.texture = texture;
         }
     }
 }
