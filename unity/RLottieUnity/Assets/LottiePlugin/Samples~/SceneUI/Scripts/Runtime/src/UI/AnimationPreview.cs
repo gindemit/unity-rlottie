@@ -34,6 +34,7 @@ namespace LottiePlugin.Sample.SceneUI.UI
         public void Dispose()
         {
             _lottieAnimation.Dispose();
+            Destroy(gameObject);
         }
 
         internal void DoUpdate()
