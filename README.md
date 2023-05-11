@@ -15,7 +15,15 @@ For the first time, designers can create and ship beautiful animations without a
 * Easy integration and usage
 * High performance and low memory footprint
 * Uses Samsung's rlottie library internally
-* Compatible with Unity 2020.3 and later
+* Compatible with Unity 2019.4 and later
+
+## Supported Platforms
+
+* Android
+* iOS
+* Windows
+* OSX
+* Linux
 
 ## Installation
 
