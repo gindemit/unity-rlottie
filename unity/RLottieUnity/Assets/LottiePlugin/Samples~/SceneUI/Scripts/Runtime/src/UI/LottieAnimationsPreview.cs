@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -15,6 +16,8 @@ namespace LottiePlugin.Sample.SceneUI.UI
         [SerializeField] private int _gabBetweenItems;
 
         private List<AnimationPreview> _animationPreviews;
+        private float _oneItemSize;
+        private float _viewPortSize;
 
         internal void Init(string[] animationPaths, uint textureSize)
         {
@@ -26,26 +29,29 @@ namespace LottiePlugin.Sample.SceneUI.UI
             }
             _animationPreviews = new List<AnimationPreview>(animationsCount);
             Vector2 viewPortSize = _scrollRectViewPort.rect.size;
-            float oneItemSize = (viewPortSize.x / _columns) - (_gabBetweenItems * _columns);
+            _viewPortSize = viewPortSize.y;
+            _oneItemSize = (viewPortSize.x / _columns) - (_gabBetweenItems * _columns);
             for (int i = 0; i < animationsCount; ++i)
             {
                 string animation = animationPaths[i];
                 AnimationPreview animationPreview = Instantiate(_animationPreviewPrefab, _scrollRectContent);
                 animationPreview.InitFromFile(animation, textureSize, textureSize);
                 animationPreview.RectTransform.anchoredPosition = new Vector3(
-                    i % _columns * oneItemSize + _gabBetweenItems,
-                    -i / _columns * oneItemSize - _gabBetweenItems);
-                animationPreview.RectTransform.sizeDelta = new Vector2(oneItemSize, oneItemSize);
+                    i % _columns * _oneItemSize + _gabBetweenItems,
+                    -i / _columns * _oneItemSize - _gabBetweenItems);
+                animationPreview.RectTransform.sizeDelta = new Vector2(_oneItemSize, _oneItemSize);
                 _animationPreviews.Add(animationPreview);
             }
             int rows = Mathf.CeilToInt((float)animationsCount / _columns);
             _scrollRectContent.sizeDelta = new Vector2(
                 _scrollRectContent.sizeDelta.x,
-                (rows * oneItemSize) +
+                (rows * _oneItemSize) +
                 (rows * _gabBetweenItems));
+            _scrollRect.onValueChanged.AddListener(OnScrollRectValueChanged);
         }
         public void Dispose()
         {
+            _scrollRect.onValueChanged.RemoveListener(OnScrollRectValueChanged);
             if (_animationPreviews == null)
             {
                 return;
@@ -56,6 +62,28 @@ namespace LottiePlugin.Sample.SceneUI.UI
             }
             _animationPreviews.Clear();
         }
+
+        private void OnScrollRectValueChanged(Vector2 scrollPosition)
+        {
+            float bottom = _scrollRectContent.anchoredPosition.y + _viewPortSize;
+            float top = bottom - _viewPortSize;
+
+            for (int i = 0; i < _animationPreviews.Count; ++i)
+            {
+                AnimationPreview animationPreview = _animationPreviews[i];
+                float previewPosition = -animationPreview.RectTransform.anchoredPosition.y;
+
+                if (previewPosition > bottom || previewPosition + _oneItemSize < top)
+                {
+                    animationPreview.DisableAnimation();
+                }
+                else
+                {
+                    animationPreview.EnableAnimation();
+                }
+            }
+        }
+
         private void Update()
         {
             if (_animationPreviews == null)

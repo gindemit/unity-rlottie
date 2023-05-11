@@ -12,6 +12,7 @@ namespace LottiePlugin.Sample.SceneUI.UI
         [SerializeField] private TextAsset _animationJsonData;
 
         private LottiePlugin.LottieAnimation _lottieAnimation;
+        private bool _animationEnabled = true;
 
         internal void InitFromFile(string jsonFilePath, uint width, uint height)
         {
@@ -37,15 +38,37 @@ namespace LottiePlugin.Sample.SceneUI.UI
 
         internal void DoUpdate()
         {
+            if (!_animationEnabled)
+            {
+                return;
+            }
             _lottieAnimation.Update();
         }
         internal void DoUpdateAsync()
         {
+            if (!_animationEnabled)
+            {
+                return;
+            }
             _lottieAnimation.UpdateAsync();
         }
         internal void DoDrawOneFrameAsyncGetResult()
         {
+            if (!_animationEnabled)
+            {
+                return;
+            }
             _lottieAnimation.DrawOneFrameAsyncGetResult();
+        }
+
+        internal void DisableAnimation()
+        {
+            _animationEnabled = false;
+        }
+
+        internal void EnableAnimation()
+        {
+            _animationEnabled = true;
         }
     }
 }
