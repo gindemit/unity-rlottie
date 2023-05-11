@@ -1,4 +1,4 @@
-using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,10 +18,13 @@ namespace LottiePlugin.Sample.SceneUI.UI
         private List<AnimationPreview> _animationPreviews;
         private float _oneItemSize;
         private float _viewPortSize;
+        private WaitForEndOfFrame _waitForEndOfFrame;
+        private Coroutine _coroutine;
 
         internal void Init(string[] animationPaths, uint textureSize)
         {
             int animationsCount = animationPaths.Length;
+            _waitForEndOfFrame = new WaitForEndOfFrame();
             _noItemsText.gameObject.SetActive(animationsCount == 0);
             if (animationsCount == 0)
             {
@@ -48,9 +51,12 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 (rows * _oneItemSize) +
                 (rows * _gabBetweenItems));
             _scrollRect.onValueChanged.AddListener(OnScrollRectValueChanged);
+            RestartCoroutine();
         }
         public void Dispose()
         {
+            StopAllCoroutines();
+            _coroutine = null;
             _scrollRect.onValueChanged.RemoveListener(OnScrollRectValueChanged);
             if (_animationPreviews == null)
             {
@@ -61,6 +67,18 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 _animationPreviews[i].Dispose();
             }
             _animationPreviews.Clear();
+        }
+        private void RestartCoroutine()
+        {
+            if (_coroutine != null)
+            {
+                StopCoroutine(_coroutine);
+            }
+            _coroutine = StartCoroutine(RenderLottieAnimationCoroutine());
+        }
+        private void OnEnable()
+        {
+            RestartCoroutine();
         }
 
         private void OnScrollRectValueChanged(Vector2 scrollPosition)
@@ -83,27 +101,18 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 }
             }
         }
-
-        private void Update()
+        private IEnumerator RenderLottieAnimationCoroutine()
         {
-            if (_animationPreviews == null)
+            while (true)
             {
-                return;
-            }
-            for (int i = 0; i < _animationPreviews.Count; ++i)
-            {
-                _animationPreviews[i].DoUpdateAsync();
-            }
-        }
-        private void LateUpdate()
-        {
-            if (_animationPreviews == null)
-            {
-                return;
-            }
-            for (int i = 0; i < _animationPreviews.Count; ++i)
-            {
-                _animationPreviews[i].DoDrawOneFrameAsyncGetResult();
+                yield return _waitForEndOfFrame;
+                if (_animationPreviews != null)
+                {
+                    for (int i = 0; i < _animationPreviews.Count; ++i)
+                    {
+                        _animationPreviews[i].DoUpdate();
+                    }
+                }
             }
         }
     }
