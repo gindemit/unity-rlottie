@@ -98,6 +98,7 @@ namespace LottiePlugin.UI
         {
             while (true)
             {
+                yield return _waitForEndOfFrame;
                 if (_lottieAnimation != null)
                 {
                     _lottieAnimation.Update(_animationSpeed);
@@ -106,7 +107,6 @@ namespace LottiePlugin.UI
                         Stop();
                     }
                 }
-                yield return _waitForEndOfFrame;
             }
         }
     }
