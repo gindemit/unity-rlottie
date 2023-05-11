@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace LottiePlugin.UI
@@ -23,14 +24,15 @@ namespace LottiePlugin.UI
         internal uint TextureWidth => _textureWidth;
         internal uint TextureHeight => _textureHeight;
 
-        internal Graphic Graphic => _graphic;
+        internal RawImage RawImage => _rawImage;
         internal State[] States => _states;
 
         [SerializeField] private TextAsset _animationJson;
         [SerializeField] private float _animationSpeed = 1f;
         [SerializeField] private uint _textureWidth;
         [SerializeField] private uint _textureHeight;
-        [SerializeField] private Graphic _graphic;
+        [FormerlySerializedAs("_graphic")] 
+        [SerializeField] private RawImage _rawImage;
         [SerializeField] private bool _ignoreInputWhileAnimating = true;
         [SerializeField] private State[] _states;
         [SerializeField] private ButtonClickedEvent _onClick = new ButtonClickedEvent();
@@ -47,13 +49,17 @@ namespace LottiePlugin.UI
         protected override void Start()
         {
             base.Start();
+            if (_animationJson == null)
+            {
+                return;
+            }
             _lottieAnimation = LottieAnimation.LoadFromJsonData(
                 _animationJson.text,
                 string.Empty,
                 _textureWidth,
                 _textureHeight);
             _lottieAnimation.DrawOneFrame(_states[0].FrameNumber);
-            ((RawImage)_graphic).texture = _lottieAnimation.Texture;
+            _rawImage.texture = _lottieAnimation.Texture;
         }
         protected override void OnDestroy()
         {

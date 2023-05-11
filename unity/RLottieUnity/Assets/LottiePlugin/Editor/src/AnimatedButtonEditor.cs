@@ -17,7 +17,7 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty _animationSpeedProperty;
         private SerializedProperty _widthProperty;
         private SerializedProperty _heightProperty;
-        private SerializedProperty _graphicProperty;
+        private SerializedProperty _rawImageProperty;
         private SerializedProperty _ignoreInputWhileAnimatingProperty;
         private SerializedProperty _onClickProperty;
         private SerializedProperty _statesProperty;
@@ -25,6 +25,7 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty m_InteractableProperty;
         private SerializedProperty m_NavigationProperty;
 
+        private AnimatedButton _button;
         private ReorderableList _statesList;
         private LottieAnimation _lottieAnimation;
         private string _animationInfoBoxText;
@@ -33,11 +34,12 @@ namespace LottiePlugin.UI.Editor
         {
             base.OnEnable();
 
+            _button = serializedObject.targetObject as AnimatedButton;
             _animationJsonProperty = serializedObject.FindProperty("_animationJson");
             _animationSpeedProperty = serializedObject.FindProperty("_animationSpeed");
             _widthProperty = serializedObject.FindProperty("_textureWidth");
             _heightProperty = serializedObject.FindProperty("_textureHeight");
-            _graphicProperty = serializedObject.FindProperty("_graphic");
+            _rawImageProperty = serializedObject.FindProperty("_rawImage");
             _ignoreInputWhileAnimatingProperty = serializedObject.FindProperty("_ignoreInputWhileAnimating");
             _onClickProperty = serializedObject.FindProperty("_onClick");
             _statesProperty = serializedObject.FindProperty("_states");
@@ -60,11 +62,14 @@ namespace LottiePlugin.UI.Editor
             base.OnDisable();
             _lottieAnimation?.Dispose();
             _lottieAnimation = null;
-            _statesList.drawHeaderCallback = null;
-            _statesList.onAddCallback = null;
-            _statesList.drawElementCallback = null;
-            _statesList.onSelectCallback = null;
-            _statesList = null;
+            if (_statesList != null)
+            {
+                _statesList.drawHeaderCallback = null;
+                _statesList.onAddCallback = null;
+                _statesList.drawElementCallback = null;
+                _statesList.onSelectCallback = null;
+                _statesList = null;
+            }
             SetGraphicsTexture(null);
         }
         public override void OnInspectorGUI()
@@ -73,7 +78,6 @@ namespace LottiePlugin.UI.Editor
             EditorGUILayout.PropertyField(m_InteractableProperty);
             EditorGUILayout.PropertyField(_ignoreInputWhileAnimatingProperty);
             EditorGUILayout.PropertyField(m_NavigationProperty);
-            AnimatedButton button = serializedObject.targetObject as AnimatedButton;
 
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_animationJsonProperty);
@@ -89,9 +93,9 @@ namespace LottiePlugin.UI.Editor
                 SetStateValuesAtIndex(0, "Begin", 0, true);
                 SetStateValuesAtIndex(1, "End", _lottieAnimation != null ? (int)_lottieAnimation.TotalFramesCount : 0, true);
             }
-            if (button.AnimationJson == null ||
-                string.IsNullOrEmpty(button.AnimationJson.text) ||
-                !button.AnimationJson.text.StartsWith("{\"v\":"))
+            if (_button.AnimationJson == null ||
+                string.IsNullOrEmpty(_button.AnimationJson.text) ||
+                !_button.AnimationJson.text.StartsWith("{\"v\":"))
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated button.", MessageType.Error);
             }
@@ -130,8 +134,8 @@ namespace LottiePlugin.UI.Editor
                 EditorGUILayout.HelpBox("Higher texture resolution will consume more processor resources at runtime.", MessageType.Warning);
             }
             EditorGUILayout.Space();
-            EditorGUILayout.PropertyField(_graphicProperty);
-            if (button.Graphic == null)
+            EditorGUILayout.PropertyField(_rawImageProperty);
+            if (_button.RawImage == null)
             {
                 EditorGUILayout.HelpBox("You must have a target graphic set in order to use the animated button.", MessageType.Error);
             }
@@ -148,12 +152,11 @@ namespace LottiePlugin.UI.Editor
                 return;
             }
             serializedObject.ApplyModifiedProperties();
-            AnimatedButton button = serializedObject.targetObject as AnimatedButton;
-            if (button.AnimationJson == null)
+            if (_button.AnimationJson == null)
             {
                 return;
             }
-            string jsonData = button.AnimationJson.text;
+            string jsonData = _button.AnimationJson.text;
             if (string.IsNullOrEmpty(jsonData) ||
                 !jsonData.StartsWith("{\"v\":"))
             {
@@ -163,8 +166,8 @@ namespace LottiePlugin.UI.Editor
             _lottieAnimation = LottieAnimation.LoadFromJsonData(
                 jsonData,
                 string.Empty,
-                button.TextureWidth,
-                button.TextureHeight);
+                _button.TextureWidth,
+                _button.TextureHeight);
             _lottieAnimation.DrawOneFrame(0);
             SetGraphicsTexture(_lottieAnimation.Texture);
         }
@@ -181,8 +184,16 @@ namespace LottiePlugin.UI.Editor
         }
         private void SetGraphicsTexture(Texture2D texture)
         {
-            AnimatedButton button = serializedObject.targetObject as AnimatedButton;
-            ((RawImage)button.Graphic).texture = texture;
+            if (_button == null)
+            {
+                return;
+            }
+            RawImage rawImage = _button.RawImage as RawImage;
+            if (rawImage == null)
+            {
+                return;
+            }
+            rawImage.texture = texture;
         }
 
         private void DrawListItems(Rect rect, int index, bool isActive, bool isFocused)
