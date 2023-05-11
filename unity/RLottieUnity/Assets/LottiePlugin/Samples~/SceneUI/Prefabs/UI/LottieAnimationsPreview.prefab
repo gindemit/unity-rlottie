@@ -133,7 +133,6 @@ MonoBehaviour:
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 0.392}
   m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
@@ -166,7 +165,7 @@ MonoBehaviour:
   m_MovementType: 1
   m_Elasticity: 0.1
   m_Inertia: 1
-  m_DecelerationRate: 0.135
+  m_DecelerationRate: 0.001
   m_ScrollSensitivity: 1
   m_Viewport: {fileID: 2606107604183147808}
   m_HorizontalScrollbar: {fileID: 0}
@@ -228,7 +227,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c14997b805382b1418f92342629e06f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _animationPreviewPrefab: {fileID: 6430382759961137617, guid: 0711e59834cc502459d9324d5193f133, type: 3}
+  _animationPreviewPrefab: {fileID: 6430382759961137617, guid: 0711e59834cc502459d9324d5193f133,
+    type: 3}
   _scrollRect: {fileID: 2606107604256272231}
   _scrollRectViewPort: {fileID: 2606107604183147808}
   _scrollRectContent: {fileID: 2606107603885611451}
@@ -295,7 +295,6 @@ MonoBehaviour:
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
