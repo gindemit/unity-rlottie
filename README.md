@@ -115,7 +115,7 @@ Check out the 'Scene UI' Sample in Unity Package manager.
 7. Open the 'SampleScene' from the sample in 'Assets/Samples/Lottie Animation/[version]/Scene UI/Scenes/' folder
 8. Hit play in Unity editor
 
-https://user-images.githubusercontent.com/5675979/144131059-94285a28-61cf-44cf-94c9-9868923ed950.mp4
+https://github.com/gindemit/unity-rlottie/assets/5675979/3301d00e-fc9e-49c0-bc7f-7408f1f72ce4
 
 ## Support
 
