@@ -36,7 +36,73 @@ To install the Unity Lottie Animation to Texture2D plugin using the Unity Packag
    https://github.com/gindemit/unity-rlottie.git?path=/unity/RLottieUnity/Assets/LottiePlugin/#0.2.0
    ```
 
-## Examples
+## Quick Start
+
+The `LottiePlugin.UI` namespace includes a `AnimatedImage` class which allows you to use Lottie animations as `RawImage` in your Unity game.
+Here are the steps to use the `AnimatedImage` class in your Unity project:
+
+1. **Import the Class:** First, make sure the `AnimatedImage` class is included in your Unity project.
+
+2. **Create an RawImage:** In your Unity scene, create a new RawImage UGUI game object and attach the `AnimatedImage` script to it.
+
+3. **Assign Parameters:** In the `AnimatedImage` component, you will see several parameters:
+
+    - **Animation Json**: A `TextAsset` representing the JSON data for your Lottie animation. You can drag and drop it from your Assets folder.
+    - **Texture Width**: Defines the width of the texture for the animation. Increasing this value will improve the quality of the animation by increasing the number of pixels, but it may also impact performance, especially on lower-end hardware.
+    - **Texture Height**: Defines the height of the texture for the animation. Similar to Texture Width, increasing this value enhances the quality of the animation by adding more pixels, but it could potentially degrade performance on less powerful devices.
+    - **Animation Speed**: Speed at which animation plays. 1 is normal speed.
+    - **Play On Awake**: If checked, the animation will start playing as soon as the scene starts.
+    - **Loop**: If checked, the animation will keep playing in a loop.
+
+    Fill these in according to your needs.
+
+4. **Play/Stop the Animation:** You can use the `Play()` and `Stop()` methods to control the animation at runtime. You can call these from any other script.
+
+    ```csharp
+    // Get a reference to the AnimatedImage
+    AnimatedImage animatedImage = gameObject.GetComponent<AnimatedImage>();
+
+    // Play the animation
+    animatedImage.Play();
+
+    // Stop the animation
+    animatedImage.Stop();
+    ```
+And that's it! You are now able to use Lottie animations in your Unity projects using the `AnimatedImage` class.
+
+## Example
+
+Here's an example of how to use the `AnimatedImage` class:
+
+```csharp
+// Attach this script to a GameObject with AnimatedImage component
+
+using UnityEngine;
+using LottiePlugin.UI;
+
+public class AnimationController : MonoBehaviour
+{
+    private AnimatedImage animatedImage;
+
+    private void Awake()
+    {
+        animatedImage = GetComponent<AnimatedImage>();
+    }
+
+    private void Start()
+    {
+        animatedImage.Play(); // Start the animation
+    }
+
+    private void OnDisable()
+    {
+        animatedImage.Stop(); // Stop the animation
+    }
+}
+```
+This script, when attached to the same GameObject as the `AnimatedImage` component, will start the animation when the game starts and stop it when the GameObject is disabled.
+
+## Other Examples
 
 Check out the 'Scene UI' Sample in Unity Package manager.
 
