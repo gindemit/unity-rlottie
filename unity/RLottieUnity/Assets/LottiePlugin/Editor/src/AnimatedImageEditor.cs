@@ -110,6 +110,10 @@ namespace LottiePlugin.UI.Editor
                 return;
             }
             _lottieAnimation = _image.CreateIfNeededAndReturnLottieAnimation();
+            if (_lottieAnimation == null)
+            {
+                return;
+            }
             _lottieAnimation.DrawOneFrame(0);
         }
         private void UpdateTheAnimationInfoBoxText()

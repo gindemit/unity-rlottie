@@ -21,11 +21,8 @@ namespace LottiePlugin.UI
 
         public Transform Transform { get; private set; }
         internal TextAsset AnimationJson => _animationJson;
-        internal uint TextureWidth => _textureWidth;
-        internal uint TextureHeight => _textureHeight;
 
         internal RawImage RawImage => _rawImage;
-        internal State[] States => _states;
 
         [SerializeField] private TextAsset _animationJson;
         [SerializeField] private float _animationSpeed = 1f;
@@ -81,6 +78,14 @@ namespace LottiePlugin.UI
         }
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
         {
+            if (_animationJson == null)
+            {
+                return null;
+            }
+            if (_rawImage == null)
+            {
+                return null;
+            }
             if (_lottieAnimation == null)
             {
                 _lottieAnimation = LottieAnimation.LoadFromJsonData(
@@ -88,9 +93,17 @@ namespace LottiePlugin.UI
                 string.Empty,
                 _textureWidth,
                 _textureHeight);
-                _rawImage.texture = _lottieAnimation.Texture;
+                SetTextureToTheTargetRawImage();
             }
             return _lottieAnimation;
+        }
+        internal void SetTextureToTheTargetRawImage()
+        {
+            if (_lottieAnimation == null)
+            {
+                return;
+            }
+            _rawImage.texture = _lottieAnimation.Texture;
         }
         internal void DisposeLottieAnimation()
         {

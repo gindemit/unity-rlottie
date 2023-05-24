@@ -12,6 +12,9 @@ namespace LottiePlugin.UI
         internal TextAsset AnimationJson => _animationJson;
         internal uint TextureWidth => _textureWidth;
         internal uint TextureHeight => _textureHeight;
+        internal LottieAnimation LottieAnimation => _lottieAnimation;
+        internal float AnimationSpeed => _animationSpeed;
+        internal bool Loop => _loop;
 
         [SerializeField] private TextAsset _animationJson;
         [SerializeField] private RawImage _rawImage;
@@ -37,7 +40,10 @@ namespace LottiePlugin.UI
             {
                 return;
             }
-            _rawImage = GetComponent<RawImage>();
+            if (_rawImage == null)
+            {
+                _rawImage = GetComponent<RawImage>();
+            }
             CreateIfNeededAndReturnLottieAnimation();
             if (_playOnAwake)
             {
@@ -74,6 +80,18 @@ namespace LottiePlugin.UI
         }
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
         {
+            if (_animationJson == null)
+            {
+                return null;
+            }
+            if (_rawImage == null)
+            {
+                _rawImage = GetComponent<RawImage>();
+            }
+            if (_rawImage == null)
+            {
+                return null;
+            }
             if (_lottieAnimation == null)
             {
                 _lottieAnimation = LottieAnimation.LoadFromJsonData(

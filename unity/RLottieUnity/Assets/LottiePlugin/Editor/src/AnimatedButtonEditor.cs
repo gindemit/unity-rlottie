@@ -1,10 +1,8 @@
 #if UNITY_EDITOR
-using System.Collections.ObjectModel;
 using UnityEditor;
 using UnityEditor.UI;
 using UnityEditorInternal;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace LottiePlugin.UI.Editor
 {
@@ -51,7 +49,8 @@ namespace LottiePlugin.UI.Editor
             CreateAnimationIfNecessaryAndAttachToGraphic();
             UpdateTheAnimationInfoBoxText();
 
-            _statesList = new ReorderableList(serializedObject, _statesProperty, true, true, true, true) {
+            _statesList = new ReorderableList(serializedObject, _statesProperty, true, true, true, true)
+            {
                 drawHeaderCallback = DrawHeader,
                 onAddCallback = AddCallback,
                 drawElementCallback = DrawListItems,
@@ -132,7 +131,12 @@ namespace LottiePlugin.UI.Editor
                 EditorGUILayout.HelpBox("Higher texture resolution will consume more processor resources at runtime.", MessageType.Warning);
             }
             EditorGUILayout.Space();
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_rawImageProperty);
+            if (EditorGUI.EndChangeCheck())
+            {
+                _button.SetTextureToTheTargetRawImage();
+            }
             if (_button.RawImage == null)
             {
                 EditorGUILayout.HelpBox("You must have a target graphic set in order to use the animated button.", MessageType.Error);
@@ -162,6 +166,10 @@ namespace LottiePlugin.UI.Editor
                 return;
             }
             _lottieAnimation = _button.CreateIfNeededAndReturnLottieAnimation();
+            if (_lottieAnimation == null)
+            {
+                return;
+            }
             _lottieAnimation.DrawOneFrame(0);
         }
         private void UpdateTheAnimationInfoBoxText()
@@ -173,7 +181,7 @@ namespace LottiePlugin.UI.Editor
             _animationInfoBoxText = $"Animation info: Frame Rate \"{_lottieAnimation.FrameRate.ToString("F2")}\", " +
                     $"Total Frames \"{_lottieAnimation.TotalFramesCount.ToString()}\", " +
                     $"Original Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec. " +
-                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue) .ToString("F2")}\" sec. " ;
+                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2")}\" sec. ";
         }
 
         private void DrawListItems(Rect rect, int index, bool isActive, bool isFocused)
