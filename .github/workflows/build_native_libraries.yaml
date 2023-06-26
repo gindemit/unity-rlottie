@@ -20,20 +20,20 @@ jobs:
       - name: Build
         run: |
           cd unity-rlottie/projects/CMake
-          cmake .
-          cmake --build . --config Release
-          dir out\build\x64-Release
-          dir out\build\x86-Release
+          cmake -S . -B ./build_x86 -A Win32
+          cmake -S . -B ./build_x86_64 -A x64
+          cmake --build ./build_x86 --config Release
+          cmake --build ./build_x86_64 --config Release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: RLottiePlugin
           path: |
-            unity-rlottie/projects/CMake/out/build/x64-Release/LottiePlugin.dll
-            unity-rlottie/projects/CMake/out/build/x64-Release/rlottie.dll
-            unity-rlottie/projects/CMake/out/build/x86-Release/LottiePlugin.dll
-            unity-rlottie/projects/CMake/out/build/x86-Release/rlottie.dll
+            unity-rlottie/out/Release/Plugins/Windows/x86/LottiePlugin.dll
+            unity-rlottie/out/Release/Plugins/Windows/x86/rlottie.dll
+            unity-rlottie/out/Release/Plugins/Windows/x86_64/LottiePlugin.dll
+            unity-rlottie/out/Release/Plugins/Windows/x86_64/rlottie.dll
 
   # build_android:
   #   runs-on: ubuntu-latest
