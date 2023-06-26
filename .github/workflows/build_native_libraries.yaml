@@ -19,7 +19,7 @@ jobs:
 
       - name: Build
         run: |
-          cd unity-rlottie/projects/CMake
+          cd projects/CMake
           cmake -S . -B ./build_x86 -A Win32
           cmake -S . -B ./build_x86_64 -A x64
           cmake --build ./build_x86 --config Release
@@ -30,10 +30,10 @@ jobs:
         with:
           name: RLottiePlugin
           path: |
-            unity-rlottie/out/Release/Plugins/Windows/x86/LottiePlugin.dll
-            unity-rlottie/out/Release/Plugins/Windows/x86/rlottie.dll
-            unity-rlottie/out/Release/Plugins/Windows/x86_64/LottiePlugin.dll
-            unity-rlottie/out/Release/Plugins/Windows/x86_64/rlottie.dll
+            out/Release/Plugins/Windows/x86/LottiePlugin.dll
+            out/Release/Plugins/Windows/x86/rlottie.dll
+            out/Release/Plugins/Windows/x86_64/LottiePlugin.dll
+            out/Release/Plugins/Windows/x86_64/rlottie.dll
 
   # build_android:
   #   runs-on: ubuntu-latest
