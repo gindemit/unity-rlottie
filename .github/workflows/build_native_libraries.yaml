@@ -1,0 +1,95 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  build_windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Build
+        run: |
+          cd unity-rlottie/projects/CMake
+          cmake .
+          cmake --build . --config Release
+          dir out\build\x64-Release
+          dir out\build\x86-Release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: RLottiePlugin
+          path: |
+            unity-rlottie/projects/CMake/out/build/x64-Release/LottiePlugin.dll
+            unity-rlottie/projects/CMake/out/build/x64-Release/rlottie.dll
+            unity-rlottie/projects/CMake/out/build/x86-Release/LottiePlugin.dll
+            unity-rlottie/projects/CMake/out/build/x86-Release/rlottie.dll
+
+  # build_android:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v2
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Set up JDK 1.8
+  #       uses: actions/setup-java@v2
+  #       with:
+  #         java-version: '8'
+  #         distribution: 'adopt'
+
+  #     - name: Install Android NDK
+  #       run: echo "y" | sudo ${ANDROID_HOME}/tools/bin/sdkmanager --install "ndk;21.3.6528147"
+
+  #     - name: Build
+  #       run: |
+  #         # Insert Android build commands here
+
+  # build_macos:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v2
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Install CMake
+  #       run: brew install cmake
+
+  #     - name: Build
+  #       run: |
+  #         cd unity-rlottie/projects/CMake
+  #         cmake -S . -B ./buildOSX -G Xcode -DVORBIS_OSX=1
+  #         cmake --build ./buildOSX --config Release
+  #         mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/OSX
+  #         mv VorbisPluginBuild/RLottiePlugin.dylib ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/OSX
+
+  # build_ios:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v2
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Install CMake
+  #       run: brew install cmake
+
+  #     - name: Build
+  #       run: |
+  #         cd unity-rlottie/projects/CMake
+  #         cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DVORBIS_IOS=1
+  #         cmake --build ./buildIOS --config Release --target RLottiePlugin
+  #         mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
+  #         mv VorbisPluginBuild/RLottiePlugin.a ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
