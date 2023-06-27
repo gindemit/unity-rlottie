@@ -50,7 +50,7 @@ jobs:
           distribution: 'adopt'
 
       - name: Install Android NDK
-        run: echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+        run: echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;21.4.7075529"
 
       - name: Set execution permissions for gradlew
         run: chmod +x projects/AndroidStudio/gradlew
@@ -59,6 +59,14 @@ jobs:
         run: |
           cd projects/AndroidStudio
           ./gradlew build
+          ls -R app/build/outputs
+      
+      # - name: Upload artifacts
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     name: LottiePluginAndroidArtifacts
+      #     path: |
+      #       projects/AndroidStudio/app/build/outputs/aar/app-release.aar
 
   # build_macos:
   #   runs-on: macos-latest
