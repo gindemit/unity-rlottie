@@ -25,8 +25,10 @@ include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc>)
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES 
     ../../src/LottiePlugin.cpp)
 
+message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 
-if (ANDROID)
+if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR
+    "${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
     message("Building for arm architecture")
     set(CMAKE_ASM_FLAGS "${CMAKE_CXX_FLAGS} -x assembler-with-cpp")
     set(ARM_ASM_SOURCE ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
