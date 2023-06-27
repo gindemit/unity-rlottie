@@ -43,14 +43,16 @@ else()
   add_library (LottiePlugin SHARED ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
 endif()
 
-if (${ANDROID_ABI} STREQUAL "armeabi-v7a")
+if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")
     target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
     target_compile_definitions(LottiePlugin PUBLIC
             USE_ARM_NEON)
     target_sources(LottiePlugin PRIVATE
             ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
-elseif(${ANDROID_ABI} STREQUAL "arm64-v8a")
+elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
+    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")    
     target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
     target_compile_definitions(LottiePlugin PUBLIC
