@@ -50,7 +50,7 @@ jobs:
           distribution: 'adopt'
 
       - name: Install Android NDK
-        run: echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;21.4.7075529"
+        run: echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.1.8937393"
 
       - name: Set execution permissions for gradlew
         run: chmod +x projects/AndroidStudio/gradlew
