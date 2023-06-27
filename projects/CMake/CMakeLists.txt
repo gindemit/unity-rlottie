@@ -46,6 +46,7 @@ else()
 endif()
 
 if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
+    set(CMAKE_ASM_COMPILER "/usr/bin/as")
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")
     target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
@@ -54,6 +55,7 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
     target_sources(LottiePlugin PRIVATE
             ${PIXMAN_ROOT}/pixman-arm-neon-asm.S)
 elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
+    set(CMAKE_ASM_COMPILER "/usr/bin/as")
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")    
     target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
