@@ -26,7 +26,7 @@ set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
     ../../src/LottiePlugin.cpp)
 
 
-if ("${ARCH}" STREQUAL "arm")
+if (ANDROID)
     message("Building for arm architecture")
     set(CMAKE_ASM_FLAGS "${CMAKE_CXX_FLAGS} -x assembler-with-cpp")
     set(ARM_ASM_SOURCE ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
