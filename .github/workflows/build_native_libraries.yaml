@@ -52,10 +52,14 @@ jobs:
       - name: Install Android NDK
         run: echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
 
+      - name: Set execution permissions for gradlew
+        run: chmod +x projects/AndroidStudio/gradlew
+
       - name: Build Gradle project
         run: |
           cd projects/AndroidStudio
           ./gradlew build
+
 
   # build_macos:
   #   runs-on: macos-latest
