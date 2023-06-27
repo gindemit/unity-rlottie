@@ -62,6 +62,7 @@ jobs:
 
       - name: Build Gradle project
         run: |
+          echo $ANDROID_NDK_HOME
           result=$(find $ANDROID_NDK_HOME -name aarch64-linux-android-strip)
           echo $result
           cd projects/AndroidStudio
