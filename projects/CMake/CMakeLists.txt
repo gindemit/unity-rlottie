@@ -24,7 +24,15 @@ include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc>)
 
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES 
     ../../src/LottiePlugin.cpp)
-    
+
+
+if ("${ARCH}" STREQUAL "arm")
+    message("Building for arm architecture")
+    set(CMAKE_ASM_FLAGS "${CMAKE_CXX_FLAGS} -x assembler-with-cpp")
+    set(ARM_ASM_SOURCE ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
+    set(RLOTTIE_PLUGIN_LIBRARY_SOURCES ${RLOTTIE_PLUGIN_LIBRARY_SOURCES} ${ARM_ASM_SOURCE})
+endif()
+
 if (RLOTTIE_IOS)
   set(BUILD_SHARED_LIBS OFF)
   add_library (LottiePlugin STATIC ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
