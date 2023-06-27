@@ -43,10 +43,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up JDK 1.8
+      - name: Set up JDK 11
         uses: actions/setup-java@v2
         with:
-          java-version: '8'
+          java-version: '11'
           distribution: 'adopt'
 
       - name: Install Android NDK
@@ -59,7 +59,6 @@ jobs:
         run: |
           cd projects/AndroidStudio
           ./gradlew build
-
 
   # build_macos:
   #   runs-on: macos-latest
