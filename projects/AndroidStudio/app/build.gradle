@@ -3,6 +3,7 @@ plugins {
 }
 
 android {
+    namespace 'com.gindemit.rlottie'
     compileSdk 33
 
     defaultConfig {
