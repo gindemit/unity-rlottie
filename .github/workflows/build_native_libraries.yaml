@@ -62,7 +62,8 @@ jobs:
 
       - name: Build Gradle project
         run: |
-          find $ANDROID_NDK_HOME -name aarch64-linux-android-strip
+          result=$(find $ANDROID_NDK_HOME -name aarch64-linux-android-strip)
+          echo $result
           cd projects/AndroidStudio
           ./gradlew build
           ls -R app/build/outputs
