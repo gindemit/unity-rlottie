@@ -27,20 +27,36 @@ set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
 
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 
-if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR
-    "${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
-    message("Building for arm architecture")
-    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")
-    set(CMAKE_ASM_FLAGS "${CMAKE_CXX_FLAGS} -x assembler-with-cpp")
-    set(ARM_ASM_SOURCE ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
-    set(RLOTTIE_PLUGIN_LIBRARY_SOURCES ${RLOTTIE_PLUGIN_LIBRARY_SOURCES} ${ARM_ASM_SOURCE})
-endif()
+# if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR
+#     "${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
+#     message("Building for arm architecture")
+#     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")
+#     set(CMAKE_ASM_FLAGS "${CMAKE_CXX_FLAGS} -x assembler-with-cpp")
+#     set(ARM_ASM_SOURCE ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
+#     set(RLOTTIE_PLUGIN_LIBRARY_SOURCES ${RLOTTIE_PLUGIN_LIBRARY_SOURCES} ${ARM_ASM_SOURCE})
+# endif()
 
 if (RLOTTIE_IOS)
   set(BUILD_SHARED_LIBS OFF)
   add_library (LottiePlugin STATIC ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
 else()
   add_library (LottiePlugin SHARED ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
+endif()
+
+if (${ANDROID_ABI} STREQUAL "armeabi-v7a")
+    target_compile_options(rlottie PUBLIC
+            -fno-integrated-as)
+    target_compile_definitions(rlottie PUBLIC
+            USE_ARM_NEON)
+    target_sources(rlottie PRIVATE
+            rlottie/src/vector/pixman/pixman-arm-neon-asm.S)
+elseif(${ANDROID_ABI} STREQUAL "arm64-v8a")
+    target_compile_options(rlottie PUBLIC
+            -fno-integrated-as)
+    target_compile_definitions(rlottie PUBLIC
+            USE_ARM_NEON __ARM64_NEON__)
+    target_sources(rlottie PRIVATE
+            rlottie/src/vector/pixman/pixman-arma64-neon-asm.S)
 endif()
 
 if (WIN32)
