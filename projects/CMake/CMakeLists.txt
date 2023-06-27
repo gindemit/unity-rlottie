@@ -7,6 +7,8 @@ cmake_minimum_required (VERSION 3.6)
 project(LottiePlugin)
 
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)
+set (PIXMAN_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/pixman)
+
 if (RLOTTIE_IOS)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/LottiePluginBuild)
 elseif (RLOTTIE_OSX)
@@ -50,7 +52,7 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
     target_compile_definitions(LottiePlugin PUBLIC
             USE_ARM_NEON)
     target_sources(LottiePlugin PRIVATE
-            ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
+            ${PIXMAN_ROOT}/pixman-arm-neon-asm.S)
 elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")    
     target_compile_options(LottiePlugin PUBLIC
@@ -58,7 +60,7 @@ elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
     target_compile_definitions(LottiePlugin PUBLIC
             USE_ARM_NEON __ARM64_NEON__)
     target_sources(LottiePlugin PRIVATE
-            ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
+            ${PIXMAN_ROOT}/pixman-arma64-neon-asm.S)
 endif()
 
 if (WIN32)
