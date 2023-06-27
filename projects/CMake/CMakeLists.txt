@@ -44,18 +44,18 @@ else()
 endif()
 
 if (${ANDROID_ABI} STREQUAL "armeabi-v7a")
-    target_compile_options(rlottie PUBLIC
+    target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
-    target_compile_definitions(rlottie PUBLIC
+    target_compile_definitions(LottiePlugin PUBLIC
             USE_ARM_NEON)
-    target_sources(rlottie PRIVATE
+    target_sources(LottiePlugin PRIVATE
             ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
 elseif(${ANDROID_ABI} STREQUAL "arm64-v8a")
-    target_compile_options(rlottie PUBLIC
+    target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
-    target_compile_definitions(rlottie PUBLIC
+    target_compile_definitions(LottiePlugin PUBLIC
             USE_ARM_NEON __ARM64_NEON__)
-    target_sources(rlottie PRIVATE
+    target_sources(LottiePlugin PRIVATE
             ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
 endif()
 
