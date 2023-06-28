@@ -63,7 +63,7 @@ jobs:
           result=$(find $ANDROID_NDK_HOME -name aarch64-linux-android-strip)
           echo $result
           cd projects/AndroidStudio
-          ./gradlew build
+          ./gradlew assembleRelease
           ls -R app
       
     # C/C++: /home/runner/work/unity-rlottie/unity-rlottie/projects/AndroidStudio/app/.cxx/RelWithDebInfo/2a684z5s/armeabi-v7a/rlottie_build/librlottie.a
