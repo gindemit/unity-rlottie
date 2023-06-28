@@ -25,10 +25,11 @@ jobs:
           cmake --build ./build_x86 --config Release
           cmake --build ./build_x86_64 --config Release
           cd ../../
-          copy /Y out/Release/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
-          copy /Y out/Release/Plugins/Windows/x86/rlottie.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/rlottie.dll
-          copy /Y out/Release/Plugins/Windows/x86_64/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
-          copy /Y out/Release/Plugins/Windows/x86_64/rlottie.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/rlottie.dll
+          Copy-Item -Path out/Release/Plugins/Windows/x86/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll -Force
+          Copy-Item -Path out/Release/Plugins/Windows/x86/rlottie.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/rlottie.dll -Force
+          Copy-Item -Path out/Release/Plugins/Windows/x86_64/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll -Force
+          Copy-Item -Path out/Release/Plugins/Windows/x86_64/rlottie.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/rlottie.dll -Force
+        
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
