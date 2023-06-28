@@ -1,6 +1,4 @@
 # CMakeList.txt : CMake project for LottiePlugin, include source and define
-# project specific logic here.
-#
 cmake_minimum_required (VERSION 3.6)
 
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
@@ -29,15 +27,6 @@ set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
     ../../src/LottiePlugin.cpp)
 
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
-
-# if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR
-#     "${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
-#     message("Building for arm architecture")
-#     set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")
-#     set(CMAKE_ASM_FLAGS "${CMAKE_CXX_FLAGS} -x assembler-with-cpp")
-#     set(ARM_ASM_SOURCE ${RLOTTIE_ROOT}/src/vector/pixman/pixman-arm-neon-asm.S)
-#     set(RLOTTIE_PLUGIN_LIBRARY_SOURCES ${RLOTTIE_PLUGIN_LIBRARY_SOURCES} ${ARM_ASM_SOURCE})
-# endif()
 
 if (RLOTTIE_IOS)
   set(BUILD_SHARED_LIBS OFF)
@@ -99,7 +88,6 @@ else()
 endif()
 
 add_dependencies(LottiePlugin rlottie)
-#target_link_libraries(LottiePlugin ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build/${RLOTTIE_LIBRARY_NAME})
 target_link_libraries(LottiePlugin rlottie)
 message(${CMAKE_CURRENT_BINARY_DIR}/rlottie_build/${RLOTTIE_LIBRARY_NAME})
 
