@@ -8,6 +8,7 @@ project(LottiePlugin)
 
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)
 set (PIXMAN_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/pixman)
+set(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
 if (RLOTTIE_IOS)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/LottiePluginBuild)
@@ -46,8 +47,6 @@ else()
 endif()
 
 if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
-    set(CMAKE_ASM_COMPILER "/usr/bin/as")
-    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")
     target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
     target_compile_definitions(LottiePlugin PUBLIC
@@ -55,8 +54,6 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
     target_sources(LottiePlugin PRIVATE
             ${PIXMAN_ROOT}/pixman-arm-neon-asm.S)
 elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
-    set(CMAKE_ASM_COMPILER "/usr/bin/as")
-    set(CMAKE_ASM_COMPILE_OBJECT "<CMAKE_ASM_COMPILER> <FLAGS> <DEFINES> -o <OBJECT> <SOURCE>")    
     target_compile_options(LottiePlugin PUBLIC
             -fno-integrated-as)
     target_compile_definitions(LottiePlugin PUBLIC
