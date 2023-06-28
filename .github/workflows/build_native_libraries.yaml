@@ -80,40 +80,84 @@ jobs:
             out/RelWithDebInfo/Plugins/Android/x86_64/libLottiePlugin.so
             out/RelWithDebInfo/Plugins/Android/x86_64/librlottie.so
 
-  # build_macos:
-  #   runs-on: macos-latest
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v2
-  #       with:
-  #         submodules: recursive
+  build_macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
-  #     - name: Install CMake
-  #       run: brew install cmake
+      - name: Install CMake
+        run: brew install cmake
 
-  #     - name: Build
-  #       run: |
-  #         cd unity-rlottie/projects/CMake
-  #         cmake -S . -B ./buildOSX -G Xcode -DVORBIS_OSX=1
-  #         cmake --build ./buildOSX --config Release
-  #         mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/OSX
-  #         mv VorbisPluginBuild/RLottiePlugin.dylib ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/OSX
+      - name: Build
+        run: |
+          cd unity-rlottie/projects/CMake
+          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1
+          cmake --build ./buildOSX --config Release
+          tree ../../out
 
-  # build_ios:
-  #   runs-on: macos-latest
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v2
-  #       with:
-  #         submodules: recursive
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: LottiePluginMacOSArtifacts
+          path: |
+            out/Release/Plugins/OSX/libLottiePlugin.dylib
+            out/Release/Plugins/OSX/librlottie.dylib
 
-  #     - name: Install CMake
-  #       run: brew install cmake
+  build_ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
-  #     - name: Build
-  #       run: |
-  #         cd unity-rlottie/projects/CMake
-  #         cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DVORBIS_IOS=1
-  #         cmake --build ./buildIOS --config Release --target RLottiePlugin
-  #         mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
-  #         mv VorbisPluginBuild/RLottiePlugin.a ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
+      - name: Install CMake
+        run: brew install cmake
+
+      - name: Build
+        run: |
+          cd unity-rlottie/projects/CMake
+          cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1
+          cmake --build ./buildIOS --config Release --target RLottiePlugin
+          mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
+          mv VorbisPluginBuild/RLottiePlugin.a ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
+          tree ../../out
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: LottiePluginIOSArtifacts
+          path: |
+            out/Release/Plugins/iOS/libLottiePlugin.a
+            out/Release/Plugins/iOS/librlottie.a
+
+  build_linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Install CMake
+        run: sudo apt-get install cmake
+
+      - name: Build
+        run: |
+          cd unity-rlottie/projects/CMake
+          cmake -S . -B ./buildLinux -G "Unix Makefiles" -DRLOTTIE_LINUX=1
+          cmake --build ./buildLinux --config Release
+          tree ../../out
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: LottiePluginLinuxArtifacts
+          path: |
+            out/Release/Plugins/Linux/x86/libLottiePlugin.so
+            out/Release/Plugins/Linux/x86/librlottie.so
+            out/Release/Plugins/Linux/x86_64/libLottiePlugin.so
+            out/Release/Plugins/Linux/x86_64/librlottie.so
