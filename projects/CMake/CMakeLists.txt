@@ -94,9 +94,9 @@ message(${CMAKE_CURRENT_BINARY_DIR}/rlottie_build/${RLOTTIE_LIBRARY_NAME})
 #Adding simple test program:
 #add_executable(LottiePluginTest ../../src/PluginTest.c)
 #target_link_libraries(LottiePluginTest LottiePlugin)
-if (RLOTTIE_IOS)
-  set_xcode_property(LottiePluginTest PRODUCT_BUNDLE_IDENTIFIER "com.soulside.app" All)
-endif()
+# if (RLOTTIE_IOS)
+#   set_xcode_property(LottiePluginTest PRODUCT_BUNDLE_IDENTIFIER "com.soulside.app" All)
+# endif()
 
 if (WIN32)
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
