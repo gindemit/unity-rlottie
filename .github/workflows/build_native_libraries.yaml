@@ -24,6 +24,11 @@ jobs:
           cmake -S . -B ./build_x86_64 -A x64
           cmake --build ./build_x86 --config Release
           cmake --build ./build_x86_64 --config Release
+          cd ../../
+          copy /Y out/Release/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
+          copy /Y out/Release/Plugins/Windows/x86/rlottie.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/rlottie.dll
+          copy /Y out/Release/Plugins/Windows/x86_64/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
+          copy /Y out/Release/Plugins/Windows/x86_64/rlottie.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/rlottie.dll
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -34,6 +39,14 @@ jobs:
             out/Release/Plugins/Windows/x86/rlottie.dll
             out/Release/Plugins/Windows/x86_64/LottiePlugin.dll
             out/Release/Plugins/Windows/x86_64/rlottie.dll
+
+      - name: Run Tests in Unity
+        uses: game-ci/unity-test-runner@v2
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: unity/RLottieUnity
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
 
   build_android:
     runs-on: ubuntu-latest
