@@ -121,7 +121,7 @@ jobs:
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1
+          cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1 -DCMAKE_IOS_INSTALL_COMBINED=YES -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED="NO" -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY=""
           cmake --build ./buildIOS --config Release --target LottiePlugin
           brew install tree
           tree ../../out
