@@ -64,14 +64,18 @@ jobs:
           echo $result
           cd projects/AndroidStudio
           ./gradlew build
-          ls -R app/build/outputs
+          ls -R app
       
-      # - name: Upload artifacts
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     name: LottiePluginAndroidArtifacts
-      #     path: |
-      #       projects/AndroidStudio/app/build/outputs/aar/app-release.aar
+    # C/C++: /home/runner/work/unity-rlottie/unity-rlottie/projects/AndroidStudio/app/.cxx/RelWithDebInfo/2a684z5s/armeabi-v7a/rlottie_build/librlottie.a
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: LottiePluginAndroidArtifacts
+          path: |
+            projects/AndroidStudio/app/.cxx/RelWithDebInfo/2a684z5s/armeabi-v7a/rlottie_build/librlottie.a
+            projects/AndroidStudio/app/.cxx/RelWithDebInfo/2a684z5s/arm64-v8a/rlottie_build/librlottie.a
+            projects/AndroidStudio/app/.cxx/RelWithDebInfo/2a684z5s/x86/rlottie_build/librlottie.a
+            projects/AndroidStudio/app/.cxx/RelWithDebInfo/2a684z5s/x86_64/rlottie_build/librlottie.a
 
   # build_macos:
   #   runs-on: macos-latest
