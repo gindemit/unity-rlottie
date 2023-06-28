@@ -131,8 +131,8 @@ jobs:
         with:
           name: LottiePluginIOSArtifacts
           path: |
-            out/Release/Plugins/iOS/libLottiePlugin.a
-            out/Release/Plugins/iOS/librlottie.a
+            out/Release/Plugins/iOS/aarch64/libLottiePlugin.a
+            out/Release/Plugins/iOS/aarch64/librlottie.a
 
   build_linux:
     runs-on: ubuntu-latest
