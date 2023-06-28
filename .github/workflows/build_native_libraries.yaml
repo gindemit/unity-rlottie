@@ -96,6 +96,7 @@ jobs:
           cd projects/CMake
           cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1
           cmake --build ./buildOSX --config Release
+          brew install tree
           tree ../../out
 
       - name: Upload artifacts
@@ -124,6 +125,7 @@ jobs:
           cmake --build ./buildIOS --config Release --target RLottiePlugin
           mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
           mv VorbisPluginBuild/RLottiePlugin.a ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
+          brew install tree
           tree ../../out
 
       - name: Upload artifacts
@@ -157,7 +159,5 @@ jobs:
         with:
           name: LottiePluginLinuxArtifacts
           path: |
-            out/Release/Plugins/Linux/x86/libLottiePlugin.so
-            out/Release/Plugins/Linux/x86/librlottie.so
-            out/Release/Plugins/Linux/x86_64/libLottiePlugin.so
-            out/Release/Plugins/Linux/x86_64/librlottie.so
+            out/Plugins/Linux/x86_64/libLottiePlugin.so
+            out/Plugins/Linux/x86_64/librlottie.so.0.2
