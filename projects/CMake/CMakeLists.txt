@@ -48,8 +48,6 @@ endif()
 
 if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR "${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
     enable_language(ASM)
-else()
-    enable_language(ASM_NASM)
 endif()
 
 if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
