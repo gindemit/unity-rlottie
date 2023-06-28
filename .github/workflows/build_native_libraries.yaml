@@ -104,8 +104,8 @@ jobs:
         with:
           name: LottiePluginMacOSArtifacts
           path: |
-            out/Release/Plugins/OSX/libLottiePlugin.dylib
-            out/Release/Plugins/OSX/librlottie.dylib
+            out/Release/Plugins/Darwin/x86_64/libLottiePlugin.dylib
+            out/Release/Plugins/Darwin/x86_64/librlottie.0.2.dylib
 
   build_ios:
     runs-on: macos-latest
@@ -122,9 +122,7 @@ jobs:
         run: |
           cd projects/CMake
           cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1
-          cmake --build ./buildIOS --config Release --target RLottiePlugin
-          mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
-          mv VorbisPluginBuild/RLottiePlugin.a ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
+          cmake --build ./buildIOS --config Release --target LottiePlugin
           brew install tree
           tree ../../out
 
