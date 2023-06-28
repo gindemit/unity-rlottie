@@ -93,7 +93,7 @@ jobs:
 
       - name: Build
         run: |
-          cd unity-rlottie/projects/CMake
+          cd projects/CMake
           cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1
           cmake --build ./buildOSX --config Release
           tree ../../out
@@ -119,7 +119,7 @@ jobs:
 
       - name: Build
         run: |
-          cd unity-rlottie/projects/CMake
+          cd projects/CMake
           cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1
           cmake --build ./buildIOS --config Release --target RLottiePlugin
           mkdir -p ../../unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS
@@ -147,7 +147,7 @@ jobs:
 
       - name: Build
         run: |
-          cd unity-rlottie/projects/CMake
+          cd projects/CMake
           cmake -S . -B ./buildLinux -G "Unix Makefiles" -DRLOTTIE_LINUX=1
           cmake --build ./buildLinux --config Release
           tree ../../out
