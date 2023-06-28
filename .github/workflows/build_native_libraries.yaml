@@ -64,18 +64,19 @@ jobs:
           echo $result
           cd projects/AndroidStudio
           ./gradlew assembleRelease
-          echo "Ls command for app/.cxx"
-          ls -R app/.cxx
-          echo "Ls command for ../../out"
-          ls -R ../../out
-          echo "Tree command for app/.cxx"
-          tree app/.cxx
+          tree ../../out
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: LottiePluginAndroidArtifacts
-          path: out/
+          path: |
+            out/RelWithDebInfo/Plugins/Android/arm64-v8a/libLottiePlugin.so
+            out/RelWithDebInfo/Plugins/Android/arm64-v8a/librlottie.so
+            out/RelWithDebInfo/Plugins/Android/armeabi-v7a/libLottiePlugin.so
+            out/RelWithDebInfo/Plugins/Android/armeabi-v7a/librlottie.so
+            out/RelWithDebInfo/Plugins/Android/x86/libLottiePlugin.so
+            out/RelWithDebInfo/Plugins/Android/x86/librlottie.so
 
   # build_macos:
   #   runs-on: macos-latest
