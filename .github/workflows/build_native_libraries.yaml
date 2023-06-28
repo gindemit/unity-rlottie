@@ -77,6 +77,8 @@ jobs:
             out/RelWithDebInfo/Plugins/Android/armeabi-v7a/librlottie.so
             out/RelWithDebInfo/Plugins/Android/x86/libLottiePlugin.so
             out/RelWithDebInfo/Plugins/Android/x86/librlottie.so
+            out/RelWithDebInfo/Plugins/Android/x86_64/libLottiePlugin.so
+            out/RelWithDebInfo/Plugins/Android/x86_64/librlottie.so
 
   # build_macos:
   #   runs-on: macos-latest
