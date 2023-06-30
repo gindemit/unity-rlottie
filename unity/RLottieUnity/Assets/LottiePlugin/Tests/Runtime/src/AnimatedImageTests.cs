@@ -45,7 +45,7 @@ namespace LottiePlugin.Tests.Runtime
         [UnityTest]
         public IEnumerator CheckStartFunctionalityWithJsonAnimation()
         {
-            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text);
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
             yield return null;
             Assert.IsNotNull(_animatedImage.RawImage);
             Assert.IsNotNull(_animatedImage.RawImage.texture);
@@ -55,7 +55,7 @@ namespace LottiePlugin.Tests.Runtime
         [UnityTest]
         public IEnumerator CheckPlayFunctionality()
         {
-            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text);
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
             _animatedImage.Play();
             yield return null;
             Assert.IsTrue(_animatedImage.LottieAnimation.IsPlaying);
@@ -64,7 +64,7 @@ namespace LottiePlugin.Tests.Runtime
         [UnityTest]
         public IEnumerator CheckStopFunctionality()
         {
-            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text);
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
             _animatedImage.Play();
             yield return null;
             _animatedImage.Stop();
@@ -75,16 +75,16 @@ namespace LottiePlugin.Tests.Runtime
         [UnityTest]
         public IEnumerator CheckTextureDimensions()
         {
-            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text);
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
             yield return null;
-            Assert.AreEqual(_animatedImage.TextureWidth, _animatedImage.LottieAnimation.Texture.width);
-            Assert.AreEqual(_animatedImage.TextureHeight, _animatedImage.LottieAnimation.Texture.height);
+            Assert.AreEqual(32, _animatedImage.LottieAnimation.Texture.width);
+            Assert.AreEqual(32, _animatedImage.LottieAnimation.Texture.height);
         }
 
         [UnityTest]
         public IEnumerator CheckDisposeFunctionality()
         {
-            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text);
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
             yield return null;
             _animatedImage.DisposeLottieAnimation();
             Assert.IsNull(_animatedImage.LottieAnimation);

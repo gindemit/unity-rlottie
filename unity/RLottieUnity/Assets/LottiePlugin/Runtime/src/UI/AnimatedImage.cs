@@ -78,7 +78,7 @@ namespace LottiePlugin.UI
             _lottieAnimation.Stop();
             _lottieAnimation.DrawOneFrame(0);
         }
-        public void LoadFromAnimationJson(string json)
+        public void LoadFromAnimationJson(string json, uint width, uint height, string resourcesPath = "")
         {
             if (string.IsNullOrWhiteSpace(json))
             {
@@ -96,9 +96,9 @@ namespace LottiePlugin.UI
             DisposeLottieAnimation();
             _lottieAnimation = LottieAnimation.LoadFromJsonData(
                 json,
-                string.Empty,
-                _textureWidth,
-                _textureHeight);
+                resourcesPath,
+                width,
+                height);
             _rawImage.texture = _lottieAnimation.Texture;
         }
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
