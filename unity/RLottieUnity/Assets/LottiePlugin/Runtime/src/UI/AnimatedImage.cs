@@ -78,6 +78,29 @@ namespace LottiePlugin.UI
             _lottieAnimation.Stop();
             _lottieAnimation.DrawOneFrame(0);
         }
+        public void LoadFromAnimationJson(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                throw new System.ArgumentException("The json parameter should be not null or empty");
+            }
+            if (_rawImage == null)
+            {
+                _rawImage = GetComponent<RawImage>();
+            }
+            if (_rawImage == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Can not find the RawImage component on the current game object: " + gameObject.name);
+            }
+            DisposeLottieAnimation();
+            _lottieAnimation = LottieAnimation.LoadFromJsonData(
+                json,
+                string.Empty,
+                _textureWidth,
+                _textureHeight);
+            _rawImage.texture = _lottieAnimation.Texture;
+        }
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
         {
             if (_animationJson == null)
