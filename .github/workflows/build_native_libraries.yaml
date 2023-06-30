@@ -173,10 +173,12 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: LottiePluginLinuxArtifacts
-          path: unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64
-
-      - name: Print directory structure
+          path: out/Plugins/Linux
+          
+      - name: Force replace the native libraries
         run: |
+          cp -f out/Plugins/Linux/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/libLottiePlugin.so
+          cp -f out/Plugins/Linux/x86_64/librlottie.so.0.2 unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/librlottie.so
           tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
 
       - name: Run Tests in Unity
