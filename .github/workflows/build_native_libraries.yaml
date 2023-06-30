@@ -24,12 +24,6 @@ jobs:
           cmake -S . -B ./build_x86_64 -A x64
           cmake --build ./build_x86 --config Release
           cmake --build ./build_x86_64 --config Release
-          cd ../../
-          Copy-Item -Path out/Release/Plugins/Windows/x86/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll -Force
-          Copy-Item -Path out/Release/Plugins/Windows/x86/rlottie.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/rlottie.dll -Force
-          Copy-Item -Path out/Release/Plugins/Windows/x86_64/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll -Force
-          Copy-Item -Path out/Release/Plugins/Windows/x86_64/rlottie.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/rlottie.dll -Force
-        
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -40,14 +34,6 @@ jobs:
             out/Release/Plugins/Windows/x86/rlottie.dll
             out/Release/Plugins/Windows/x86_64/LottiePlugin.dll
             out/Release/Plugins/Windows/x86_64/rlottie.dll
-
-      - name: Run Tests in Unity
-        uses: game-ci/unity-test-runner@v2.0.3
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-        with:
-          projectPath: unity/RLottieUnity
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
 
   build_android:
     runs-on: ubuntu-latest
@@ -173,3 +159,31 @@ jobs:
           path: |
             out/Plugins/Linux/x86_64/libLottiePlugin.so
             out/Plugins/Linux/x86_64/librlottie.so.0.2
+
+  run_tests_and_build_unity:
+    needs: [build_windows, build_android, build_macos, build_ios, build_linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginLinuxArtifacts
+          path: unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64
+
+      - name: Print directory structure
+        run: |
+          tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
+
+      - name: Run Tests in Unity
+        uses: game-ci/unity-test-runner@v2.0.3
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: unity/RLottieUnity
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+    
