@@ -4,6 +4,7 @@ cmake_minimum_required (VERSION 3.6)
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
 project(LottiePlugin)
 
+set(BUILD_SHARED_LIBS FALSE)
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)
 set (PIXMAN_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/pixman)
 set(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
@@ -40,7 +41,7 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR "${CMAKE_SYSTEM_PROCESSOR}
     enable_language(ASM)
 endif()
 
-if (NOT RLOTTIE_IOS)
+if (ANDROID)
   if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
       message("Compile asm source for armv7-a")
       target_compile_options(rlottie PUBLIC -fno-integrated-as)
@@ -143,14 +144,14 @@ add_custom_command(
 # endif()
 # uncomment end
 if (ANDROID)
-add_custom_command(
-    TARGET LottiePlugin POST_BUILD
-    COMMAND "${ANDROID_TOOLCHAIN_PREFIX}strip" -g -S -d --strip-debug --verbose
-            "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:LottiePlugin>"
-    COMMENT "Strip debug symbols done on final binary.")
-add_custom_command(
+  add_custom_command(
       TARGET LottiePlugin POST_BUILD
       COMMAND "${ANDROID_TOOLCHAIN_PREFIX}strip" -g -S -d --strip-debug --verbose
-              "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
+              "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:LottiePlugin>"
       COMMENT "Strip debug symbols done on final binary.")
+  add_custom_command(
+        TARGET LottiePlugin POST_BUILD
+        COMMAND "${ANDROID_TOOLCHAIN_PREFIX}strip" -g -S -d --strip-debug --verbose
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
+        COMMENT "Strip debug symbols done on final binary.")
 endif()
