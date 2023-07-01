@@ -5,6 +5,8 @@ cmake_minimum_required (VERSION 3.6)
 project(LottiePlugin)
 
 set(BUILD_SHARED_LIBS FALSE)
+set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
+
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)
 set (PIXMAN_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/pixman)
 set(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
