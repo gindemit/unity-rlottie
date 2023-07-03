@@ -180,4 +180,5 @@ jobs:
         with:
           projectPath: unity/RLottieUnity
           githubToken: ${{ secrets.GITHUB_TOKEN }}
+          customParameters: -logFile -
     
