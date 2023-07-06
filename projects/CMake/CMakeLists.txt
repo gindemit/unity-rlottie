@@ -43,7 +43,7 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR "${CMAKE_SYSTEM_PROCESSOR}
     enable_language(ASM)
 endif()
 
-if (ANDROID OR RLOTTIE_IOS)
+if (ANDROID)
   if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
       message("Compile asm source for armv7-a")
       target_compile_options(rlottie PUBLIC -fno-integrated-as)
@@ -55,6 +55,12 @@ if (ANDROID OR RLOTTIE_IOS)
       target_compile_definitions(rlottie PUBLIC USE_ARM_NEON __ARM64_NEON__)
       target_sources(rlottie PRIVATE ${PIXMAN_ROOT}/pixman-arma64-neon-asm.S)
   endif()
+endif()
+
+if (RLOTTIE_IOS)
+  message("Compile asm source for iOS")
+  target_compile_definitions(rlottie PUBLIC USE_ARM_NEON __ARM64_NEON__ __ARM_NEON__)
+  target_sources(rlottie PRIVATE ${PIXMAN_ROOT}/pixman-arma64-neon-asm.S)
 endif()
 
 if (WIN32)
