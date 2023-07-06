@@ -43,7 +43,7 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a" OR "${CMAKE_SYSTEM_PROCESSOR}
     enable_language(ASM)
 endif()
 
-if (ANDROID)
+if (ANDROID OR RLOTTIE_IOS)
   if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7-a")
       message("Compile asm source for armv7-a")
       target_compile_options(rlottie PUBLIC -fno-integrated-as)
