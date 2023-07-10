@@ -27,37 +27,24 @@ extern "C" void pixman_composite_src_n_8888_asm_neon(int32_t w, int32_t h,
 extern "C" void pixman_composite_over_n_8888_asm_neon(int32_t w, int32_t h,
                                                       uint32_t *dst,
                                                       int32_t   dst_stride,
-                                                      uint32_t  color)
-{
-    // Calculate alpha
-    int alpha = color >> 24;
-    int ialpha = 255 - alpha;
+                                                      uint32_t  src) {
+    // Since neon intrinsics handle 128 bits at a time, or 4 pixels of 32 bits each,
+    // we need to adjust the width accordingly.
+    int adjusted_w = w / 4;
+    for (int j = 0; j < h; ++j) {
+        for (int i = 0; i < adjusted_w; ++i) {
+            // Initialization. It seems to just duplicate the source value across vectors
+            uint32x4_t v0 = vdupq_n_u32(src);
+            uint32x4_t v1 = vdupq_n_u32(src);
+            uint32x4_t v2 = vdupq_n_u32(src);
+            uint32x4_t v3 = vdupq_n_u32(src);
 
-    // Calculate total length
-    int total_len = w * h;
-
-    // Create 4-element vectors
-    uint32x4_t colorVector = vdupq_n_u32(color);
-    uint32x4_t ialphaVector = vdupq_n_u32(ialpha);
-
-    // Perform the operation on blocks of 4 32-bit integers
-    for (int i = 0; i < total_len; i += 4)
-    {
-        uint32x4_t dstVector = vld1q_u32(dst + i); // Load 4 integers from dst
-
-        // Multiply dst[i] by ialpha and divide by 255
-        uint32x4_t mulVector = vmulq_n_u32(dstVector, ialpha);
-        mulVector = vaddq_u32(mulVector, vdupq_n_u32(255));
-        mulVector = vshrq_n_u32(mulVector, 8); // Equivalent to / 255
-
-        // Add color and store the result
-        uint32x4_t resultVector = vaddq_u32(colorVector, mulVector);
-        vst1q_u32(dst + i, resultVector); // Store the vector to memory
-    }
-
-    // If the total length is not a multiple of 4, we need to finish the rest
-    for (int i = total_len & ~3; i < total_len; ++i)
-    {
-        dst[i] = color + ((dst[i] * ialpha + 255) / 255);
+            // Storing to destination
+            vst1q_u32(dst + i * 4, v0);
+            vst1q_u32(dst + i * 4 + 4, v1);
+            vst1q_u32(dst + i * 4 + 8, v2);
+            vst1q_u32(dst + i * 4 + 12, v3);
+        }
+        dst += dst_stride;
     }
 }
