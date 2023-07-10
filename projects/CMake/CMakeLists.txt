@@ -61,7 +61,7 @@ if (RLOTTIE_IOS)
   message("Compile asm source for iOS")
   target_compile_options(rlottie PUBLIC -fno-integrated-as)
   target_compile_definitions(rlottie PUBLIC USE_ARM_NEON __ARM64_NEON__ __ARM_NEON__)
-  target_sources(rlottie PRIVATE ${PIXMAN_ROOT}/pixman-arma64-neon-asm.S)
+  target_sources(rlottie PRIVATE ${PIXMAN_ROOT}/pixman-arm-intrisics.cpp)
 endif()
 
 if (WIN32)
