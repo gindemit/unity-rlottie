@@ -5,15 +5,22 @@ extern "C" void pixman_composite_src_n_8888_asm_neon(int32_t w, int32_t h,
                                                      int32_t   dst_stride,
                                                      uint32_t  src)
 {
-    uint8x8_t v_src = vdup_n_u8(src);
+    // Create a 4-element vector with the same value
+    uint32x4_t value = vdupq_n_u32(src);
 
-    for (int32_t y = 0; y < h; y++)
+    // calculate total length
+    int total_len = w * h;
+
+    // Perform the operation on blocks of 4 32-bit integers
+    for (int i = 0; i < total_len; i += 4)
     {
-        for (int32_t x = 0; x < w; x += 8)
-        {
-            vst1_u8((uint8_t *)(dst + x), v_src);
-        }
-        dst += dst_stride;
+        vst1q_u32(dst + i, value); // Store the vector to memory
+    }
+
+    // If the total length is not a multiple of 4, we need to finish the rest
+    for (int i = total_len & ~3; i < total_len; ++i)
+    {
+        dst[i] = src;
     }
 }
 
