@@ -170,7 +170,7 @@ jobs:
       - name: Force replace the native libraries
         run: |
           tree out
-          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/libLottiePlugin.so
+          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
           tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
 
       - name: Run Tests in Unity
