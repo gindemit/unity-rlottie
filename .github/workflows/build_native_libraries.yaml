@@ -182,7 +182,9 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: LottiePluginWebGLArtifacts
-          path: out/Release/Plugins/WebGL/LottiePlugin.js
+          path: |
+            out/Release/Plugins/WebGL/LottiePlugin.js
+            out/Release/Plugins/WebGL/LottiePlugin.wasm
   # run_tests_and_build_unity:
   #   needs: [build_windows, build_android, build_macos, build_ios, build_linux]
   #   runs-on: ubuntu-latest
