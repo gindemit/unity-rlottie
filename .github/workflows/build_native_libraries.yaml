@@ -152,33 +152,61 @@ jobs:
           path: |
             out/Plugins/Linux/x86_64/libLottiePlugin.so
 
-  run_tests_and_build_unity:
-    needs: [build_windows, build_android, build_macos, build_ios, build_linux]
+  build_webgl:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
         with:
           submodules: recursive
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: LottiePluginLinuxArtifacts
-          path: out/Plugins/Linux
-          
-      - name: Force replace the native libraries
+  
+      - name: Install Emscripten
         run: |
-          tree out
-          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
-          tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
-
-      - name: Run Tests in Unity
-        uses: game-ci/unity-test-runner@v2.1.1
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+          source ./emsdk_env.sh
+  
+      - name: Build
+        run: |
+          cd projects/CMake
+          emcmake cmake -S . -B ./buildWebGL
+          emmake cmake --build ./buildWebGL --config Release
+          tree ../../out
+  
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
         with:
-          projectPath: unity/RLottieUnity
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          customParameters: -logFile -
+          name: LottiePluginWebGLArtifacts
+          path: out/Release/Plugins/WebGL/LottiePlugin.js
+  # run_tests_and_build_unity:
+  #   needs: [build_windows, build_android, build_macos, build_ios, build_linux]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Download artifacts
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: LottiePluginLinuxArtifacts
+  #         path: out/Plugins/Linux
+          
+  #     - name: Force replace the native libraries
+  #       run: |
+  #         tree out
+  #         cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+  #         tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
+
+  #     - name: Run Tests in Unity
+  #       uses: game-ci/unity-test-runner@v2.1.1
+  #       env:
+  #         UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+  #       with:
+  #         projectPath: unity/RLottieUnity
+  #         githubToken: ${{ secrets.GITHUB_TOKEN }}
+  #         customParameters: -logFile -
     
