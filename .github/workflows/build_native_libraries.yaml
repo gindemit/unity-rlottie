@@ -174,7 +174,7 @@ jobs:
           emcmake cmake -S . -B ./buildWebGL -DRLOTTIE_WEB_ASSEMBLY=1
           emmake cmake --build ./buildWebGL --config Release
           cd ../..
-          emcc -O3 -s WASM=1 -s EXTRA_EXPORTED_RUNTIME_METHODS='["cwrap", "ccall"]' -s EXPORTED_FUNCTIONS='["_lottie_load_from_data", "_lottie_load_from_file", "_lottie_dispose_wrapper", "_lottie_render_immediately", "_lottie_render_create_future_async", "_lottie_render_get_future_result", "_lottie_allocate_render_data", "_lottie_dispose_render_data"]' -o out/Release/Plugins/WebGL/LottiePlugin.js out/Release/Plugins/Emscripten/x86/libLottiePlugin.a
+          emcc -O3 -s WASM=1 -s EXTRA_EXPORTED_RUNTIME_METHODS='["cwrap", "ccall"]' -s EXPORTED_FUNCTIONS='["_lottie_load_from_data", "_lottie_load_from_file", "_lottie_dispose_wrapper", "_lottie_render_immediately", "_lottie_render_create_future_async", "_lottie_render_get_future_result", "_lottie_allocate_render_data", "_lottie_dispose_render_data"]' -o out/Release/Plugins/WebGL/LottiePlugin.js out/Plugins/Emscripten/x86/libLottiePlugin.a
           tree out
   
       - name: Upload artifacts
