@@ -159,7 +159,11 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-  
+
+      - name: Modify rlottie CMakeLists.txt
+        run: sed -i '/add_subdirectory(example)/d' dependency/rlottie/CMakeLists.txt
+
+
       - name: Install Emscripten and Build
         run: |
           git clone https://github.com/emscripten-core/emsdk.git
@@ -168,7 +172,7 @@ jobs:
           ./emsdk activate latest
           source ./emsdk_env.sh
           cd ../projects/CMake
-          emcmake cmake -S . -B ./buildWebGL
+          emcmake cmake -S . -B ./buildWebGL -DRLOTTIE_WEB_ASSEMBLY=1
           emmake cmake --build ./buildWebGL --config Release
           tree ../../out
   
