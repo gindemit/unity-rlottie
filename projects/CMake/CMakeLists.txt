@@ -5,7 +5,6 @@ cmake_minimum_required (VERSION 3.6)
 project(LottiePlugin)
 
 set(BUILD_SHARED_LIBS FALSE)
-set(LOTTIE_MODULE OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)

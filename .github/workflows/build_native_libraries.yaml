@@ -171,7 +171,7 @@ jobs:
           ./emsdk activate latest
           source ./emsdk_env.sh
           cd ../projects/CMake
-          emcmake cmake -S . -B ./buildWebGL -DRLOTTIE_WEB_ASSEMBLY=1
+          emcmake cmake -S . -B ./buildWebGL -DRLOTTIE_WEB_ASSEMBLY=1 -DLOTTIE_MODULE=OFF -DBUILD_SHARED_LIBS=OFF
           emmake cmake --build ./buildWebGL --config Release
           cd ../..
           mkdir -p out/Release/Plugins/WebGL
