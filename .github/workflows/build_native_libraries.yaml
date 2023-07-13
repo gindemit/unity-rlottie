@@ -167,8 +167,8 @@ jobs:
         run: |
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk
-          ./emsdk install 1.38.48
-          ./emsdk activate 1.38.48
+          ./emsdk install latest
+          ./emsdk activate latest
           source ./emsdk_env.sh
           cd ../projects/CMake
           emcmake cmake -S . -B ./buildWebGL -DRLOTTIE_WEB_ASSEMBLY=1 -DLOTTIE_MODULE=OFF -DBUILD_SHARED_LIBS=OFF
@@ -182,7 +182,11 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: LottiePluginWebGLArtifacts
-          path: out/Release/Plugins/WebGL/LottiePlugin.bc
+          path: |
+            out/Release/Plugins/WebGL/LottiePlugin.bc
+            out/Release/Plugins/WebGL/LottiePlugin.wasm
+            out/Plugins/Emscripten/x86/libLottiePlugin.a
+            out/Plugins/Emscripten/x86/librlottie.a
 
   # run_tests_and_build_unity:
   #   needs: [build_windows, build_android, build_macos, build_ios, build_linux]
