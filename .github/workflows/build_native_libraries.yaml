@@ -167,8 +167,8 @@ jobs:
         run: |
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk
-          ./emsdk install latest
-          ./emsdk activate latest
+          ./emsdk install 1.38.11-unity
+          ./emsdk activate 1.38.11-unity
           source ./emsdk_env.sh
           cd ../projects/CMake
           emcmake cmake -S . -B ./buildWebGL -DRLOTTIE_WEB_ASSEMBLY=1 -DLOTTIE_MODULE=OFF -DBUILD_SHARED_LIBS=OFF
