@@ -175,7 +175,7 @@ jobs:
           emmake cmake --build ./buildWebGL --config Release
           cd ../..
           mkdir -p out/Release/Plugins/WebGL
-          emcc -O3 -flto -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall"]' -s EXPORTED_FUNCTIONS='["_lottie_load_from_data", "_lottie_load_from_file", "_lottie_dispose_wrapper", "_lottie_render_immediately", "_lottie_render_create_future_async", "_lottie_render_get_future_result", "_lottie_allocate_render_data", "_lottie_dispose_render_data"]' -o out/Release/Plugins/WebGL/LottiePlugin.bc out/Plugins/Emscripten/x86/libLottiePlugin.a out/Plugins/Emscripten/x86/librlottie.a
+          emcc -O3 -flto -o out/Release/Plugins/WebGL/LottiePlugin.bc out/Plugins/Emscripten/x86/libLottiePlugin.a out/Plugins/Emscripten/x86/librlottie.a
           tree out
   
       - name: Upload artifacts
@@ -188,6 +188,7 @@ jobs:
             out/Plugins/Emscripten/x86/libLottiePlugin.a
             out/Plugins/Emscripten/x86/librlottie.a
 
+  # # emcc -O3 -flto -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall"]' -s EXPORTED_FUNCTIONS='["_lottie_load_from_data", "_lottie_load_from_file", "_lottie_dispose_wrapper", "_lottie_render_immediately", "_lottie_render_create_future_async", "_lottie_render_get_future_result", "_lottie_allocate_render_data", "_lottie_dispose_render_data"]' -o out/Release/Plugins/WebGL/LottiePlugin.bc out/Plugins/Emscripten/x86/libLottiePlugin.a out/Plugins/Emscripten/x86/librlottie.a
   # run_tests_and_build_unity:
   #   needs: [build_windows, build_android, build_macos, build_ios, build_linux]
   #   runs-on: ubuntu-latest
