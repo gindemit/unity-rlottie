@@ -88,8 +88,8 @@ jobs:
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1
-          cmake --build ./buildOSX --config Release
+          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake --build ./buildOSX --config Release 
           brew install tree
           tree ../../out
 
