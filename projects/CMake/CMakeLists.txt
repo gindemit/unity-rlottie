@@ -37,7 +37,7 @@ else()
   add_library (LottiePlugin SHARED ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
 endif()
 
-if (RLOTTIE_IOS OR ANDROID)
+if (RLOTTIE_IOS OR ANDROID OR (RLOTTIE_OSX AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64"))
   message("Compile cpp source for iOS or Android")
   target_sources(rlottie PRIVATE ${PIXMAN_ROOT}/pixman-cpp-standard.cpp)
 endif()
