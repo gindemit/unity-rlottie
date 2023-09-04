@@ -1,4 +1,6 @@
 #include "LottiePlugin.h"
+#define LOTTIE_LOGGING_SUPPORT
+#include "vdebug.h"
 
 extern "C" {
 
@@ -25,7 +27,12 @@ extern "C" {
         return animation_wrapper;
     }
 
-    EXPORT_API int32_t lottie_load_from_data(const char* json_data, const char* resource_path, lottie_animation_wrapper** animation_wrapper) {
+    EXPORT_API int32_t lottie_load_from_data(
+      const char* json_data,
+      const char* resource_path,
+      const char* log_dir_path,
+      lottie_animation_wrapper** animation_wrapper) {
+        initialize(GuaranteedLogger(), std::string(log_dir_path), std::string("rlottie_log"), 1);
         const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
         auto animation = rlottie::Animation::loadFromData(std::string(json_data), std::string(resource_path), null_func);
         if(!animation) {
@@ -35,7 +42,11 @@ extern "C" {
         *animation_wrapper = create_animation_wrapper(animation);
         return *animation_wrapper == nullptr ? -1 : 0;
     }
-    EXPORT_API int32_t lottie_load_from_file(const char* file_path, lottie_animation_wrapper** animation_wrapper) {
+    EXPORT_API int32_t lottie_load_from_file(
+      const char* file_path,
+      const char* log_dir_path,
+      lottie_animation_wrapper** animation_wrapper) {
+        initialize(GuaranteedLogger(), std::string(log_dir_path), std::string("rlottie_log"), 1);
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
 
         if(!animation) {
