@@ -26,6 +26,8 @@ add_subdirectory(${RLOTTIE_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build)
 
 include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc>)
 
+add_definitions(-DLOTTIE_LOGGING_SUPPORT)
+
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES 
     ../../src/LottiePlugin.cpp)
 
