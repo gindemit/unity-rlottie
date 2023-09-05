@@ -9,6 +9,8 @@ namespace LottiePlugin
 {
     public sealed class LottieAnimation : IDisposable
     {
+        private static bool sLoggerInitialized;
+
         public Texture2D Texture { get; private set; }
         public int CurrentFrame { get; private set; }
         public double FrameRate => _animationWrapper.frameRate;
@@ -146,12 +148,25 @@ namespace LottiePlugin
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)
         {
             ThrowIf.String.IsNullOrEmpty(filePath, nameof(filePath));
+            InitializeLogger(Application.persistentDataPath, "rlottie.log", 1);
             return new LottieAnimation(filePath, width, height);
         }
         public static LottieAnimation LoadFromJsonData(string jsonData, string resourcesPath, uint width, uint height)
         {
             ThrowIf.String.IsNullOrEmpty(jsonData, nameof(jsonData));
+            InitializeLogger(Application.persistentDataPath, "rlottie.log", 1);
             return new LottieAnimation(jsonData, resourcesPath, width, height);
+        }
+        public static void InitializeLogger(string logDirectoryPath, string logFileName, int logFileRollSizeMB)
+        {
+            ThrowIf.String.IsNullOrEmpty(logDirectoryPath, nameof(logDirectoryPath));
+            ThrowIf.String.IsNullOrEmpty(logFileName, nameof(logFileName));
+            if (sLoggerInitialized)
+            {
+                return;
+            }
+            NativeBridge.InitializeLogger(logDirectoryPath, logFileName, logFileRollSizeMB);
+            sLoggerInitialized = true;
         }
     }
 }

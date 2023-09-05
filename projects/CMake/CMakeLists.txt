@@ -23,10 +23,9 @@ if (WIN32)
 endif()
 
 add_subdirectory(${RLOTTIE_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build)
-
-include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc>)
-
-add_definitions(-DLOTTIE_LOGGING_SUPPORT)
+target_compile_definitions(rlottie PRIVATE LOTTIE_LOGGING_SUPPORT)
+include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/vector/ ${RLOTTIE_ROOT}/vs2019/)
+message("Lottie root directory: ${RLOTTIE_ROOT}")
 
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES 
     ../../src/LottiePlugin.cpp)
@@ -38,6 +37,8 @@ if (RLOTTIE_IOS OR RLOTTIE_WEB_ASSEMBLY)
 else()
   add_library (LottiePlugin SHARED ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
 endif()
+
+target_compile_definitions(LottiePlugin PRIVATE LOTTIE_LOGGING_SUPPORT)
 
 if (RLOTTIE_IOS OR ANDROID OR RLOTTIE_OSX)
   message("Compile cpp source for iOS or Android")

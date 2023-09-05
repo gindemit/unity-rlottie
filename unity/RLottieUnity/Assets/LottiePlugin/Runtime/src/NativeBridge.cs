@@ -37,7 +37,6 @@ namespace LottiePlugin
         private static extern int LottieLoadFromData(
             string jsonData,
             string resourcePath,
-            string logDirectoryPath,
             out IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
@@ -45,7 +44,6 @@ namespace LottiePlugin
             EntryPoint = "lottie_load_from_file")]
         private static extern int LottieLoadFromFile(
             string filePath,
-            string logDirectoryPath,
             out IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
@@ -88,16 +86,23 @@ namespace LottiePlugin
             EntryPoint = "lottie_dispose_render_data")]
         internal static extern int LottieDisposeRenderData(
             ref IntPtr animationWrapper);
+        
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "initialize_logger")]
+        internal static extern int InitializeLogger(
+            string logDirectoryPath,
+            string logFileName,
+            int logFileRollSizeMB);
 
         internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)
         {
-            Debug.Log(Application.persistentDataPath);
-            LottieLoadFromData(filePath, resourcesPath, Application.persistentDataPath, out animationWrapper);
+            LottieLoadFromData(filePath, resourcesPath, out animationWrapper);
             return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
         }
         internal static LottieAnimationWrapper LoadFromFile(string filePath, out IntPtr animationWrapper)
         {
-            LottieLoadFromFile(filePath, Application.persistentDataPath, out animationWrapper);
+            LottieLoadFromFile(filePath, out animationWrapper);
             return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
         }
         internal static void Dispose(LottieAnimationWrapper lottieAnimationWrapper)

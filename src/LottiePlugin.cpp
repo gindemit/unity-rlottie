@@ -1,5 +1,4 @@
 #include "LottiePlugin.h"
-#define LOTTIE_LOGGING_SUPPORT
 #include "vdebug.h"
 
 extern "C" {
@@ -30,9 +29,7 @@ extern "C" {
     EXPORT_API int32_t lottie_load_from_data(
       const char* json_data,
       const char* resource_path,
-      const char* log_dir_path,
       lottie_animation_wrapper** animation_wrapper) {
-        initialize(GuaranteedLogger(), std::string(log_dir_path), std::string("rlottie_log"), 1);
         const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
         auto animation = rlottie::Animation::loadFromData(std::string(json_data), std::string(resource_path), null_func);
         if(!animation) {
@@ -44,9 +41,7 @@ extern "C" {
     }
     EXPORT_API int32_t lottie_load_from_file(
       const char* file_path,
-      const char* log_dir_path,
       lottie_animation_wrapper** animation_wrapper) {
-        initialize(GuaranteedLogger(), std::string(log_dir_path), std::string("rlottie_log"), 1);
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
 
         if(!animation) {
@@ -110,6 +105,19 @@ extern "C" {
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data) {
         delete (*render_data);
         *render_data = nullptr;
+        return 0;
+    }
+    EXPORT_API int32_t initialize_logger(const char* log_dir_path, const char* log_file_name, int32_t log_file_roll_size_mb) {
+        fprintf(stderr, "Initializing logger (stderr)\n");
+        // print the paths
+        fprintf(stderr, "log_dir_path: %s\n", log_dir_path);
+        fprintf(stderr, "log_file_name: %s\n", log_file_name);
+        fprintf(stderr, "log_file_roll_size_mb: %d\n", log_file_roll_size_mb);
+        fprintf(stdout, "Initializing logger (stdout)\n");
+        initialize(GuaranteedLogger(), std::string(log_dir_path), std::string(log_file_name), log_file_roll_size_mb);
+        vDebug << "Initialized logger (debug)";
+        vWarning << "Initialized logger (warning)";
+        vCritical << "Initialized logger (critical)";
         return 0;
     }
 }
