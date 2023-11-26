@@ -119,6 +119,10 @@ extern "C" {
         vDebug << "Initialized logger (debug) test message";
         vWarning << "Initialized logger (warning) test message";
         vCritical << "Initialized logger (critical) test message";
+        // print the paths
+        vDebug << "log_dir_path: " << log_dir_path;
+        vDebug << "log_file_name: " << log_file_name;
+        vDebug << "log_file_roll_size_mb: " << log_file_roll_size_mb;
         return 0;
     }
 }
