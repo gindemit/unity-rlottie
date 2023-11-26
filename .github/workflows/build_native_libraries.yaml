@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - dev
+    paths:
+      - 'dependency/**'
+      - 'projects/**'
+      - 'src/**'
   pull_request:
     branches:
       - dev
