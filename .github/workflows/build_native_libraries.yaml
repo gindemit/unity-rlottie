@@ -192,33 +192,133 @@ jobs:
             out/Plugins/Emscripten/x86/libLottiePlugin.a
             out/Plugins/Emscripten/x86/librlottie.a
 
-  # run_tests_and_build_unity:
-  #   needs: [build_windows, build_android, build_macos, build_ios, build_linux]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v3
-  #       with:
-  #         submodules: recursive
+  run_tests_and_build_unity_ubuntulatest:
+    needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-  #     - name: Download artifacts
-  #       uses: actions/download-artifact@v3
-  #       with:
-  #         name: LottiePluginLinuxArtifacts
-  #         path: out/Plugins/Linux
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginLinuxArtifacts
+          path: out/Plugins/Linux
           
-  #     - name: Force replace the native libraries
-  #       run: |
-  #         tree out
-  #         cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
-  #         tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
+      - name: Force replace the native libraries
+        run: |
+          tree out
+          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+          tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
 
-  #     - name: Run Tests in Unity
-  #       uses: game-ci/unity-test-runner@v2.1.1
-  #       env:
-  #         UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-  #       with:
-  #         projectPath: unity/RLottieUnity
-  #         githubToken: ${{ secrets.GITHUB_TOKEN }}
-  #         customParameters: -logFile -
-    
+      - name: Run Tests in Unity
+        uses: game-ci/unity-test-runner@v3
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: unity/RLottieUnity
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          customParameters: -logFile -
+
+  run_tests_and_build_unity_windows:
+    needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginWindowsArtifacts
+          path: out/Plugins/Windows
+
+      - name: Force replace the native libraries
+        run: |
+          cp -f out/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
+          cp -f out/Plugins/Windows/x86_64/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
+
+      - name: Run Tests in Unity
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: unity/RLottieUnity
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          customParameters: -logFile -
+            
+  commit_and_push_native_libraries:
+    needs: [run_tests_and_build_unity_windows, run_tests_and_build_unity_ubuntulatest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download artifacts windows
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginWindowsArtifacts
+          path: out/Plugins/Windows
+
+      - name: Download artifacts android
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginAndroidArtifacts
+          path: out/Plugins/Android
+
+      - name: Download artifacts macos
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginMacOSArtifacts
+          path: out/Plugins/Darwin
+
+      - name: Download artifacts ios
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginIOSArtifacts
+          path: out/Plugins/iOS
+
+      - name: Download artifacts linux
+        uses: actions/download-artifact@v3
+        with:
+          name: LottiePluginLinuxArtifacts
+          path: out/Plugins/Linux
+
+      # - name: Download artifacts webgl
+      #   uses: actions/download-artifact@v3
+      #   with:
+      #     name: LottiePluginWebGLArtifacts
+      #     path: out/Plugins/WebGL
+
+      - name: Commit and push native libraries
+        env:
+          MY_SECRET: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          cp -f out/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
+          cp -f out/Plugins/Windows/x86_64/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
+          cp -f out/Plugins/Android/arm64-v8a/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/arm64-v8a/libLottiePlugin.so
+          cp -f out/Plugins/Android/armeabi-v7a/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/armeabi-v7a/libLottiePlugin.so
+          cp -f out/Plugins/Android/x86/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/x86/libLottiePlugin.so
+          cp -f out/Plugins/Android/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/x86_64/libLottiePlugin.so
+          cp -f out/Plugins/Darwin/libLottiePlugin.dylib unity/RLottieUnity/Assets/LottiePlugin/Plugins/OSX/libLottiePlugin.dylib
+          cp -f out/Plugins/iOS/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/libLottiePlugin.a
+          cp -f out/Plugins/iOS/librlottie.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/librlottie.a
+          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+          git add .
+          git status
+          git config --global user.email "konstantin.gindemit@gmail.com"
+          git config --global user.name "Konstantin Gindemit"
+          git remote -v
+          git commit --allow-empty -m "New native libraries version: 0.3.0-dev.${{ github.run_number }}"
+          git tag -a 0.3.0-dev.${{ github.run_number }} -m "New native libraries version: 0.3.0-dev.${{ github.run_number }}"
+          git config -l | grep 'http\..*\.extraheader' | cut -d= -f1 | xargs -L1 git config --unset-all
+          echo "Trying to push..."
+          git push --set-upstream https://token:$MY_SECRET@github.com/gindemit/unity-rlottie.git
+          git push --tags --set-upstream https://token:$MY_SECRET@github.com/gindemit/unity-rlottie.git
+
