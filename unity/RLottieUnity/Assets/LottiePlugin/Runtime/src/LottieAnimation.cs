@@ -1,5 +1,6 @@
 using LottiePlugin.Utility;
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -164,6 +165,10 @@ namespace LottiePlugin
             if (sLoggerInitialized)
             {
                 return;
+            }
+            if (!logDirectoryPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+            {
+                logDirectoryPath += Path.DirectorySeparatorChar;
             }
             NativeBridge.InitializeLogger(logDirectoryPath, logFileName, logFileRollSizeMB);
             sLoggerInitialized = true;
