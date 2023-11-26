@@ -239,8 +239,8 @@ jobs:
 
       - name: Force replace the native libraries
         run: |
-          cp -f out/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
-          cp -f out/Plugins/Windows/x86_64/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
+          Copy-Item -Force out/Plugins/Windows/x86/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
+          Copy-Item -Force out/Plugins/Windows/x86_64/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
 
       - name: Run Tests in Unity
         uses: game-ci/unity-test-runner@v4
