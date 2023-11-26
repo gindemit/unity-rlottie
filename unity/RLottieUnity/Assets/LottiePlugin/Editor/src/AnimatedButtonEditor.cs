@@ -91,8 +91,7 @@ namespace LottiePlugin.UI.Editor
                 SetStateValuesAtIndex(1, "End", _lottieAnimation != null ? (int)_lottieAnimation.TotalFramesCount : 0, true);
             }
             if (_button.AnimationJson == null ||
-                string.IsNullOrEmpty(_button.AnimationJson.text) ||
-                !_button.AnimationJson.text.StartsWith("{\"v\":"))
+                string.IsNullOrEmpty(_button.AnimationJson.text))
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated button.", MessageType.Error);
             }
@@ -159,8 +158,7 @@ namespace LottiePlugin.UI.Editor
                 return;
             }
             string jsonData = _button.AnimationJson.text;
-            if (string.IsNullOrEmpty(jsonData) ||
-                !jsonData.StartsWith("{\"v\":"))
+            if (string.IsNullOrEmpty(jsonData))
             {
                 Debug.LogError("Selected file is not a lottie json");
                 return;

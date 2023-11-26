@@ -48,8 +48,7 @@ namespace LottiePlugin.UI.Editor
                 UpdateTheAnimationInfoBoxText();
             }
             if (_image.AnimationJson == null ||
-                string.IsNullOrEmpty(_image.AnimationJson.text) ||
-                !_image.AnimationJson.text.StartsWith("{\"v\":"))
+                string.IsNullOrEmpty(_image.AnimationJson.text))
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated image.", MessageType.Error);
             }
@@ -103,8 +102,7 @@ namespace LottiePlugin.UI.Editor
                 return;
             }
             string jsonData = _image.AnimationJson.text;
-            if (string.IsNullOrEmpty(jsonData) ||
-                !jsonData.StartsWith("{\"v\":"))
+            if (string.IsNullOrEmpty(jsonData))
             {
                 Debug.LogError("Selected file is not a lottie json");
                 return;
