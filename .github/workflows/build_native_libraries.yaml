@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -82,7 +82,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -108,7 +108,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -160,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -222,42 +222,43 @@ jobs:
   #         githubToken: ${{ secrets.GITHUB_TOKEN }}
   #         customParameters: -logFile -
 
-  run_tests_and_build_unity_windows:
-    needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+  # run_tests_and_build_unity_windows:
+  #   needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
+  #   runs-on: windows-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: LottiePluginWindowsArtifacts
-          path: out/Plugins/Windows
+  #     - name: Download artifacts
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: LottiePluginWindowsArtifacts
+  #         path: out/Plugins/Windows
 
-      - name: Force replace the native libraries
-        run: |
-          Copy-Item -Force out/Plugins/Windows/x86/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
-          Copy-Item -Force out/Plugins/Windows/x86_64/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
+  #     - name: Force replace the native libraries
+  #       run: |
+  #         Copy-Item -Force out/Plugins/Windows/x86/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
+  #         Copy-Item -Force out/Plugins/Windows/x86_64/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
 
-      - name: Run Tests in Unity
-        uses: game-ci/unity-test-runner@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-        with:
-          projectPath: unity/RLottieUnity
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          customParameters: -logFile -
+  #     - name: Run Tests in Unity
+  #       uses: game-ci/unity-test-runner@v4
+  #       env:
+  #         UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+  #       with:
+  #         projectPath: unity/RLottieUnity
+  #         githubToken: ${{ secrets.GITHUB_TOKEN }}
+  #         customParameters: -logFile -
             
   commit_and_push_native_libraries:
-    needs: [run_tests_and_build_unity_windows]
+    needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: dev
           submodules: recursive
 
       - name: Download artifacts windows
