@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
@@ -26,25 +27,23 @@ namespace LottiePlugin.UI
 
         private LottieAnimation _lottieAnimation;
         private Coroutine _renderLottieAnimationCoroutine;
-        private WaitForEndOfFrame _waitForEndOfFrame;
-
-        private void Awake()
-        {
-            Transform = transform;
-            _waitForEndOfFrame = new WaitForEndOfFrame();
-        }
-
+        private readonly WaitForEndOfFrame _waitForEndOfFrame = new WaitForEndOfFrame();
+        private bool _reservedPlay = false;
+        
         private void Start()
         {
             if (_animationJson == null)
             {
                 return;
             }
-            if (_rawImage == null)
+
+            if (IsInitialized())
             {
-                _rawImage = GetComponent<RawImage>();
+                return;
             }
-            CreateIfNeededAndReturnLottieAnimation();
+            
+            Initialize();
+            
             if (_playOnAwake)
             {
                 Play();
@@ -54,22 +53,65 @@ namespace LottiePlugin.UI
                 _lottieAnimation.DrawOneFrame(0);
             }
         }
+
+        private void OnEnable()
+        {
+            if (_reservedPlay)
+            {
+                Play();
+            }
+        }
+
         private void OnDestroy()
         {
+            _reservedPlay = false;
             DisposeLottieAnimation();
+        }
+
+        private void Initialize()
+        {
+            Transform = transform;
+            
+            if (_rawImage == null)
+            {
+                _rawImage = GetComponent<RawImage>();
+            }
+            CreateIfNeededAndReturnLottieAnimation();
+        }
+        private bool IsInitialized()
+        {
+            return _lottieAnimation != null && _rawImage != null;
         }
 
         public void Play()
         {
+            if (!IsInitialized())
+            {
+                Initialize();
+            }
+
+            if (!isActiveAndEnabled)
+            {
+                _reservedPlay = true;
+                return;
+            }
             if (_renderLottieAnimationCoroutine != null)
             {
                 StopCoroutine(_renderLottieAnimationCoroutine);
             }
             _lottieAnimation.Play();
             _renderLottieAnimationCoroutine = StartCoroutine(RenderLottieAnimationCoroutine());
+            
+            _reservedPlay = false;
         }
+
         public void Stop()
         {
+            if (!IsInitialized())
+            {
+                Initialize();
+            }
+            
             if (_renderLottieAnimationCoroutine != null)
             {
                 StopCoroutine(_renderLottieAnimationCoroutine);
