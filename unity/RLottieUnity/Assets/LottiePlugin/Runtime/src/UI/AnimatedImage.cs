@@ -5,6 +5,7 @@ using UnityEngine.UI;
 namespace LottiePlugin.UI
 {
     [RequireComponent(typeof(RawImage))]
+    [ExecuteAlways]
     public sealed class AnimatedImage : MonoBehaviour
     {
         public Transform Transform { get; private set; }
@@ -45,13 +46,10 @@ namespace LottiePlugin.UI
                 _rawImage = GetComponent<RawImage>();
             }
             CreateIfNeededAndReturnLottieAnimation();
-            if (_playOnAwake)
+            _lottieAnimation.DrawOneFrame(0);
+            if (_playOnAwake && Application.isPlaying)
             {
                 Play();
-            }
-            else
-            {
-                _lottieAnimation.DrawOneFrame(0);
             }
         }
         private void OnDestroy()
