@@ -12,6 +12,10 @@ namespace LottiePlugin
     {
         private static bool sLoggerInitialized;
 
+        public event Action<LottieAnimation> Started;
+        public event Action<LottieAnimation> Paused;
+        public event Action<LottieAnimation> Stopped;
+
         public Texture2D Texture { get; private set; }
         public int CurrentFrame { get; private set; }
         public double FrameRate => _animationWrapper.frameRate;
@@ -58,6 +62,9 @@ namespace LottiePlugin
         }
         public void Dispose()
         {
+            Started = null;
+            Paused = null;
+            Stopped = null;
             NativeBridge.Dispose(_animationWrapper);
             NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
             UnityEngine.Object.DestroyImmediate(Texture);
@@ -79,15 +86,18 @@ namespace LottiePlugin
         {
             IsPlaying = true;
             DrawOneFrame(++CurrentFrame);
+            Started?.Invoke(this);
         }
         public void Pause()
         {
             IsPlaying = false;
+            Paused?.Invoke(this);
         }
         public void Stop()
         {
-            Pause();
+            IsPlaying = false;
             CurrentFrame = 0;
+            Stopped?.Invoke(this);
         }
         public void DrawOneFrame(int frameNumber)
         {

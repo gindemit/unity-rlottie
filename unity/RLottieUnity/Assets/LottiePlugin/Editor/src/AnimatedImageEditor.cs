@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,6 +10,9 @@ namespace LottiePlugin.UI.Editor
     internal sealed class AnimatedImageEditor : UnityEditor.Editor
     {
         //Own
+        private SerializedProperty Started;
+        private SerializedProperty Paused;
+        private SerializedProperty Stopped;
         private SerializedProperty _animationJsonProperty;
         private SerializedProperty _animationSpeedProperty;
         private SerializedProperty _widthProperty;
@@ -25,6 +29,9 @@ namespace LottiePlugin.UI.Editor
         {
             _image = serializedObject.targetObject as AnimatedImage;
             _lottieAnimation = _image.CreateIfNeededAndReturnLottieAnimation();
+            Started = serializedObject.FindProperty("Started");
+            Paused = serializedObject.FindProperty("Paused");
+            Stopped = serializedObject.FindProperty("Stopped");
             _animationJsonProperty = serializedObject.FindProperty("_animationJson");
             _animationSpeedProperty = serializedObject.FindProperty("_animationSpeed");
             _widthProperty = serializedObject.FindProperty("_textureWidth");
@@ -91,6 +98,10 @@ namespace LottiePlugin.UI.Editor
             EditorGUILayout.PropertyField(_playOnAwake);
             EditorGUILayout.PropertyField(_loop);
             EditorGUILayout.PropertyField(_stopOnLastFrame);
+            EditorGUILayout.Space();
+            EditorGUILayout.PropertyField(Started);
+            EditorGUILayout.PropertyField(Paused);
+            EditorGUILayout.PropertyField(Stopped);
             serializedObject.ApplyModifiedProperties();
         }
         private void CreateAnimationIfNecessaryAndAttachToGraphic()
@@ -123,11 +134,21 @@ namespace LottiePlugin.UI.Editor
             {
                 return;
             }
-            _animationInfoBoxText = $"Animation info: Frame Rate \"{_lottieAnimation.FrameRate.ToString("F2")}\", " +
-                    $"Total Frames \"{_lottieAnimation.TotalFramesCount.ToString()}\", " +
-                    $"Original Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec. " +
-                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2")}\" sec. " +
-                    $"Current Frame \"{_lottieAnimation.CurrentFrame.ToString()}\"";
+
+            var sb = new StringBuilder();
+            sb.Append("Animation info: Frame Rate \"");
+            sb.Append(_lottieAnimation.FrameRate.ToString("F2"));
+            sb.Append("\", Total Frames \"");
+            sb.Append(_lottieAnimation.TotalFramesCount.ToString());
+            sb.Append("\", Original Duration \"");
+            sb.Append(_lottieAnimation.DurationSeconds.ToString("F2"));
+            sb.Append("\" sec. Play Duration \"");
+            sb.Append((_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2"));
+            sb.Append("\" sec. Current Frame \"");
+            sb.Append(_lottieAnimation.CurrentFrame.ToString());
+            sb.Append("\"");
+
+            _animationInfoBoxText = sb.ToString();
         }
     }
 }

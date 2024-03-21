@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace LottiePlugin.UI
@@ -8,6 +9,13 @@ namespace LottiePlugin.UI
     [ExecuteAlways]
     public sealed class AnimatedImage : MonoBehaviour
     {
+        [System.Serializable]
+        public class AnimationEvent : UnityEvent<AnimatedImage> {}
+
+        public AnimationEvent Started = new AnimationEvent();
+        public AnimationEvent Paused = new AnimationEvent();
+        public AnimationEvent Stopped = new AnimationEvent();
+
         public Transform Transform { get; private set; }
         public RawImage RawImage { get => _rawImage; internal set { _rawImage = value; } }
         internal TextAsset AnimationJson => _animationJson;
@@ -68,6 +76,10 @@ namespace LottiePlugin.UI
             _lottieAnimation.Play();
             _renderLottieAnimationCoroutine = StartCoroutine(RenderLottieAnimationCoroutine());
         }
+        public void Pause()
+        {
+            _lottieAnimation.Pause();
+        }
         public void Stop()
         {
             if (_renderLottieAnimationCoroutine != null)
@@ -101,7 +113,11 @@ namespace LottiePlugin.UI
                 width,
                 height);
             _rawImage.texture = _lottieAnimation.Texture;
+            _lottieAnimation.Started += OnAnimationStarted;
+            _lottieAnimation.Paused += OnAnimationPaused;
+            _lottieAnimation.Stopped += OnAnimationStopped;
         }
+
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
         {
             if (_animationJson == null)
@@ -124,6 +140,9 @@ namespace LottiePlugin.UI
                 _textureWidth,
                 _textureHeight);
                 _rawImage.texture = _lottieAnimation.Texture;
+                _lottieAnimation.Started += OnAnimationStarted;
+                _lottieAnimation.Paused += OnAnimationPaused;
+                _lottieAnimation.Stopped += OnAnimationStopped;
             }
             return _lottieAnimation;
         }
@@ -131,6 +150,9 @@ namespace LottiePlugin.UI
         {
             if (_lottieAnimation != null)
             {
+                _lottieAnimation.Started -= OnAnimationStarted;
+                _lottieAnimation.Paused -= OnAnimationPaused;
+                _lottieAnimation.Stopped -= OnAnimationStopped;
                 _lottieAnimation.Dispose();
                 _lottieAnimation = null;
             }
@@ -150,6 +172,19 @@ namespace LottiePlugin.UI
                     }
                 }
             }
+        }
+
+        private void OnAnimationStarted(LottieAnimation animation)
+        {
+            Started.Invoke(this);
+        }
+        private void OnAnimationPaused(LottieAnimation animation)
+        {
+            Paused.Invoke(this);
+        }
+        private void OnAnimationStopped(LottieAnimation animation)
+        {
+            Stopped.Invoke(this);
         }
     }
 }
