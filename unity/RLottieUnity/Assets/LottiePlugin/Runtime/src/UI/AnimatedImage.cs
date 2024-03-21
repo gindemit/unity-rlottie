@@ -16,6 +16,7 @@ namespace LottiePlugin.UI
         internal LottieAnimation LottieAnimation => _lottieAnimation;
         internal float AnimationSpeed => _animationSpeed;
         internal bool Loop => _loop;
+        internal bool StopOnLastFrame => _stopOnLastFrame;
 
         [SerializeField] private TextAsset _animationJson;
         [SerializeField] private RawImage _rawImage;
@@ -24,6 +25,7 @@ namespace LottiePlugin.UI
         [SerializeField] private uint _textureHeight;
         [SerializeField] private bool _playOnAwake = true;
         [SerializeField] private bool _loop = true;
+        [SerializeField] private bool _stopOnLastFrame = true;
 
         private LottieAnimation _lottieAnimation;
         private Coroutine _renderLottieAnimationCoroutine;
@@ -74,7 +76,8 @@ namespace LottiePlugin.UI
                 _renderLottieAnimationCoroutine = null;
             }
             _lottieAnimation.Stop();
-            _lottieAnimation.DrawOneFrame(0);
+            int lastFrame = (int)_lottieAnimation.TotalFramesCount - 1;
+            _lottieAnimation.DrawOneFrame(_stopOnLastFrame ? lastFrame : 0);
         }
         public void LoadFromAnimationJson(string json, uint width, uint height, string resourcesPath = "")
         {

@@ -15,6 +15,7 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty _heightProperty;
         private SerializedProperty _playOnAwake;
         private SerializedProperty _loop;
+        private SerializedProperty _stopOnLastFrame;
 
         private AnimatedImage _image;
         private LottieAnimation _lottieAnimation;
@@ -30,6 +31,7 @@ namespace LottiePlugin.UI.Editor
             _heightProperty = serializedObject.FindProperty("_textureHeight");
             _playOnAwake = serializedObject.FindProperty("_playOnAwake");
             _loop = serializedObject.FindProperty("_loop");
+            _stopOnLastFrame = serializedObject.FindProperty("_stopOnLastFrame");
 
             CreateAnimationIfNecessaryAndAttachToGraphic();
             UpdateTheAnimationInfoBoxText();
@@ -88,6 +90,7 @@ namespace LottiePlugin.UI.Editor
             }
             EditorGUILayout.PropertyField(_playOnAwake);
             EditorGUILayout.PropertyField(_loop);
+            EditorGUILayout.PropertyField(_stopOnLastFrame);
             serializedObject.ApplyModifiedProperties();
         }
         private void CreateAnimationIfNecessaryAndAttachToGraphic()
@@ -123,7 +126,8 @@ namespace LottiePlugin.UI.Editor
             _animationInfoBoxText = $"Animation info: Frame Rate \"{_lottieAnimation.FrameRate.ToString("F2")}\", " +
                     $"Total Frames \"{_lottieAnimation.TotalFramesCount.ToString()}\", " +
                     $"Original Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec. " +
-                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2")}\" sec. ";
+                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2")}\" sec. " +
+                    $"Current Frame \"{_lottieAnimation.CurrentFrame.ToString()}\"";
         }
     }
 }

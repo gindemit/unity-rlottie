@@ -179,7 +179,8 @@ namespace LottiePlugin.UI.Editor
             _animationInfoBoxText = $"Animation info: Frame Rate \"{_lottieAnimation.FrameRate.ToString("F2")}\", " +
                     $"Total Frames \"{_lottieAnimation.TotalFramesCount.ToString()}\", " +
                     $"Original Duration \"{_lottieAnimation.DurationSeconds.ToString("F2")}\" sec. " +
-                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2")}\" sec. ";
+                    $"Play Duration \"{(_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2")}\" sec. " +
+                    $"Current Frame \"{_lottieAnimation.CurrentFrame.ToString()}\"";
         }
 
         private void DrawListItems(Rect rect, int index, bool isActive, bool isFocused)
