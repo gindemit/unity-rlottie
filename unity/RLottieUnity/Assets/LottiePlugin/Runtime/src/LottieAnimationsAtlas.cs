@@ -156,7 +156,7 @@ namespace LottiePlugin
             void* firstTextureInAtlas = pixelData.GetUnsafePtr();
             for (int i = 0; i < animationCount; ++i)
             {
-                void* shiftedPointer = Unsafe.Add<byte>(firstTextureInAtlas, oneTextureSizeBytes * i);
+                void* shiftedPointer = ((byte*)firstTextureInAtlas) + oneTextureSizeBytes * i;
 
                 LottieRenderData lottieRenderData = new LottieRenderData {
                     width = width,
