@@ -37,12 +37,10 @@ namespace LottiePlugin.UI
                 return;
             }
 
-            if (IsInitialized())
+            if (!IsInitialized())
             {
-                return;
+                Initialize();
             }
-            
-            Initialize();
             
             if (_playOnAwake)
             {
