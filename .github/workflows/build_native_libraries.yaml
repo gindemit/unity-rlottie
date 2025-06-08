@@ -30,7 +30,7 @@ jobs:
           cmake --build ./build_x86_64 --config Release
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginWindowsArtifacts
           path: |
@@ -69,7 +69,7 @@ jobs:
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginAndroidArtifacts
           path: |
@@ -98,7 +98,7 @@ jobs:
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginMacOSArtifacts
           path: |
@@ -124,7 +124,7 @@ jobs:
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginIOSArtifacts
           path: |
@@ -150,7 +150,7 @@ jobs:
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
           path: |
@@ -183,7 +183,7 @@ jobs:
           tree out
   
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginWebGLArtifacts
           path: |
@@ -202,7 +202,7 @@ jobs:
   #         submodules: recursive
 
   #     - name: Download artifacts
-  #       uses: actions/download-artifact@v3
+  #       uses: actions/download-artifact@v4
   #       with:
   #         name: LottiePluginLinuxArtifacts
   #         path: out/Plugins/Linux
@@ -232,7 +232,7 @@ jobs:
   #         submodules: recursive
 
   #     - name: Download artifacts
-  #       uses: actions/download-artifact@v3
+  #       uses: actions/download-artifact@v4
   #       with:
   #         name: LottiePluginWindowsArtifacts
   #         path: out/Plugins/Windows
@@ -262,37 +262,37 @@ jobs:
           submodules: recursive
 
       - name: Download artifacts windows
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: LottiePluginWindowsArtifacts
           path: out/Plugins/Windows
 
       - name: Download artifacts android
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: LottiePluginAndroidArtifacts
           path: out/Plugins/Android
 
       - name: Download artifacts macos
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: LottiePluginMacOSArtifacts
           path: out/Plugins/Darwin
 
       - name: Download artifacts ios
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: LottiePluginIOSArtifacts
           path: out/Plugins/iOS
 
       - name: Download artifacts linux
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
           path: out/Plugins/Linux
 
       # - name: Download artifacts webgl
-      #   uses: actions/download-artifact@v3
+      #   uses: actions/download-artifact@v4
       #   with:
       #     name: LottiePluginWebGLArtifacts
       #     path: out/Plugins/WebGL
