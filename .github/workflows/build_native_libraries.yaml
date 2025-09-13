@@ -189,8 +189,6 @@ jobs:
         with:
           name: LottiePluginWebGLArtifacts
           path: |
-            out/Plugins/WebGL/LottiePlugin.bc
-            out/Plugins/WebGL/LottiePlugin.wasm
             out/Plugins/Emscripten/x86/libLottiePlugin.a
             out/Plugins/Emscripten/x86/librlottie.a
 
@@ -297,7 +295,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: LottiePluginWebGLArtifacts
-          path: out/Plugins/WebGL
+          path: out/Plugins/Emscripten/x86
 
       - name: Commit and push native libraries
         env:
@@ -313,7 +311,8 @@ jobs:
           cp -f out/Plugins/iOS/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/libLottiePlugin.a
           cp -f out/Plugins/iOS/librlottie.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/librlottie.a
           cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
-          cp -f out/Plugins/WebGL/LottiePlugin.bc unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/LottiePlugin.bc
+          cp -f out/Plugins/Emscripten/x86/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/libLottiePlugin.a
+          cp -f out/Plugins/Emscripten/x86/librlottie.a  unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/librlottie.a
           git add .
           git status
           git config --global user.email "konstantin.gindemit@gmail.com"
