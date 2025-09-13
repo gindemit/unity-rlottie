@@ -4,6 +4,8 @@ cmake_minimum_required (VERSION 3.6)
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
 project(LottiePlugin)
 
+option(RLOTTIE_ANDROID_PAGE_SIZE_16K "Build Android libraries with 16KB page size" OFF)
+
 set(BUILD_SHARED_LIBS FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 
@@ -88,6 +90,11 @@ endif()
 
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
+
+if(ANDROID AND RLOTTIE_ANDROID_PAGE_SIZE_16K)
+  target_link_options(LottiePlugin PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+  target_link_options(rlottie PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+endif()
 message(${CMAKE_CURRENT_BINARY_DIR}/rlottie_build/${RLOTTIE_LIBRARY_NAME})
 
 #Adding simple test program:
