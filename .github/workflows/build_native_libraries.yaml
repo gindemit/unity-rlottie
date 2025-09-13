@@ -86,8 +86,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install CMake
-        run: brew install cmake
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v1.14
+        with:
+          cmake-version: '3.29.6'
 
       - name: Build
         run: |
@@ -112,8 +114,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install CMake
-        run: brew install cmake
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v1.14
+        with:
+          cmake-version: '3.29.6'
 
       - name: Build
         run: |
