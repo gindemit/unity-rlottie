@@ -92,14 +92,48 @@ jobs:
           cmake-version: '3.29.6'
 
       - name: Build
+        shell: bash
         run: |
+          set -euxo pipefail
           cd projects/CMake
+
+          # 1) Build universal (optional, kept because it’s already there)
+          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake --build ./buildOSX --config Release 
+
+          # 2) Build arm64 only
           cmake -S . -B ./buildOSX_arm64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=arm64
           cmake --build ./buildOSX_arm64 --config Release
+
+          # 3) Build x86_64 only
           cmake -S . -B ./buildOSX_x86_64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=x86_64
           cmake --build ./buildOSX_x86_64 --config Release
-          lipo -create ../../out/Release/Plugins/Darwin/arm64/libLottiePlugin.dylib ../../out/Release/Plugins/Darwin/x86_64/libLottiePlugin.dylib -output ../../out/Release/Plugins/Darwin/libLottiePlugin.dylib
-          lipo -create ../../out/Release/Plugins/Darwin/arm64/librlottie.a ../../out/Release/Plugins/Darwin/x86_64/librlottie.a -output ../../out/Release/Plugins/Darwin/librlottie.a
+
+          # 4) Find actual outputs produced by Xcode/CMake
+          ARM64_DYLIB="$(find ./buildOSX_arm64 -type f -name libLottiePlugin.dylib | head -n1)"
+          X64_DYLIB="$(find ./buildOSX_x86_64 -type f -name libLottiePlugin.dylib | head -n1)"
+          ARM64_RLOTTIE="$(find ./buildOSX_arm64 -type f -name librlottie.a | head -n1)"
+          X64_RLOTTIE="$(find ./buildOSX_x86_64 -type f -name librlottie.a | head -n1)"
+
+          # 5) Prepare the expected out/ layout
+          mkdir -p ../../out/Release/Plugins/Darwin/arm64
+          mkdir -p ../../out/Release/Plugins/Darwin/x86_64
+
+          # 6) Copy thin libs into arch-specific folders for inspection
+          cp "$ARM64_DYLIB"    ../../out/Release/Plugins/Darwin/arm64/
+          cp "$X64_DYLIB"      ../../out/Release/Plugins/Darwin/x86_64/
+          cp "$ARM64_RLOTTIE"  ../../out/Release/Plugins/Darwin/arm64/ || true
+          cp "$X64_RLOTTIE"    ../../out/Release/Plugins/Darwin/x86_64/ || true
+
+          # 7) Create universal binaries into Darwin/ (no arch subfolder)
+          lipo -create "$ARM64_DYLIB" "$X64_DYLIB" -output ../../out/Release/Plugins/Darwin/libLottiePlugin.dylib
+
+          # librlottie is a static lib — lipo can merge it too if both variants exist
+          if [[ -f "$ARM64_RLOTTIE" && -f "$X64_RLOTTIE" ]]; then
+            lipo -create "$ARM64_RLOTTIE" "$X64_RLOTTIE" -output ../../out/Release/Plugins/Darwin/librlottie.a
+          fi
+
+          # 8) (Optional) show tree for debugging
           brew install tree
           tree ../../out
 
@@ -108,6 +142,8 @@ jobs:
         with:
           name: LottiePluginMacOSArtifacts
           path: |
+            out/Release/Plugins/Darwin/arm64/libLottiePlugin.dylib
+            out/Release/Plugins/Darwin/x86_64/libLottiePlugin.dylib
             out/Release/Plugins/Darwin/libLottiePlugin.dylib
             out/Release/Plugins/Darwin/librlottie.a
           if-no-files-found: error
