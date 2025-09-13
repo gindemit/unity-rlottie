@@ -65,7 +65,7 @@ jobs:
           result=$(find $ANDROID_NDK_HOME -name aarch64-linux-android-strip)
           echo $result
           cd projects/AndroidStudio
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease -PcmakeArgs="-DRLOTTIE_ANDROID_16K_PAGE=ON"
           tree ../../out
 
       - name: Upload artifacts

@@ -7,6 +7,9 @@ project(LottiePlugin)
 set(BUILD_SHARED_LIBS FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 
+# Option to enable 16 KB page size alignment for Android builds
+option(RLOTTIE_ANDROID_16K_PAGE "Align Android shared libraries for 16 KB page size" OFF)
+
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)
 set (PIXMAN_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/pixman)
 
@@ -88,6 +91,12 @@ endif()
 
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
+
+# Enable 16 KB page size for Android if requested
+if(ANDROID AND RLOTTIE_ANDROID_16K_PAGE)
+  target_link_options(LottiePlugin PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+endif()
+
 message(${CMAKE_CURRENT_BINARY_DIR}/rlottie_build/${RLOTTIE_LIBRARY_NAME})
 
 #Adding simple test program:
