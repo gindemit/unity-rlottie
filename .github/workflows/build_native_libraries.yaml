@@ -190,7 +190,6 @@ jobs:
           name: LottiePluginWebGLArtifacts
           path: |
             out/Plugins/WebGL/LottiePlugin.bc
-            out/Plugins/WebGL/LottiePlugin.wasm
             out/Plugins/Emscripten/x86/libLottiePlugin.a
             out/Plugins/Emscripten/x86/librlottie.a
 

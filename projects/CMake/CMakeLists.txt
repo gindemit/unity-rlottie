@@ -136,7 +136,10 @@ if (RLOTTIE_WEB_ASSEMBLY)
   )
   add_custom_command(
       TARGET LottiePlugin POST_BUILD
-      COMMAND emcc -O3 -flto -o
+      # Produce a relocatable LLVM bitcode file instead of a JavaScript glue
+      # stub. This allows Unity to statically link the plugin when building a
+      # WebGL player, avoiding runtime `dlopen` errors.
+      COMMAND emcc -O3 -flto -r -o
           "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/WebGL/LottiePlugin.bc"
           "$<TARGET_FILE:LottiePlugin>" "$<TARGET_FILE:rlottie>"
       COMMENT "Generated WebGL bitcode library")
