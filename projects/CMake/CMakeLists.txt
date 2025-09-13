@@ -127,6 +127,21 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
     COMMENT "Copied final library to out directory")
 
+# Generate WebGL bitcode when building with Emscripten
+if (RLOTTIE_WEB_ASSEMBLY)
+  add_custom_command(
+      TARGET LottiePlugin POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+          "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/WebGL"
+  )
+  add_custom_command(
+      TARGET LottiePlugin POST_BUILD
+      COMMAND emcc -O3 -flto -o
+          "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/WebGL/LottiePlugin.bc"
+          "$<TARGET_FILE:LottiePlugin>" "$<TARGET_FILE:rlottie>"
+      COMMENT "Generated WebGL bitcode library")
+endif()
+
 # Uncomment following lines if you want to copy the pdb files for Debug builds:
 #if (WIN32)
 # add_custom_command(
