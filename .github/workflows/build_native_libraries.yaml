@@ -210,6 +210,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Disable rlottie examples
+        run: |
+          sed -i '/add_subdirectory[[:space:]]*(example)/d' dependency/rlottie/CMakeLists.txt
+
       - name: Install Emscripten 3.1.38
         run: |
           git clone https://github.com/emscripten-core/emsdk.git
@@ -217,8 +221,7 @@ jobs:
           ./emsdk install 3.1.38
           ./emsdk activate 3.1.38
           source ./emsdk_env.sh
-          emcc -v || true   # show exact version
-          emar -V || true
+          emcc -v || true
 
       - name: Build WebGL static libs (.a)
         run: |
@@ -227,10 +230,12 @@ jobs:
           emcmake cmake -S . -B ./buildWebGL \
             -DRLOTTIE_WEB_ASSEMBLY=1 \
             -DLOTTIE_MODULE=OFF \
-            -DBUILD_SHARED_LIBS=OFF
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF
           cmake --build ./buildWebGL --config Release
           cd ../..
-          tree out || true
+          ls -al out/Plugins/WebGL || true
           # sanity: list objects inside the archives
           emar t out/Plugins/WebGL/libLottiePlugin.a || true
           emar t out/Plugins/WebGL/librlottie.a || true
