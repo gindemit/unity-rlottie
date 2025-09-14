@@ -1,4 +1,6 @@
+using LottiePlugin.Utility;
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -8,6 +10,12 @@ namespace LottiePlugin
 {
     public sealed class LottieAnimation : IDisposable
     {
+        private static bool sLoggerInitialized;
+
+        public event Action<LottieAnimation> Started;
+        public event Action<LottieAnimation> Paused;
+        public event Action<LottieAnimation> Stopped;
+
         public Texture2D Texture { get; private set; }
         public int CurrentFrame { get; private set; }
         public double FrameRate => _animationWrapper.frameRate;
@@ -30,6 +38,9 @@ namespace LottiePlugin
 
         private LottieAnimation(string jsonData, string resourcesPath, uint width, uint height)
         {
+            ThrowIf.String.IsNullOrEmpty(jsonData, nameof(jsonData));
+            ThrowIf.Value.IsZero(width, nameof(width));
+            ThrowIf.Value.IsZero(height, nameof(height));
             _animationWrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animationWrapperIntPtr);
             _frameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
             CreateRenderDataTexture2DMarshalToNative(width, height);
@@ -39,6 +50,9 @@ namespace LottiePlugin
         }
         private LottieAnimation(string jsonFilePath, uint width, uint height)
         {
+            ThrowIf.String.IsNullOrEmpty(jsonFilePath, nameof(jsonFilePath));
+            ThrowIf.Value.IsZero(width, nameof(width));
+            ThrowIf.Value.IsZero(height, nameof(height));
             _animationWrapper = NativeBridge.LoadFromFile(jsonFilePath, out _animationWrapperIntPtr);
             _frameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
             CreateRenderDataTexture2DMarshalToNative(width, height);
@@ -48,6 +62,9 @@ namespace LottiePlugin
         }
         public void Dispose()
         {
+            Started = null;
+            Paused = null;
+            Stopped = null;
             NativeBridge.Dispose(_animationWrapper);
             NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
             UnityEngine.Object.DestroyImmediate(Texture);
@@ -69,15 +86,18 @@ namespace LottiePlugin
         {
             IsPlaying = true;
             DrawOneFrame(++CurrentFrame);
+            Started?.Invoke(this);
         }
         public void Pause()
         {
             IsPlaying = false;
+            Paused?.Invoke(this);
         }
         public void Stop()
         {
-            Pause();
+            IsPlaying = false;
             CurrentFrame = 0;
+            Stopped?.Invoke(this);
         }
         public void DrawOneFrame(int frameNumber)
         {
@@ -138,19 +158,30 @@ namespace LottiePlugin
 
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)
         {
-            if (!System.IO.File.Exists(filePath))
-            {
-                throw new System.ArgumentException($"Can not find file at path: \"{filePath}\"");
-            }
+            ThrowIf.String.IsNullOrEmpty(filePath, nameof(filePath));
+            InitializeLogger(Application.persistentDataPath, "rlottie.log", 1);
             return new LottieAnimation(filePath, width, height);
         }
         public static LottieAnimation LoadFromJsonData(string jsonData, string resourcesPath, uint width, uint height)
         {
-            if (string.IsNullOrWhiteSpace(jsonData))
-            {
-                throw new System.ArgumentException($"The provided json animation file is empty");
-            }
+            ThrowIf.String.IsNullOrEmpty(jsonData, nameof(jsonData));
+            InitializeLogger(Application.persistentDataPath, "rlottie.log", 1);
             return new LottieAnimation(jsonData, resourcesPath, width, height);
+        }
+        public static void InitializeLogger(string logDirectoryPath, string logFileName, int logFileRollSizeMB)
+        {
+            ThrowIf.String.IsNullOrEmpty(logDirectoryPath, nameof(logDirectoryPath));
+            ThrowIf.String.IsNullOrEmpty(logFileName, nameof(logFileName));
+            if (sLoggerInitialized)
+            {
+                return;
+            }
+            if (!logDirectoryPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+            {
+                logDirectoryPath += Path.DirectorySeparatorChar;
+            }
+            NativeBridge.InitializeLogger(logDirectoryPath, logFileName, logFileRollSizeMB);
+            sLoggerInitialized = true;
         }
     }
 }

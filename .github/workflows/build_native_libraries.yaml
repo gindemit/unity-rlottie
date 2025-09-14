@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - dev
+    paths:
+      - 'dependency/**'
+      - 'projects/**'
+      - 'src/**'
   pull_request:
     branches:
       - dev
@@ -13,7 +17,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -26,25 +30,23 @@ jobs:
           cmake --build ./build_x86_64 --config Release
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginWindowsArtifacts
           path: |
             out/Release/Plugins/Windows/x86/LottiePlugin.dll
-            out/Release/Plugins/Windows/x86/rlottie.dll
             out/Release/Plugins/Windows/x86_64/LottiePlugin.dll
-            out/Release/Plugins/Windows/x86_64/rlottie.dll
 
   build_android:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'adopt'
@@ -67,56 +69,97 @@ jobs:
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginAndroidArtifacts
           path: |
             out/RelWithDebInfo/Plugins/Android/arm64-v8a/libLottiePlugin.so
-            out/RelWithDebInfo/Plugins/Android/arm64-v8a/librlottie.so
             out/RelWithDebInfo/Plugins/Android/armeabi-v7a/libLottiePlugin.so
-            out/RelWithDebInfo/Plugins/Android/armeabi-v7a/librlottie.so
             out/RelWithDebInfo/Plugins/Android/x86/libLottiePlugin.so
-            out/RelWithDebInfo/Plugins/Android/x86/librlottie.so
             out/RelWithDebInfo/Plugins/Android/x86_64/libLottiePlugin.so
-            out/RelWithDebInfo/Plugins/Android/x86_64/librlottie.so
 
   build_macos:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install CMake
-        run: brew install cmake
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v1.14
+        with:
+          cmake-version: '3.29.6'
 
       - name: Build
+        shell: bash
         run: |
+          set -euxo pipefail
           cd projects/CMake
-          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1
-          cmake --build ./buildOSX --config Release
+
+          # 1) Build universal (optional, kept because it’s already there)
+          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake --build ./buildOSX --config Release 
+
+          # 2) Build arm64 only
+          cmake -S . -B ./buildOSX_arm64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build ./buildOSX_arm64 --config Release
+
+          # 3) Build x86_64 only
+          cmake -S . -B ./buildOSX_x86_64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=x86_64
+          cmake --build ./buildOSX_x86_64 --config Release
+
+          # 4) Find actual outputs produced by Xcode/CMake
+          ARM64_DYLIB="$(find ./buildOSX_arm64 -type f -name libLottiePlugin.dylib | head -n1)"
+          X64_DYLIB="$(find ./buildOSX_x86_64 -type f -name libLottiePlugin.dylib | head -n1)"
+          ARM64_RLOTTIE="$(find ./buildOSX_arm64 -type f -name librlottie.a | head -n1)"
+          X64_RLOTTIE="$(find ./buildOSX_x86_64 -type f -name librlottie.a | head -n1)"
+
+          # 5) Prepare the expected out/ layout
+          mkdir -p ../../out/Release/Plugins/Darwin/arm64
+          mkdir -p ../../out/Release/Plugins/Darwin/x86_64
+
+          # 6) Copy thin libs into arch-specific folders for inspection
+          cp "$ARM64_DYLIB"    ../../out/Release/Plugins/Darwin/arm64/
+          cp "$X64_DYLIB"      ../../out/Release/Plugins/Darwin/x86_64/
+          cp "$ARM64_RLOTTIE"  ../../out/Release/Plugins/Darwin/arm64/ || true
+          cp "$X64_RLOTTIE"    ../../out/Release/Plugins/Darwin/x86_64/ || true
+
+          # 7) Create universal binaries into Darwin/ (no arch subfolder)
+          lipo -create "$ARM64_DYLIB" "$X64_DYLIB" -output ../../out/Release/Plugins/Darwin/libLottiePlugin.dylib
+
+          # librlottie is a static lib — lipo can merge it too if both variants exist
+          if [[ -f "$ARM64_RLOTTIE" && -f "$X64_RLOTTIE" ]]; then
+            lipo -create "$ARM64_RLOTTIE" "$X64_RLOTTIE" -output ../../out/Release/Plugins/Darwin/librlottie.a
+          fi
+
+          # 8) (Optional) show tree for debugging
           brew install tree
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginMacOSArtifacts
           path: |
+            out/Release/Plugins/Darwin/arm64/libLottiePlugin.dylib
             out/Release/Plugins/Darwin/x86_64/libLottiePlugin.dylib
-            out/Release/Plugins/Darwin/x86_64/librlottie.0.2.dylib
+            out/Release/Plugins/Darwin/libLottiePlugin.dylib
+            out/Release/Plugins/Darwin/librlottie.a
+          if-no-files-found: error
 
   build_ios:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install CMake
-        run: brew install cmake
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v1.14
+        with:
+          cmake-version: '3.29.6'
 
       - name: Build
         run: |
@@ -127,7 +170,7 @@ jobs:
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginIOSArtifacts
           path: |
@@ -138,7 +181,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -153,9 +196,189 @@ jobs:
           tree ../../out
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
           path: |
             out/Plugins/Linux/x86_64/libLottiePlugin.so
-            out/Plugins/Linux/x86_64/librlottie.so.0.2
+
+  build_webgl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Disable rlottie examples
+        run: |
+          sed -i '/add_subdirectory[[:space:]]*(example)/d' dependency/rlottie/CMakeLists.txt
+
+      - name: Install Emscripten 3.1.39
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install 3.1.39
+          ./emsdk activate 3.1.39
+          source ./emsdk_env.sh
+          emcc -v || true
+
+      - name: Build WebGL static libs (.a)
+        run: |
+          source emsdk/emsdk_env.sh
+          cd projects/CMake
+          emcmake cmake -S . -B ./buildWebGL \
+            -DRLOTTIE_WEB_ASSEMBLY=1 \
+            -DLOTTIE_MODULE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF
+          cmake --build ./buildWebGL --config Release
+          cd ../..
+          ls -al out/Plugins/WebGL || true
+          # sanity: list objects inside the archives
+          emar t out/Plugins/WebGL/libLottiePlugin.a || true
+          emar t out/Plugins/WebGL/librlottie.a || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: LottiePluginWebGLArtifacts
+          path: |
+            out/Plugins/WebGL/libLottiePlugin.a
+            out/Plugins/WebGL/librlottie.a
+
+  # run_tests_and_build_unity_ubuntulatest:
+  #   needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Download artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: LottiePluginLinuxArtifacts
+  #         path: out/Plugins/Linux
+          
+  #     - name: Force replace the native libraries
+  #       run: |
+  #         tree out
+  #         cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+  #         tree unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux
+
+  #     - name: Run Tests in Unity
+  #       uses: game-ci/unity-test-runner@v3
+  #       env:
+  #         UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+  #       with:
+  #         projectPath: unity/RLottieUnity
+  #         githubToken: ${{ secrets.GITHUB_TOKEN }}
+  #         customParameters: -logFile -
+
+  # run_tests_and_build_unity_windows:
+  #   needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
+  #   runs-on: windows-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Download artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: LottiePluginWindowsArtifacts
+  #         path: out/Plugins/Windows
+
+  #     - name: Force replace the native libraries
+  #       run: |
+  #         Copy-Item -Force out/Plugins/Windows/x86/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
+  #         Copy-Item -Force out/Plugins/Windows/x86_64/LottiePlugin.dll -Destination unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
+
+  #     - name: Run Tests in Unity
+  #       uses: game-ci/unity-test-runner@v4
+  #       env:
+  #         UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+  #       with:
+  #         projectPath: unity/RLottieUnity
+  #         githubToken: ${{ secrets.GITHUB_TOKEN }}
+  #         customParameters: -logFile -
+            
+  commit_and_push_native_libraries:
+    needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          submodules: recursive
+
+      - name: Download artifacts windows
+        uses: actions/download-artifact@v4
+        with:
+          name: LottiePluginWindowsArtifacts
+          path: out/Plugins/Windows
+
+      - name: Download artifacts android
+        uses: actions/download-artifact@v4
+        with:
+          name: LottiePluginAndroidArtifacts
+          path: out/Plugins/Android
+
+      - name: Download artifacts macos
+        uses: actions/download-artifact@v4
+        with:
+          name: LottiePluginMacOSArtifacts
+          path: out/Plugins/Darwin
+
+      - name: Download artifacts ios
+        uses: actions/download-artifact@v4
+        with:
+          name: LottiePluginIOSArtifacts
+          path: out/Plugins/iOS
+
+      - name: Download artifacts linux
+        uses: actions/download-artifact@v4
+        with:
+          name: LottiePluginLinuxArtifacts
+          path: out/Plugins/Linux
+
+      - name: Download artifacts webgl
+        uses: actions/download-artifact@v4
+        with:
+          name: LottiePluginWebGLArtifacts
+          path: out/Plugins/WebGL
+
+      - name: Commit and push native libraries
+        env:
+          MY_SECRET: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          cp -f out/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
+          cp -f out/Plugins/Windows/x86_64/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
+          cp -f out/Plugins/Android/arm64-v8a/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/arm64-v8a/libLottiePlugin.so
+          cp -f out/Plugins/Android/armeabi-v7a/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/armeabi-v7a/libLottiePlugin.so
+          cp -f out/Plugins/Android/x86/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/x86/libLottiePlugin.so
+          cp -f out/Plugins/Android/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/x86_64/libLottiePlugin.so
+          cp -f out/Plugins/Darwin/libLottiePlugin.dylib unity/RLottieUnity/Assets/LottiePlugin/Plugins/OSX/libLottiePlugin.dylib
+          cp -f out/Plugins/iOS/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/libLottiePlugin.a
+          cp -f out/Plugins/iOS/librlottie.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/librlottie.a
+          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+          mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL
+          cp -f out/Plugins/WebGL/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/libLottiePlugin.a
+          cp -f out/Plugins/WebGL/librlottie.a     unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/librlottie.a
+          git add .
+          git status
+          git config --global user.email "konstantin.gindemit@gmail.com"
+          git config --global user.name "Konstantin Gindemit"
+          git remote -v
+          git commit --allow-empty -m "New native libraries version: 0.3.0-dev.${{ github.run_number }}"
+          git tag -a 0.3.0-dev.${{ github.run_number }} -m "New native libraries version: 0.3.0-dev.${{ github.run_number }}"
+          git config -l | grep 'http\..*\.extraheader' | cut -d= -f1 | xargs -L1 git config --unset-all
+          echo "Trying to push..."
+          git push --set-upstream https://token:$MY_SECRET@github.com/gindemit/unity-rlottie.git
+          git push --tags --set-upstream https://token:$MY_SECRET@github.com/gindemit/unity-rlottie.git
+

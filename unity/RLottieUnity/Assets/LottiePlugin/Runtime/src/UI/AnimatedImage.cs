@@ -1,12 +1,21 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace LottiePlugin.UI
 {
     [RequireComponent(typeof(RawImage))]
+    [ExecuteAlways]
     public sealed class AnimatedImage : MonoBehaviour
     {
+        [System.Serializable]
+        public class AnimationEvent : UnityEvent<AnimatedImage> {}
+
+        public AnimationEvent Started = new AnimationEvent();
+        public AnimationEvent Paused = new AnimationEvent();
+        public AnimationEvent Stopped = new AnimationEvent();
+
         public Transform Transform { get; private set; }
         public RawImage RawImage { get => _rawImage; internal set { _rawImage = value; } }
         internal TextAsset AnimationJson => _animationJson;
@@ -15,6 +24,7 @@ namespace LottiePlugin.UI
         internal LottieAnimation LottieAnimation => _lottieAnimation;
         internal float AnimationSpeed => _animationSpeed;
         internal bool Loop => _loop;
+        internal bool StopOnLastFrame => _stopOnLastFrame;
 
         [SerializeField] private TextAsset _animationJson;
         [SerializeField] private RawImage _rawImage;
@@ -23,6 +33,7 @@ namespace LottiePlugin.UI
         [SerializeField] private uint _textureHeight;
         [SerializeField] private bool _playOnAwake = true;
         [SerializeField] private bool _loop = true;
+        [SerializeField] private bool _stopOnLastFrame = true;
 
         private LottieAnimation _lottieAnimation;
         private Coroutine _renderLottieAnimationCoroutine;
@@ -45,13 +56,10 @@ namespace LottiePlugin.UI
                 _rawImage = GetComponent<RawImage>();
             }
             CreateIfNeededAndReturnLottieAnimation();
-            if (_playOnAwake)
+            _lottieAnimation.DrawOneFrame(0);
+            if (_playOnAwake && Application.isPlaying)
             {
                 Play();
-            }
-            else
-            {
-                _lottieAnimation.DrawOneFrame(0);
             }
         }
         private void OnDestroy()
@@ -68,6 +76,10 @@ namespace LottiePlugin.UI
             _lottieAnimation.Play();
             _renderLottieAnimationCoroutine = StartCoroutine(RenderLottieAnimationCoroutine());
         }
+        public void Pause()
+        {
+            _lottieAnimation.Pause();
+        }
         public void Stop()
         {
             if (_renderLottieAnimationCoroutine != null)
@@ -76,8 +88,36 @@ namespace LottiePlugin.UI
                 _renderLottieAnimationCoroutine = null;
             }
             _lottieAnimation.Stop();
-            _lottieAnimation.DrawOneFrame(0);
+            int lastFrame = (int)_lottieAnimation.TotalFramesCount - 1;
+            _lottieAnimation.DrawOneFrame(_stopOnLastFrame ? lastFrame : 0);
         }
+        public void LoadFromAnimationJson(string json, uint width, uint height, string resourcesPath = "")
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                throw new System.ArgumentException("The json parameter should be not null or empty");
+            }
+            if (_rawImage == null)
+            {
+                _rawImage = GetComponent<RawImage>();
+            }
+            if (_rawImage == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Can not find the RawImage component on the current game object: " + gameObject.name);
+            }
+            DisposeLottieAnimation();
+            _lottieAnimation = LottieAnimation.LoadFromJsonData(
+                json,
+                resourcesPath,
+                width,
+                height);
+            _rawImage.texture = _lottieAnimation.Texture;
+            _lottieAnimation.Started += OnAnimationStarted;
+            _lottieAnimation.Paused += OnAnimationPaused;
+            _lottieAnimation.Stopped += OnAnimationStopped;
+        }
+
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
         {
             if (_animationJson == null)
@@ -100,6 +140,9 @@ namespace LottiePlugin.UI
                 _textureWidth,
                 _textureHeight);
                 _rawImage.texture = _lottieAnimation.Texture;
+                _lottieAnimation.Started += OnAnimationStarted;
+                _lottieAnimation.Paused += OnAnimationPaused;
+                _lottieAnimation.Stopped += OnAnimationStopped;
             }
             return _lottieAnimation;
         }
@@ -107,6 +150,9 @@ namespace LottiePlugin.UI
         {
             if (_lottieAnimation != null)
             {
+                _lottieAnimation.Started -= OnAnimationStarted;
+                _lottieAnimation.Paused -= OnAnimationPaused;
+                _lottieAnimation.Stopped -= OnAnimationStopped;
                 _lottieAnimation.Dispose();
                 _lottieAnimation = null;
             }
@@ -126,6 +172,19 @@ namespace LottiePlugin.UI
                     }
                 }
             }
+        }
+
+        private void OnAnimationStarted(LottieAnimation animation)
+        {
+            Started.Invoke(this);
+        }
+        private void OnAnimationPaused(LottieAnimation animation)
+        {
+            Paused.Invoke(this);
+        }
+        private void OnAnimationStopped(LottieAnimation animation)
+        {
+            Stopped.Invoke(this);
         }
     }
 }

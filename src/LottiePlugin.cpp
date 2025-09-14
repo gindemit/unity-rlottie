@@ -1,4 +1,5 @@
 #include "LottiePlugin.h"
+#include "vdebug.h"
 
 extern "C" {
 
@@ -25,7 +26,10 @@ extern "C" {
         return animation_wrapper;
     }
 
-    EXPORT_API int32_t lottie_load_from_data(const char* json_data, const char* resource_path, lottie_animation_wrapper** animation_wrapper) {
+    EXPORT_API int32_t lottie_load_from_data(
+      const char* json_data,
+      const char* resource_path,
+      lottie_animation_wrapper** animation_wrapper) {
         const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
         auto animation = rlottie::Animation::loadFromData(std::string(json_data), std::string(resource_path), null_func);
         if(!animation) {
@@ -35,7 +39,9 @@ extern "C" {
         *animation_wrapper = create_animation_wrapper(animation);
         return *animation_wrapper == nullptr ? -1 : 0;
     }
-    EXPORT_API int32_t lottie_load_from_file(const char* file_path, lottie_animation_wrapper** animation_wrapper) {
+    EXPORT_API int32_t lottie_load_from_file(
+      const char* file_path,
+      lottie_animation_wrapper** animation_wrapper) {
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
 
         if(!animation) {
@@ -67,6 +73,29 @@ extern "C" {
     }
 
 
+#if defined(__EMSCRIPTEN__)
+    // WebGL single-thread fallback: do sync render instead of futures
+    EXPORT_API int32_t lottie_render_create_future_async(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data,
+        uint32_t frame_number,
+        bool keep_aspect_ratio) {
+        rlottie::Surface surface(
+            render_data->buffer,
+            render_data->width,
+            render_data->height,
+            render_data->bytesPerLine);
+        // WebGL single-thread fallback: do sync render instead of futures
+        animation_wrapper->animation->renderSync(frame_number, surface, keep_aspect_ratio);
+        return 0;
+    }
+    EXPORT_API int32_t lottie_render_get_future_result(
+        lottie_animation_wrapper* /*animation_wrapper*/,
+        lottie_render_data* /*render_data*/) {
+        // WebGL single-thread fallback: nothing to do here
+        return 0;
+    }
+#else
     EXPORT_API int32_t lottie_render_create_future_async(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
@@ -81,11 +110,12 @@ extern "C" {
         return 0;
     }
     EXPORT_API int32_t lottie_render_get_future_result(
-        lottie_animation_wrapper* animation_wrapper,
+        lottie_animation_wrapper* /*animation_wrapper*/,
         lottie_render_data* render_data) {
         render_data->render_future.get();
         return 0;
     }
+#endif
 
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data) {
         *render_data = new lottie_render_data();
@@ -99,6 +129,25 @@ extern "C" {
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data) {
         delete (*render_data);
         *render_data = nullptr;
+        return 0;
+    }
+    EXPORT_API int32_t initialize_logger(const char* log_dir_path, const char* log_file_name, int32_t log_file_roll_size_mb) {
+        fprintf(stderr, "Initializing logger (stderr)\n");
+        // print the paths
+        fprintf(stderr, "log_dir_path: %s\n", log_dir_path);
+        fprintf(stderr, "log_file_name: %s\n", log_file_name);
+        fprintf(stderr, "log_file_roll_size_mb: %d\n", log_file_roll_size_mb);
+        fprintf(stdout, "Initializing logger (stdout)\n");
+        initialize(GuaranteedLogger(), std::string(log_dir_path), std::string(log_file_name), log_file_roll_size_mb);
+        set_log_level(LogLevel::INFO);
+
+        vDebug << "Initialized logger (debug) test message";
+        vWarning << "Initialized logger (warning) test message";
+        vCritical << "Initialized logger (critical) test message";
+        // print the paths
+        vDebug << "log_dir_path: " << log_dir_path;
+        vDebug << "log_file_name: " << log_file_name;
+        vDebug << "log_file_roll_size_mb: " << log_file_roll_size_mb;
         return 0;
     }
 }
