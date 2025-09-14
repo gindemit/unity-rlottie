@@ -85,12 +85,14 @@ extern "C" {
             render_data->width,
             render_data->height,
             render_data->bytesPerLine);
+        // WebGL single-thread fallback: do sync render instead of futures
         animation_wrapper->animation->renderSync(frame_number, surface, keep_aspect_ratio);
         return 0;
     }
     EXPORT_API int32_t lottie_render_get_future_result(
         lottie_animation_wrapper* /*animation_wrapper*/,
         lottie_render_data* /*render_data*/) {
+        // WebGL single-thread fallback: nothing to do here
         return 0;
     }
 #else
