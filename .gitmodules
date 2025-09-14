@@ -1,6 +1,7 @@
 [submodule "dependency/rlottie"]
 	path = dependency/rlottie
-	url = git@github.com:Samsung/rlottie.git
+	url = git@github.com:gindemit/rlottie.git
+	branch = unity-rlottie-win-fixes
 [submodule "dependency/cmake-ios-toolchain"]
 	path = dependency/cmake-ios-toolchain
 	url = git@github.com:leetal/ios-cmake.git
