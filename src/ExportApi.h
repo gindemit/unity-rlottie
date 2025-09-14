@@ -1,10 +1,13 @@
 #ifndef _EXPORT_API_H_
 #define _EXPORT_API_H_
 
-#if _MSC_VER // this is defined when compiling with Visual Studio
-#define EXPORT_API __declspec(dllexport) // Visual Studio needs annotating exported functions with this
+#if defined(__EMSCRIPTEN__)
+  #include <emscripten/emscripten.h>
+  #define EXPORT_API EMSCRIPTEN_KEEPALIVE
+#elif _MSC_VER
+  #define EXPORT_API __declspec(dllexport)
 #else
-#define EXPORT_API __attribute__((visibility("default"))) // Other compilers
+  #define EXPORT_API __attribute__((visibility("default")))
 #endif
 
 #endif // !_EXPORT_API_H_

@@ -25,7 +25,7 @@ namespace LottiePlugin
     }
     internal static class NativeBridge
     {
-#if UNITY_IOS && !UNITY_EDITOR
+#if (UNITY_WEBGL || UNITY_IOS) && !UNITY_EDITOR
         private const string PLUGIN_NAME = "__Internal";
 #else
         private const string PLUGIN_NAME = "LottiePlugin";
@@ -35,15 +35,15 @@ namespace LottiePlugin
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_load_from_data")]
         private static extern int LottieLoadFromData(
-            string jsonData,
-            string resourcePath,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string jsonData,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string resourcePath,
             out IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_load_from_file")]
         private static extern int LottieLoadFromFile(
-            string filePath,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string filePath,
             out IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
@@ -91,8 +91,8 @@ namespace LottiePlugin
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "initialize_logger")]
         internal static extern int InitializeLogger(
-            string logDirectoryPath,
-            string logFileName,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string logDirectoryPath,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string logFileName,
             int logFileRollSizeMB);
 
         internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)

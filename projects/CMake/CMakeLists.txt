@@ -43,9 +43,15 @@ endif()
 
 target_compile_definitions(LottiePlugin PRIVATE LOTTIE_LOGGING_SUPPORT)
 
-if (RLOTTIE_IOS OR ANDROID OR RLOTTIE_OSX)
-  message("Compile cpp source for iOS or Android")
+# Add WebGL to platforms that need pixman-cpp shim:
+if (RLOTTIE_IOS OR ANDROID OR RLOTTIE_OSX OR RLOTTIE_WEB_ASSEMBLY)
+  message("Compile cpp source for iOS/Android/macOS/WebAssembly")
   target_sources(rlottie PRIVATE ${PIXMAN_ROOT}/pixman-cpp-standard.cpp)
+endif()
+
+# Build static lib for WebAssembly
+if (RLOTTIE_WEB_ASSEMBLY)
+  set(BUILD_SHARED_LIBS OFF)
 endif()
 
 if (WIN32)
@@ -127,19 +133,26 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
     COMMENT "Copied final library to out directory")
 
-# Generate WebGL bitcode when building with Emscripten
 if (RLOTTIE_WEB_ASSEMBLY)
   add_custom_command(
       TARGET LottiePlugin POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E make_directory
-          "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/WebGL"
+          "${CMAKE_CURRENT_SOURCE_DIR}/../../out/Plugins/WebGL"
   )
   add_custom_command(
       TARGET LottiePlugin POST_BUILD
-      COMMAND emcc -O3 -flto -o
-          "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/WebGL/LottiePlugin.bc"
-          "$<TARGET_FILE:LottiePlugin>" "$<TARGET_FILE:rlottie>"
-      COMMENT "Generated WebGL bitcode library")
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "$<TARGET_FILE:LottiePlugin>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/../../out/Plugins/WebGL/libLottiePlugin.a"
+      COMMENT "Copied libLottiePlugin.a to out/Plugins/WebGL"
+  )
+  add_custom_command(
+      TARGET LottiePlugin POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "$<TARGET_FILE:rlottie>"
+          "${CMAKE_CURRENT_SOURCE_DIR}/../../out/Plugins/WebGL/librlottie.a"
+      COMMENT "Copied librlottie.a to out/Plugins/WebGL"
+  )
 endif()
 
 # Uncomment following lines if you want to copy the pdb files for Debug builds:
