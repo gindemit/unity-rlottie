@@ -21,7 +21,9 @@ typedef struct lottie_render_data {
     uint32_t width;
     uint32_t height;
     uint32_t bytesPerLine;
+#if !defined(__EMSCRIPTEN__)
     std::future<rlottie::Surface> render_future;
+#endif
 } lottie_render_data;
 
 extern "C" {

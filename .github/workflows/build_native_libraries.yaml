@@ -214,12 +214,12 @@ jobs:
         run: |
           sed -i '/add_subdirectory[[:space:]]*(example)/d' dependency/rlottie/CMakeLists.txt
 
-      - name: Install Emscripten 3.1.38
+      - name: Install Emscripten 3.1.39
         run: |
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk
-          ./emsdk install 3.1.38
-          ./emsdk activate 3.1.38
+          ./emsdk install 3.1.39
+          ./emsdk activate 3.1.39
           source ./emsdk_env.sh
           emcc -v || true
 
