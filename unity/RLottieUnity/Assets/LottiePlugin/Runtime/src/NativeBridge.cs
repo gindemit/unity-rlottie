@@ -35,15 +35,15 @@ namespace LottiePlugin
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_load_from_data")]
         private static extern int LottieLoadFromData(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string jsonData,
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string resourcePath,
+            [MarshalAs(UnmanagedType.LPStr)] string jsonData,
+            [MarshalAs(UnmanagedType.LPStr)] string resourcePath,
             out IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_load_from_file")]
         private static extern int LottieLoadFromFile(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
             out IntPtr animationWrapper);
 
         [DllImport(PLUGIN_NAME,
@@ -91,8 +91,8 @@ namespace LottiePlugin
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "initialize_logger")]
         internal static extern int InitializeLogger(
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string logDirectoryPath,
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string logFileName,
+            [MarshalAs(UnmanagedType.LPStr)] string logDirectoryPath,
+            [MarshalAs(UnmanagedType.LPStr)] string logFileName,
             int logFileRollSizeMB);
 
         internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)
