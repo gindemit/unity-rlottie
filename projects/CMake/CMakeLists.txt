@@ -26,6 +26,9 @@ if (WIN32)
 endif()
 
 add_subdirectory(${RLOTTIE_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build)
+# Make rlottie compile as C++17 (doesn't affect your plugin target)
+target_compile_features(rlottie PUBLIC cxx_std_17)
+
 target_compile_definitions(rlottie PRIVATE LOTTIE_LOGGING_SUPPORT)
 include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/vector/ ${RLOTTIE_ROOT}/vs2019/)
 message("Lottie root directory: ${RLOTTIE_ROOT}")
@@ -67,13 +70,20 @@ endif()
 
 #declare common target compilation options
 if(MSVC)
+    target_compile_options(rlottie
+                        PRIVATE
+                            /std:c++17
+                            /EHsc # enable exceptions
+                            /Zc:__cplusplus # enable C++17 features
+                            /permissive-) # standards compliant mode
     target_compile_options(LottiePlugin
                         PUBLIC
                         PRIVATE
-                            /std:c++14
-                            /EHs-c- # disable exceptions
-                            /GR- # disable RTTI
-                            /W3
+                            /std:c++17
+                            /EHsc- # disable exceptions
+                            /Zc:__cplusplus # enable C++17 features
+                            /permissive- # standards compliant mode
+                            /W3 # warning level
                         )
 else()
     target_compile_options(LottiePlugin

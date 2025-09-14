@@ -24,8 +24,8 @@ jobs:
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./build_x86 -A Win32
-          cmake -S . -B ./build_x86_64 -A x64
+          cmake -S . -B ./build_x86    -A Win32 -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
+          cmake -S . -B ./build_x86_64 -A x64   -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
           cmake --build ./build_x86 --config Release
           cmake --build ./build_x86_64 --config Release
 
