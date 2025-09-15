@@ -377,13 +377,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: LottiePluginIOSArtifacts
-          path: out/Plugins/iOS
+          path: out/Plugins/iOS/aarch64
 
       - name: Download artifacts ios-simulator-x64
         uses: actions/download-artifact@v4
         with:
           name: LottiePluginIOSSimulatorX64Artifacts
-          path: out/Plugins/iOS
+          path: out/Plugins/iOS/x86_64
 
       - name: Download artifacts linux
         uses: actions/download-artifact@v4
@@ -408,8 +408,8 @@ jobs:
           cp -f out/Plugins/Android/x86/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/x86/libLottiePlugin.so
           cp -f out/Plugins/Android/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Android/x86_64/libLottiePlugin.so
           cp -f out/Plugins/Darwin/libLottiePlugin.dylib unity/RLottieUnity/Assets/LottiePlugin/Plugins/OSX/libLottiePlugin.dylib
-          cp -f out/Plugins/iOS/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/libLottiePlugin.a
-          cp -f out/Plugins/iOS/librlottie.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/librlottie.a
+          cp -f out/Plugins/iOS/aarch64/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/libLottiePlugin.a
+          cp -f out/Plugins/iOS/aarch64/librlottie.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/librlottie.a
           # iOS Simulator x86_64
           mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64
           cp -f out/Plugins/iOS/x86_64/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64/libLottiePlugin.a
