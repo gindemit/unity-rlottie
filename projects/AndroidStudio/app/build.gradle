@@ -21,6 +21,9 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags '-std=c++14'
+                if (project.hasProperty('ANDROID_16K_PAGE') && project.getProperty('ANDROID_16K_PAGE') == 'ON') {
+                    arguments "-DRLOTTIE_ANDROID_PAGE_SIZE_16K=ON"
+                }
             }
         }
 
