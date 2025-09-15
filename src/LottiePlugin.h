@@ -53,7 +53,7 @@ extern "C" {
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data);
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data);
 
-    EXPORT_API int32_t initialize_logger(
+    EXPORT_API int32_t lottie_initialize_logger(
         const char* log_dir_path,
         const char* log_file_name,
         int32_t log_file_roll_size_mb);
