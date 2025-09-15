@@ -153,11 +153,4 @@ extern "C" {
         vDebug << "log_file_roll_size_mb: " << log_file_roll_size_mb;
         return 0;
     }
-
-    EXPORT_API int32_t initialize_logger(
-        const char* log_dir_path,
-        const char* log_file_name,
-        int32_t log_file_roll_size_mb) {
-        return lottie_initialize_logger(log_dir_path, log_file_name, log_file_roll_size_mb);
-    }
 }

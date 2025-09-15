@@ -57,14 +57,6 @@ extern "C" {
         const char* log_dir_path,
         const char* log_file_name,
         int32_t log_file_roll_size_mb);
-
-    // Backward compatible alias for older entry-point name. New builds should
-    // prefer `lottie_initialize_logger` to match the export filters used on
-    // Linux/Android.
-    EXPORT_API int32_t initialize_logger(
-        const char* log_dir_path,
-        const char* log_file_name,
-        int32_t log_file_roll_size_mb);
 }
 
 #endif // !_VORBIS_PLUGIN_H_
