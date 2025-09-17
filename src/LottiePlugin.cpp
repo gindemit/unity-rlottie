@@ -5,8 +5,12 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <mutex>
+#include <queue>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -24,9 +28,6 @@
 
 #if defined(__ANDROID__)
 #    include <GLES3/gl3.h>
-#    ifndef GL_BGRA
-#        define GL_BGRA 0x80E1
-#    endif
 // On Apple platforms we rely on Metal; avoid desktop OpenGL headers there.
 #elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
 #    include <GL/gl.h>
@@ -46,11 +47,28 @@ namespace
         uint32_t stride = 0;
     };
 
-    std::mutex gUploadMutex;
-    UploadContext gUploadContext;
-    std::atomic<uint64_t> gUploadVersion{0};
-    std::atomic<uint64_t> gRequestedVersion{0};
-    uint64_t gUploadedVersion = 0;
+    struct InstanceState
+    {
+        std::mutex uploadMutex;
+        UploadContext uploadCtx{};
+        std::atomic<uint64_t> uploadVersion{0};
+        std::atomic<uint64_t> requestedVersion{0};
+        uint64_t uploadedVersion = 0;
+        std::atomic<bool> uploadQueued{false};
+        int texW = 0;
+        int texH = 0;
+        void* nativeTex = nullptr;
+#if defined(_WIN32)
+        ID3D11Texture2D* d3dTex = nullptr;
+#elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        id<MTLTexture> metalTex = nil;
+#elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+        GLuint glTex = 0;
+#endif
+#if defined(__ANDROID__)
+        std::vector<uint8_t> rgbaScratch;
+#endif
+    };
 
     lottie_animation_wrapper* gBoundAnimation = nullptr;
 
@@ -64,26 +82,21 @@ namespace
 
     Renderer gRenderer = Renderer::Unknown;
     void* gDevice = nullptr;
-    void* gNativeTexture = nullptr;
-    int gTextureWidth = 0;
-    int gTextureHeight = 0;
-    int gRequestedWidth = 0;
-    int gRequestedHeight = 0;
 
 #if defined(_WIN32)
     ID3D11Device* gD3DDevice = nullptr;
     ID3D11DeviceContext* gD3DContext = nullptr;
-    ID3D11Texture2D* gD3DTexture = nullptr;
 #endif
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
     id<MTLDevice> gMetalDevice = nil;
-    id<MTLTexture> gMetalTexture = nil;
 #endif
 
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
-    GLuint gGLTexture = 0;
-#endif
+    std::mutex gInstancesMutex;
+    std::unordered_map<lottie_animation_wrapper*, std::unique_ptr<InstanceState>> gInstances;
+
+    std::mutex gPendingUploadsMutex;
+    std::queue<lottie_animation_wrapper*> gPendingUploads;
 
     enum UnityGfxRenderer
     {
@@ -125,44 +138,77 @@ namespace
         }
     }
 
-    void ResetTextureState()
+    InstanceState* GetState(lottie_animation_wrapper* animation, bool create = true)
     {
-        gTextureWidth = 0;
-        gTextureHeight = 0;
-        gNativeTexture = nullptr;
-#if defined(_WIN32)
-        if (gD3DTexture)
+        if (animation == nullptr)
         {
-            gD3DTexture->Release();
-            gD3DTexture = nullptr;
+            return nullptr;
         }
-#elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-        gMetalTexture = nil;
-#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
-        if (gGLTexture != 0)
+
+        std::lock_guard<std::mutex> lock(gInstancesMutex);
+        auto it = gInstances.find(animation);
+        if (it != gInstances.end())
         {
-            glDeleteTextures(1, &gGLTexture);
-            gGLTexture = 0;
+            return it->second.get();
         }
-#endif
+
+        if (!create)
+        {
+            return nullptr;
+        }
+
+        auto instance = std::make_unique<InstanceState>();
+        InstanceState* raw = instance.get();
+        gInstances.emplace(animation, std::move(instance));
+        return raw;
     }
 
-    bool EnsureTexture(int width, int height)
+    void ResetTextureState(InstanceState* state)
     {
-        if (width <= 0 || height <= 0)
+        if (state == nullptr)
+        {
+            return;
+        }
+
+#if defined(_WIN32)
+        if (state->d3dTex)
+        {
+            state->d3dTex->Release();
+            state->d3dTex = nullptr;
+        }
+#elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        state->metalTex = nil;
+#elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+        if (state->glTex != 0)
+        {
+            glDeleteTextures(1, &state->glTex);
+            state->glTex = 0;
+        }
+#endif
+
+        state->nativeTex = nullptr;
+        state->texW = 0;
+        state->texH = 0;
+        state->uploadCtx = {};
+        state->uploadVersion.store(0, std::memory_order_relaxed);
+        state->requestedVersion.store(0, std::memory_order_relaxed);
+        state->uploadedVersion = 0;
+        state->uploadQueued.store(false, std::memory_order_release);
+    }
+
+    bool EnsureTexture(InstanceState* state, int width, int height)
+    {
+        if (state == nullptr || width <= 0 || height <= 0)
         {
             return false;
         }
 
-        if (width == gTextureWidth && height == gTextureHeight && gNativeTexture != nullptr)
+        if (state->texW == width && state->texH == height && state->nativeTex != nullptr)
         {
             return true;
         }
 
-        ResetTextureState();
-
-        gTextureWidth = width;
-        gTextureHeight = height;
+        ResetTextureState(state);
 
         switch (gRenderer)
         {
@@ -185,13 +231,21 @@ namespace
                 desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
                 desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-                HRESULT hr = gD3DDevice->CreateTexture2D(&desc, nullptr, &gD3DTexture);
-                if (FAILED(hr))
+                ID3D11Texture2D* texture = nullptr;
+                HRESULT hr = gD3DDevice->CreateTexture2D(&desc, nullptr, &texture);
+                if (FAILED(hr) || texture == nullptr)
                 {
-                    gD3DTexture = nullptr;
+                    if (texture != nullptr)
+                    {
+                        texture->Release();
+                    }
                     return false;
                 }
-                gNativeTexture = gD3DTexture;
+
+                state->d3dTex = texture;
+                state->nativeTex = texture;
+                state->texW = width;
+                state->texH = height;
                 return true;
             }
 #else
@@ -204,14 +258,25 @@ namespace
                 {
                     return false;
                 }
-                MTLTextureDescriptor* descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                                                                    width:width
-                                                                                                   height:height
-                                                                                                mipmapped:NO];
+
+                MTLTextureDescriptor* descriptor =
+                    [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                       width:width
+                                                                      height:height
+                                                                   mipmapped:NO];
                 descriptor.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-                gMetalTexture = [gMetalDevice newTextureWithDescriptor:descriptor];
-                gNativeTexture = (__bridge void*)gMetalTexture;
-                return gMetalTexture != nil;
+
+                id<MTLTexture> texture = [gMetalDevice newTextureWithDescriptor:descriptor];
+                if (texture == nil)
+                {
+                    return false;
+                }
+
+                state->metalTex = texture;
+                state->nativeTex = (__bridge void*)texture;
+                state->texW = width;
+                state->texH = height;
+                return true;
             }
 #else
                 return false;
@@ -219,23 +284,32 @@ namespace
             case Renderer::OpenGL:
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
             {
-                if (gGLTexture == 0)
+                if (state->glTex == 0)
                 {
-                    glGenTextures(1, &gGLTexture);
+                    glGenTextures(1, &state->glTex);
                 }
-                glBindTexture(GL_TEXTURE_2D, gGLTexture);
+                if (state->glTex == 0)
+                {
+                    return false;
+                }
+                glBindTexture(GL_TEXTURE_2D, state->glTex);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 #    if defined(__ANDROID__)
                 const GLint internalFormat = GL_RGBA;
+                glTexImage2D(
+                    GL_TEXTURE_2D, 0, internalFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 #    else
                 const GLint internalFormat = GL_RGBA8;
+                glTexImage2D(
+                    GL_TEXTURE_2D, 0, internalFormat, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
 #    endif
-                glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
-                gNativeTexture = reinterpret_cast<void*>(static_cast<uintptr_t>(gGLTexture));
-                return gGLTexture != 0;
+                state->nativeTex = reinterpret_cast<void*>(static_cast<uintptr_t>(state->glTex));
+                state->texW = width;
+                state->texH = height;
+                return true;
             }
 #else
                 return false;
@@ -246,41 +320,8 @@ namespace
         }
     }
 
-    void UploadD3D11(const UploadContext& ctx)
-    {
-#if defined(_WIN32)
-        if (gD3DContext == nullptr || gD3DTexture == nullptr || ctx.data == nullptr)
-        {
-            return;
-        }
-        D3D11_MAPPED_SUBRESOURCE mapped{};
-        if (FAILED(gD3DContext->Map(gD3DTexture, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-        {
-            return;
-        }
-        const uint8_t* src = ctx.data;
-        uint8_t* dst = reinterpret_cast<uint8_t*>(mapped.pData);
-        for (uint32_t y = 0; y < ctx.height; ++y)
-        {
-            std::memcpy(dst + y * mapped.RowPitch, src + y * ctx.stride, ctx.stride);
-        }
-        gD3DContext->Unmap(gD3DTexture, 0);
-#endif
-    }
-
-    void UploadMetal(const UploadContext& ctx)
-    {
-#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-        if (gMetalTexture == nil || ctx.data == nullptr)
-        {
-            return;
-        }
-        MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
-        [gMetalTexture replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
-#endif
-    }
-
-    [[maybe_unused]] static void ConvertBGRAtoRGBA(std::vector<uint8_t>& buffer, const UploadContext& ctx)
+#if defined(__ANDROID__)
+    void ConvertBGRAtoRGBA(std::vector<uint8_t>& buffer, const UploadContext& ctx)
     {
         buffer.resize(static_cast<size_t>(ctx.width) * static_cast<size_t>(ctx.height) * 4u);
         const uint8_t* src = ctx.data;
@@ -289,97 +330,158 @@ namespace
         {
             for (uint32_t x = 0; x < ctx.width; ++x)
             {
-                size_t offset = static_cast<size_t>(y) * ctx.width * 4u + x * 4u;
-                size_t srcOffset = static_cast<size_t>(y) * ctx.stride + x * 4u;
-                dst[offset + 0] = src[srcOffset + 2];
-                dst[offset + 1] = src[srcOffset + 1];
-                dst[offset + 2] = src[srcOffset + 0];
-                dst[offset + 3] = src[srcOffset + 3];
+                const size_t srcOffset = static_cast<size_t>(y) * ctx.stride + static_cast<size_t>(x) * 4u;
+                const size_t dstOffset = (static_cast<size_t>(y) * ctx.width + x) * 4u;
+                dst[dstOffset + 0] = src[srcOffset + 2];
+                dst[dstOffset + 1] = src[srcOffset + 1];
+                dst[dstOffset + 2] = src[srcOffset + 0];
+                dst[dstOffset + 3] = src[srcOffset + 3];
             }
         }
     }
+#endif
 
-    void UploadOpenGL(const UploadContext& ctx)
+    void UploadD3D11(InstanceState* state, const UploadContext& ctx)
     {
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
-        if (gGLTexture == 0 || ctx.data == nullptr)
+#if defined(_WIN32)
+        if (state == nullptr || gD3DContext == nullptr || state->d3dTex == nullptr || ctx.data == nullptr)
         {
             return;
         }
-        glBindTexture(GL_TEXTURE_2D, gGLTexture);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(gD3DContext->Map(state->d3dTex, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        {
+            return;
+        }
+
+        const uint8_t* src = ctx.data;
+        uint8_t* dst = reinterpret_cast<uint8_t*>(mapped.pData);
+        for (uint32_t y = 0; y < ctx.height; ++y)
+        {
+            std::memcpy(dst + y * mapped.RowPitch, src + y * ctx.stride, ctx.stride);
+        }
+
+        gD3DContext->Unmap(state->d3dTex, 0);
+#endif
+    }
+
+    void UploadMetal(InstanceState* state, const UploadContext& ctx)
+    {
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        if (state == nullptr || state->metalTex == nil || ctx.data == nullptr)
+        {
+            return;
+        }
+
+        MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
+        [state->metalTex replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
+#endif
+    }
+
+    void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
+    {
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+        if (state == nullptr || state->glTex == 0 || ctx.data == nullptr)
+        {
+            return;
+        }
+
+        glBindTexture(GL_TEXTURE_2D, state->glTex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 #    if defined(__ANDROID__)
-#        if defined(GL_BGRA)
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA, GL_UNSIGNED_BYTE, ctx.data);
-#        else
-        static std::vector<uint8_t> converted;
-        ConvertBGRAtoRGBA(converted, ctx);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_RGBA, GL_UNSIGNED_BYTE, converted.data());
-#        endif
+        ConvertBGRAtoRGBA(state->rgbaScratch, ctx);
+        glTexSubImage2D(
+            GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_RGBA, GL_UNSIGNED_BYTE, state->rgbaScratch.data());
 #    else
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA, GL_UNSIGNED_BYTE, ctx.data);
 #    endif
 #endif
     }
 
-    void PerformUpload()
+    void PerformUploadFor(lottie_animation_wrapper* animation)
     {
-        uint64_t requested = gRequestedVersion.load(std::memory_order_acquire);
-        if (requested == 0 || requested == gUploadedVersion)
+        if (animation == nullptr)
         {
+            return;
+        }
+
+        InstanceState* state = GetState(animation, /*create=*/false);
+        if (state == nullptr)
+        {
+            return;
+        }
+
+        const uint64_t requested = state->requestedVersion.load(std::memory_order_acquire);
+        if (requested == 0 || requested == state->uploadedVersion)
+        {
+            state->uploadQueued.store(false, std::memory_order_release);
             return;
         }
 
         UploadContext ctx;
         {
-            std::lock_guard<std::mutex> lock(gUploadMutex);
-            ctx = gUploadContext;
+            std::lock_guard<std::mutex> lock(state->uploadMutex);
+            ctx = state->uploadCtx;
         }
 
         if (ctx.data == nullptr)
         {
+            state->uploadQueued.store(false, std::memory_order_release);
             return;
         }
 
-        if (!EnsureTexture(static_cast<int>(ctx.width), static_cast<int>(ctx.height)))
+        if (!EnsureTexture(state, static_cast<int>(ctx.width), static_cast<int>(ctx.height)))
         {
+            state->uploadQueued.store(false, std::memory_order_release);
             return;
         }
 
         switch (gRenderer)
         {
             case Renderer::D3D11:
-                UploadD3D11(ctx);
+                UploadD3D11(state, ctx);
                 break;
             case Renderer::Metal:
-                UploadMetal(ctx);
+                UploadMetal(state, ctx);
                 break;
             case Renderer::OpenGL:
-                UploadOpenGL(ctx);
+                UploadOpenGL(state, ctx);
                 break;
             case Renderer::Unknown:
             default:
-                return;
+                break;
         }
 
-        gUploadedVersion = requested;
+        state->uploadedVersion = requested;
+        state->uploadQueued.store(false, std::memory_order_release);
     }
 
-    void PublishUpload(const lottie_render_data* render_data)
+    void PublishUpload(lottie_animation_wrapper* animation, const lottie_render_data* render_data)
     {
-        if (render_data == nullptr)
+        if (animation == nullptr || render_data == nullptr)
         {
             return;
         }
+
+        InstanceState* state = GetState(animation);
+        if (state == nullptr)
+        {
+            return;
+        }
+
         UploadContext ctx;
         ctx.data = reinterpret_cast<const uint8_t*>(render_data->buffer);
         ctx.width = render_data->width;
         ctx.height = render_data->height;
         ctx.stride = render_data->bytesPerLine;
+
         {
-            std::lock_guard<std::mutex> lock(gUploadMutex);
-            gUploadContext = ctx;
+            std::lock_guard<std::mutex> lock(state->uploadMutex);
+            state->uploadCtx = ctx;
         }
-        gUploadVersion.fetch_add(1, std::memory_order_release);
+
+        state->uploadVersion.fetch_add(1, std::memory_order_release);
     }
 #endif // !__EMSCRIPTEN__
 
@@ -443,6 +545,33 @@ extern "C"
 
     EXPORT_API int32_t lottie_dispose_wrapper(lottie_animation_wrapper** animation_wrapper)
     {
+#if !defined(__EMSCRIPTEN__)
+        if (animation_wrapper != nullptr && *animation_wrapper != nullptr)
+        {
+            {
+                std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
+                auto it = gInstances.find(*animation_wrapper);
+                if (it != gInstances.end())
+                {
+                    ResetTextureState(it->second.get());
+                    gInstances.erase(it);
+                }
+            }
+
+            std::lock_guard<std::mutex> queueLock(gPendingUploadsMutex);
+            std::queue<lottie_animation_wrapper*> filtered;
+            while (!gPendingUploads.empty())
+            {
+                lottie_animation_wrapper* candidate = gPendingUploads.front();
+                gPendingUploads.pop();
+                if (candidate != *animation_wrapper)
+                {
+                    filtered.push(candidate);
+                }
+            }
+            std::swap(gPendingUploads, filtered);
+        }
+#endif
         delete (*animation_wrapper);
         *animation_wrapper = nullptr;
         return 0;
@@ -461,7 +590,7 @@ extern "C"
             render_data->bytesPerLine);
         animation_wrapper->animation->renderSync(frame_number, surface, keep_aspect_ratio);
 #if !defined(__EMSCRIPTEN__)
-        PublishUpload(render_data);
+        PublishUpload(animation_wrapper, render_data);
 #endif
         return 0;
     }
@@ -508,11 +637,11 @@ extern "C"
     }
 
     EXPORT_API int32_t lottie_render_get_future_result(
-        lottie_animation_wrapper* /*animation_wrapper*/,
+        lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data)
     {
         render_data->render_future.get();
-        PublishUpload(render_data);
+        PublishUpload(animation_wrapper, render_data);
         return 0;
     }
 #endif
@@ -562,46 +691,81 @@ extern "C"
 #if !defined(__EMSCRIPTEN__)
     EXPORT_API void* lp_create_texture(int width, int height)
     {
-        gRequestedWidth = width;
-        gRequestedHeight = height;
-        if (!EnsureTexture(width, height))
+        InstanceState* state = GetState(gBoundAnimation);
+        if (!EnsureTexture(state, width, height))
         {
             return nullptr;
         }
-        return gNativeTexture;
+        return state != nullptr ? state->nativeTex : nullptr;
     }
 
     EXPORT_API void lp_destroy_texture(void* /*tex*/)
     {
-        ResetTextureState();
-        gRequestedWidth = 0;
-        gRequestedHeight = 0;
+        InstanceState* state = GetState(gBoundAnimation, /*create=*/false);
+        ResetTextureState(state);
     }
 
     EXPORT_API void* lp_get_native_texture_ptr(void)
     {
-        return gNativeTexture;
+        InstanceState* state = GetState(gBoundAnimation, /*create=*/false);
+        return state != nullptr ? state->nativeTex : nullptr;
     }
 
     EXPORT_API int lp_bind_lottie_instance(lottie_animation_wrapper* animation_wrapper)
     {
         gBoundAnimation = animation_wrapper;
-        return gBoundAnimation != nullptr ? 1 : 0;
+        if (gBoundAnimation == nullptr)
+        {
+            return 0;
+        }
+        return GetState(gBoundAnimation) != nullptr ? 1 : 0;
     }
 
     EXPORT_API void lp_update_texture(void)
     {
-        uint64_t latest = gUploadVersion.load(std::memory_order_acquire);
-        if (latest == 0)
+        lottie_animation_wrapper* animation = gBoundAnimation;
+        if (animation == nullptr)
         {
             return;
         }
-        gRequestedVersion.store(latest, std::memory_order_release);
+
+        InstanceState* state = GetState(animation, /*create=*/false);
+        if (state == nullptr)
+        {
+            return;
+        }
+
+        const uint64_t latest = state->uploadVersion.load(std::memory_order_acquire);
+        if (latest == 0 || latest == state->uploadedVersion)
+        {
+            return;
+        }
+
+        state->requestedVersion.store(latest, std::memory_order_release);
+        const bool enqueue = !state->uploadQueued.exchange(true, std::memory_order_acq_rel);
+        if (enqueue)
+        {
+            std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
+            gPendingUploads.push(animation);
+        }
     }
 
     static void UNITY_INTERFACE_API OnRenderEvent(int /*eventID*/)
     {
-        PerformUpload();
+        lottie_animation_wrapper* animation = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
+            if (!gPendingUploads.empty())
+            {
+                animation = gPendingUploads.front();
+                gPendingUploads.pop();
+            }
+        }
+
+        if (animation != nullptr)
+        {
+            PerformUploadFor(animation);
+        }
     }
 
     EXPORT_API UnityRenderingEvent lp_get_render_event_func(void)
@@ -615,7 +779,32 @@ extern "C"
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
     {
-        ResetTextureState();
+        gBoundAnimation = nullptr;
+        gDevice = nullptr;
+        gRenderer = Renderer::Unknown;
+#if defined(_WIN32)
+        if (gD3DContext)
+        {
+            gD3DContext->Release();
+            gD3DContext = nullptr;
+        }
+        gD3DDevice = nullptr;
+#endif
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        gMetalDevice = nil;
+#endif
+        std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
+        for (auto& entry : gInstances)
+        {
+            ResetTextureState(entry.second.get());
+        }
+        gInstances.clear();
+
+        {
+            std::lock_guard<std::mutex> queueLock(gPendingUploadsMutex);
+            std::queue<lottie_animation_wrapper*> empty;
+            std::swap(gPendingUploads, empty);
+        }
     }
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
@@ -644,14 +833,9 @@ extern "C"
                 default:
                     break;
             }
-            if (gRequestedWidth > 0 && gRequestedHeight > 0)
-            {
-                EnsureTexture(gRequestedWidth, gRequestedHeight);
-            }
         }
         else if (eventType == kUnityGfxDeviceEventShutdown)
         {
-            ResetTextureState();
             gDevice = nullptr;
             switch (gRenderer)
             {
@@ -674,6 +858,19 @@ extern "C"
                     break;
             }
             gRenderer = Renderer::Unknown;
+            gBoundAnimation = nullptr;
+            {
+                std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
+                for (auto& entry : gInstances)
+                {
+                    ResetTextureState(entry.second.get());
+                }
+            }
+            {
+                std::lock_guard<std::mutex> queueLock(gPendingUploadsMutex);
+                std::queue<lottie_animation_wrapper*> empty;
+                std::swap(gPendingUploads, empty);
+            }
         }
     }
 

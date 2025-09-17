@@ -77,9 +77,11 @@ namespace LottiePlugin
             }
             if (_nativeTexturePtr != IntPtr.Zero)
             {
+                NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
                 NativeBridge.LpDestroyTexture(_nativeTexturePtr);
                 _nativeTexturePtr = IntPtr.Zero;
             }
+            NativeBridge.LpBindLottieInstance(IntPtr.Zero);
 #endif
             NativeBridge.Dispose(_animationWrapper);
             NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
@@ -93,6 +95,7 @@ namespace LottiePlugin
         public void UpdateAsync(float animationSpeed = 1f)
         {
             UpdateInternal(animationSpeed, DrawOneFrameAsyncPrepareCached);
+            DrawOneFrameAsyncGetResult();
         }
         public void TogglePlay()
         {
@@ -165,6 +168,7 @@ namespace LottiePlugin
             int bufferSize = (int)(width * height * sizeof(uint));
             _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+            NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
             _nativeTexturePtr = NativeBridge.LpCreateTexture((int)width, (int)height);
             Texture = Texture2D.CreateExternalTexture(
                 (int)width,
@@ -173,7 +177,6 @@ namespace LottiePlugin
                 false,
                 false,
                 _nativeTexturePtr);
-            NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
             if (sRenderEventFunc == IntPtr.Zero)
             {
                 sRenderEventFunc = NativeBridge.LpGetRenderEventFunc();
@@ -204,13 +207,19 @@ namespace LottiePlugin
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
         private void RequestTextureUpload()
         {
-            if (_nativeTexturePtr == IntPtr.Zero)
+            NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
+
+            IntPtr currentPtr = NativeBridge.LpGetNativeTexturePtr();
+            if (currentPtr != _nativeTexturePtr)
             {
-                IntPtr currentPtr = NativeBridge.LpGetNativeTexturePtr();
                 if (currentPtr != IntPtr.Zero)
                 {
                     _nativeTexturePtr = currentPtr;
                     Texture.UpdateExternalTexture(currentPtr);
+                }
+                else
+                {
+                    _nativeTexturePtr = IntPtr.Zero;
                 }
             }
             NativeBridge.LpUpdateTexture();
