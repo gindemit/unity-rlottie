@@ -1,5 +1,5 @@
 # CMakeList.txt : CMake project for LottiePlugin, include source and define
-cmake_minimum_required (VERSION 3.6)
+cmake_minimum_required (VERSION 3.16)
 
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
 project(LottiePlugin)
@@ -129,6 +129,7 @@ elseif(ANDROID)
     endif()
     target_link_libraries(LottiePlugin ${GLES_LIBRARY} ${ANDROID_LOG} ${ANDROID_LIB})
 elseif(RLOTTIE_LINUX)
+    set(OpenGL_GL_PREFERENCE GLVND)
     find_package(OpenGL REQUIRED)
     target_link_libraries(LottiePlugin OpenGL::GL)
 endif()

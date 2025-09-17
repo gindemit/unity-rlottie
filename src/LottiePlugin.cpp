@@ -27,7 +27,8 @@
 #    ifndef GL_BGRA
 #        define GL_BGRA 0x80E1
 #    endif
-#elif !defined(__EMSCRIPTEN__)
+// On Apple platforms we rely on Metal; avoid desktop OpenGL headers there.
+#elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
 #    include <GL/gl.h>
 #    ifndef GL_BGRA
 #        define GL_BGRA 0x80E1
@@ -80,7 +81,7 @@ namespace
     id<MTLTexture> gMetalTexture = nil;
 #endif
 
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
     GLuint gGLTexture = 0;
 #endif
 
@@ -137,7 +138,7 @@ namespace
         }
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         gMetalTexture = nil;
-#elif !defined(__EMSCRIPTEN__)
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
         if (gGLTexture != 0)
         {
             glDeleteTextures(1, &gGLTexture);
@@ -216,7 +217,7 @@ namespace
                 return false;
 #endif
             case Renderer::OpenGL:
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
             {
                 if (gGLTexture == 0)
                 {
@@ -300,7 +301,7 @@ namespace
 
     void UploadOpenGL(const UploadContext& ctx)
     {
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
         if (gGLTexture == 0 || ctx.data == nullptr)
         {
             return;
