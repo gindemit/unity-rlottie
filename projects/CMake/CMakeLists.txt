@@ -35,8 +35,12 @@ target_compile_definitions(rlottie PRIVATE LOTTIE_LOGGING_SUPPORT)
 include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/vector/ ${RLOTTIE_ROOT}/vs2019/)
 message("Lottie root directory: ${RLOTTIE_ROOT}")
 
-set (RLOTTIE_PLUGIN_LIBRARY_SOURCES 
+set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
     ../../src/LottiePlugin.cpp)
+
+if (RLOTTIE_OSX OR RLOTTIE_IOS)
+    set_source_files_properties(${RLOTTIE_PLUGIN_LIBRARY_SOURCES} PROPERTIES LANGUAGE OBJCXX)
+endif()
 
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 
@@ -91,7 +95,7 @@ else()
     target_compile_options(LottiePlugin
                         PUBLIC
                         PRIVATE
-                            -std=c++14
+                            -std=c++17
                             -fno-exceptions
                             -fno-unwind-tables
                             -fno-asynchronous-unwind-tables
@@ -106,6 +110,28 @@ endif()
 
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
+
+if (WIN32)
+    # D3D11 is provided by the Windows SDK
+elseif(RLOTTIE_OSX OR RLOTTIE_IOS)
+    find_library(METAL_FRAMEWORK Metal)
+    find_library(FOUNDATION_FRAMEWORK Foundation)
+    target_link_libraries(LottiePlugin ${METAL_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
+elseif(ANDROID)
+    find_library(ANDROID_LOG log)
+    find_library(ANDROID_LIB android)
+    find_library(GLESV3_LIB GLESv3)
+    if (NOT GLESV3_LIB)
+        find_library(GLESV2_LIB GLESv2)
+        set(GLES_LIBRARY ${GLESV2_LIB})
+    else()
+        set(GLES_LIBRARY ${GLESV3_LIB})
+    endif()
+    target_link_libraries(LottiePlugin ${GLES_LIBRARY} ${ANDROID_LOG} ${ANDROID_LIB})
+elseif(RLOTTIE_LINUX)
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(LottiePlugin OpenGL::GL)
+endif()
 
 if(ANDROID AND RLOTTIE_ANDROID_PAGE_SIZE_16K)
   target_link_options(LottiePlugin PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")

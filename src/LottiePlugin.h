@@ -6,6 +6,22 @@
 #include <stdlib.h>
 #include <rlottie.h>
 
+#ifndef UNITY_INTERFACE_API
+#   if defined(_MSC_VER)
+#       define UNITY_INTERFACE_API __stdcall
+#   else
+#       define UNITY_INTERFACE_API
+#   endif
+#endif
+
+#ifndef UNITY_INTERFACE_EXPORT
+#   if defined(_MSC_VER)
+#       define UNITY_INTERFACE_EXPORT __declspec(dllexport)
+#   else
+#       define UNITY_INTERFACE_EXPORT __attribute__((visibility("default")))
+#   endif
+#endif
+
 typedef struct lottie_animation_wrapper {
     lottie_animation_wrapper *self;
     std::unique_ptr<rlottie::Animation> animation;
@@ -57,6 +73,16 @@ extern "C" {
         const char* log_dir_path,
         const char* log_file_name,
         int32_t log_file_roll_size_mb);
+
+    // GPU texture upload helpers
+    typedef void (UNITY_INTERFACE_API *UnityRenderingEvent)(int eventID);
+
+    EXPORT_API void* lp_create_texture(int width, int height);
+    EXPORT_API void  lp_destroy_texture(void* tex);
+    EXPORT_API void* lp_get_native_texture_ptr(void);
+    EXPORT_API int   lp_bind_lottie_instance(lottie_animation_wrapper* animation_wrapper);
+    EXPORT_API void  lp_update_texture(void);
+    EXPORT_API UnityRenderingEvent lp_get_render_event_func(void);
 }
 
 #endif // !_VORBIS_PLUGIN_H_

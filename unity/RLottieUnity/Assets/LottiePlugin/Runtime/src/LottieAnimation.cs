@@ -36,6 +36,11 @@ namespace LottiePlugin
         private Action<int> DrawOneFrameCached;
         private Action<int> DrawOneFrameAsyncPrepareCached;
 
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        private IntPtr _nativeTexturePtr;
+        private static IntPtr sRenderEventFunc;
+#endif
+
         private LottieAnimation(string jsonData, string resourcesPath, uint width, uint height)
         {
             ThrowIf.String.IsNullOrEmpty(jsonData, nameof(jsonData));
@@ -65,6 +70,17 @@ namespace LottiePlugin
             Started = null;
             Paused = null;
             Stopped = null;
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+            if (_pixelData.IsCreated)
+            {
+                _pixelData.Dispose();
+            }
+            if (_nativeTexturePtr != IntPtr.Zero)
+            {
+                NativeBridge.LpDestroyTexture(_nativeTexturePtr);
+                _nativeTexturePtr = IntPtr.Zero;
+            }
+#endif
             NativeBridge.Dispose(_animationWrapper);
             NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
             UnityEngine.Object.DestroyImmediate(Texture);
@@ -103,7 +119,11 @@ namespace LottiePlugin
         {
             NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true);
             CurrentFrame = frameNumber;
+#if UNITY_WEBGL && !UNITY_EDITOR
             Texture.Apply();
+#else
+            RequestTextureUpload();
+#endif
         }
         public void DrawOneFrameAsyncPrepare(int frameNumber)
         {
@@ -114,26 +134,51 @@ namespace LottiePlugin
             if (_asyncDrawWasCalled)
             {
                 NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
+#if UNITY_WEBGL && !UNITY_EDITOR
                 Texture.Apply();
+#else
+                RequestTextureUpload();
+#endif
                 _asyncDrawWasCalled = false;
             }
         }
 
         private unsafe void CreateRenderDataTexture2DMarshalToNative(uint width, uint height)
         {
-            _lottieRenderData = new LottieRenderData();
-            _lottieRenderData.width = width;
-            _lottieRenderData.height = height;
-            _lottieRenderData.bytesPerLine = width * sizeof(uint);
+            NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
+            _lottieRenderData = new LottieRenderData
+            {
+                width = width,
+                height = height,
+                bytesPerLine = width * sizeof(uint)
+            };
+#if UNITY_WEBGL && !UNITY_EDITOR
             Texture = new Texture2D(
-                (int)_lottieRenderData.width,
-                (int)_lottieRenderData.height,
+                (int)width,
+                (int)height,
                 TextureFormat.BGRA32,
                 0,
                 false);
             _pixelData = Texture.GetRawTextureData<byte>();
             _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-            NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
+#else
+            int bufferSize = (int)(width * height * sizeof(uint));
+            _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+            _nativeTexturePtr = NativeBridge.LpCreateTexture((int)width, (int)height);
+            Texture = Texture2D.CreateExternalTexture(
+                (int)width,
+                (int)height,
+                TextureFormat.BGRA32,
+                false,
+                false,
+                _nativeTexturePtr);
+            NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
+            if (sRenderEventFunc == IntPtr.Zero)
+            {
+                sRenderEventFunc = NativeBridge.LpGetRenderEventFunc();
+            }
+#endif
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
         }
         private void UpdateInternal(float animationSpeed, Action<int> drawOneFrameMethod)
@@ -155,6 +200,26 @@ namespace LottiePlugin
                 _timeSinceLastRenderCall = 0;
             }
         }
+
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        private void RequestTextureUpload()
+        {
+            if (_nativeTexturePtr == IntPtr.Zero)
+            {
+                IntPtr currentPtr = NativeBridge.LpGetNativeTexturePtr();
+                if (currentPtr != IntPtr.Zero)
+                {
+                    _nativeTexturePtr = currentPtr;
+                    Texture.UpdateExternalTexture(currentPtr);
+                }
+            }
+            NativeBridge.LpUpdateTexture();
+            if (sRenderEventFunc != IntPtr.Zero)
+            {
+                GL.IssuePluginEvent(sRenderEventFunc, 0);
+            }
+        }
+#endif
 
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)
         {

@@ -31,6 +31,26 @@ namespace LottiePlugin
         private const string PLUGIN_NAME = "LottiePlugin";
 #endif
 
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lp_create_texture")]
+        internal static extern IntPtr LpCreateTexture(int width, int height);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lp_destroy_texture")]
+        internal static extern void LpDestroyTexture(IntPtr texturePtr);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lp_get_native_texture_ptr")]
+        internal static extern IntPtr LpGetNativeTexturePtr();
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lp_bind_lottie_instance")]
+        internal static extern int LpBindLottieInstance(IntPtr animationWrapper);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lp_update_texture")]
+        internal static extern void LpUpdateTexture();
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lp_get_render_event_func")]
+        internal static extern IntPtr LpGetRenderEventFunc();
+#endif
+
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_load_from_data")]

@@ -42,6 +42,9 @@ namespace LottiePlugin
         //}
         private LottieAnimationsAtlas(string[] jsonFilePaths, uint width, uint height)
         {
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+            throw new NotSupportedException("LottieAnimationsAtlas is only supported on WebGL builds in this version of the plugin.");
+#endif
             int animationsCount = jsonFilePaths.Length;
             CurrentFrame = new int[animationsCount];
             _animationWrappers = new LottieAnimationWrapper[animationsCount];
@@ -115,7 +118,9 @@ namespace LottiePlugin
         {
             NativeBridge.LottieRenderImmediately(_animationWrapperIntPtrs[index], _lottieRenderDataIntPtrs[index], frameNumber, true);
             CurrentFrame[index] = frameNumber;
+#if UNITY_WEBGL && !UNITY_EDITOR
             Texture.Apply();
+#endif
         }
         public void DrawOneFrameAsyncPrepare(int frameNumber, int index)
         {
@@ -135,7 +140,9 @@ namespace LottiePlugin
             }
             if (needToApplyTexture)
             {
+#if UNITY_WEBGL && !UNITY_EDITOR
                 Texture.Apply();
+#endif
             }
         }
 
