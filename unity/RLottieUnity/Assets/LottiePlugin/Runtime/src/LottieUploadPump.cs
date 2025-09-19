@@ -35,7 +35,7 @@ namespace LottiePlugin
             sInstance = this;
             if (sRenderEventFunc == IntPtr.Zero)
             {
-                sRenderEventFunc = NativeBridge.LpGetRenderEventFunc();
+                sRenderEventFunc = NativeBridge.LottieGetRenderEventFunc();
             }
         }
 
