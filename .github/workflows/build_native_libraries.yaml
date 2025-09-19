@@ -24,8 +24,8 @@ jobs:
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./build_x86    -A Win32 -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
-          cmake -S . -B ./build_x86_64 -A x64   -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
+          cmake -S . -B ./build_x86    -A Win32 -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="${{ github.workspace }}/dependency/unity-pluginapi"
+          cmake -S . -B ./build_x86_64 -A x64   -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="${{ github.workspace }}/dependency/unity-pluginapi"
           cmake --build ./build_x86 --config Release
           cmake --build ./build_x86_64 --config Release
 
@@ -98,15 +98,15 @@ jobs:
           cd projects/CMake
 
           # 1) Build universal (optional, kept because it’s already there)
-          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildOSX --config Release 
 
           # 2) Build arm64 only
-          cmake -S . -B ./buildOSX_arm64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake -S . -B ./buildOSX_arm64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=arm64 -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildOSX_arm64 --config Release
 
           # 3) Build x86_64 only
-          cmake -S . -B ./buildOSX_x86_64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=x86_64
+          cmake -S . -B ./buildOSX_x86_64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=x86_64 -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildOSX_x86_64 --config Release
 
           # 4) Find actual outputs produced by Xcode/CMake
@@ -164,7 +164,7 @@ jobs:
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1
+          cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1 -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildIOS --config Release --target LottiePlugin
           brew install tree
           tree ../../out
@@ -201,7 +201,9 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake \
             -DPLATFORM=SIMULATOR64 \
             -DARCHS=x86_64 \
-            -DRLOTTIE_IOS=1
+            -DRLOTTIE_IOS=1 \
+            -DUSE_UNITY_PLUGINAPI=ON \
+            -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildIOSSim_x64 --config Release --target LottiePlugin
           brew install tree
           tree ../../out || true
@@ -223,22 +225,24 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install CMake
-        run: sudo apt-get install cmake
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential mesa-common-dev libgl1-mesa-dev tree
 
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./buildLinux -G "Unix Makefiles" -DRLOTTIE_LINUX=1
+          cmake -S . -B ./buildLinux -G "Unix Makefiles" -DRLOTTIE_LINUX=1 -DCMAKE_BUILD_TYPE=Release -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="${GITHUB_WORKSPACE}/dependency/unity-pluginapi"
           cmake --build ./buildLinux --config Release
-          tree ../../out
+          tree ../../out || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
           path: |
-            out/Plugins/Linux/x86_64/libLottiePlugin.so
+            out/Release/Plugins/Linux/x86_64/libLottiePlugin.so
 
   build_webgl:
     runs-on: ubuntu-latest
@@ -414,7 +418,7 @@ jobs:
           mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64
           cp -f out/Plugins/iOS/x86_64/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64/libLottiePlugin.a
           cp -f out/Plugins/iOS/x86_64/librlottie.a     unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64/librlottie.a
-          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+          cp -f out/Release/Plugins/Linux/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
           mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL
           cp -f out/Plugins/WebGL/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/libLottiePlugin.a
           cp -f out/Plugins/WebGL/librlottie.a     unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/librlottie.a

@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-#if !defined(__EMSCRIPTEN__)
+#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
 #    include "IUnityInterface.h"
 #    include "IUnityProfiler.h"
 
@@ -74,7 +74,7 @@ static UnityProfilerMarkerDesc* sMkUpload = nullptr;
 
 namespace
 {
-#if !defined(__EMSCRIPTEN__)
+#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
     struct UploadContext
     {
         const uint8_t* data = nullptr;
@@ -856,7 +856,7 @@ extern "C"
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(void* unityInterfaces)
     {
-#if !defined(__EMSCRIPTEN__)
+#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
         auto* ifaces = static_cast<IUnityInterfaces*>(unityInterfaces);
         sProfiler = ifaces != nullptr ? ifaces->Get<IUnityProfiler>() : nullptr;
         if (sProfiler != nullptr && sProfiler->IsAvailable())
@@ -899,7 +899,7 @@ extern "C"
             std::swap(gPendingUploads, empty);
         }
 
-#if !defined(__EMSCRIPTEN__)
+#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
         sProfiler = nullptr;
         sMkGetResult = nullptr;
         sMkPublish = nullptr;
