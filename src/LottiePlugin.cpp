@@ -1,6 +1,7 @@
 #include "LottiePlugin.h"
 #include "vdebug.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -65,6 +66,7 @@ static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 
 #if defined(__ANDROID__)
 #    include <GLES3/gl3.h>
+#    include <GLES2/gl2ext.h>
 // On Apple platforms we rely on Metal; avoid desktop OpenGL headers there.
 #elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
 #    include <GL/gl.h>
@@ -75,6 +77,19 @@ static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 
 namespace
 {
+#if defined(__ANDROID__)
+    static bool gHasBGRAExt = false;
+
+    static void DetectGLExtensions()
+    {
+        gHasBGRAExt = false;
+        const char* ext = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+        if (ext != nullptr && std::strstr(ext, "GL_EXT_texture_format_BGRA8888") != nullptr)
+        {
+            gHasBGRAExt = true;
+        }
+    }
+#endif
 #if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
     struct UploadContext
     {
@@ -134,7 +149,7 @@ namespace
 
     std::mutex gPendingUploadsMutex;
     std::queue<lottie_animation_wrapper*> gPendingUploads;
-    constexpr size_t kMaxPendingUploads = 32;
+    constexpr size_t kMaxPendingUploads = 1024;
 
     enum UnityGfxRenderer
     {
@@ -336,9 +351,11 @@ namespace
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 #    if defined(__ANDROID__)
-                const GLint internalFormat = GL_RGBA;
+                const bool useBGRA = gHasBGRAExt;
+                const GLint internalFormat = useBGRA ? GL_RGBA8 : GL_RGBA;
+                const GLenum uploadFormat = useBGRA ? GL_BGRA_EXT : GL_RGBA;
                 glTexImage2D(
-                    GL_TEXTURE_2D, 0, internalFormat, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                    GL_TEXTURE_2D, 0, internalFormat, width, height, 0, uploadFormat, GL_UNSIGNED_BYTE, nullptr);
 #    else
                 const GLint internalFormat = GL_RGBA8;
                 glTexImage2D(
@@ -428,9 +445,17 @@ namespace
         glBindTexture(GL_TEXTURE_2D, state->glTex);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 #    if defined(__ANDROID__)
-        ConvertBGRAtoRGBA(state->rgbaScratch, ctx);
-        glTexSubImage2D(
-            GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_RGBA, GL_UNSIGNED_BYTE, state->rgbaScratch.data());
+        if (gHasBGRAExt)
+        {
+            glTexSubImage2D(
+                GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, ctx.data);
+        }
+        else
+        {
+            ConvertBGRAtoRGBA(state->rgbaScratch, ctx);
+            glTexSubImage2D(
+                GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_RGBA, GL_UNSIGNED_BYTE, state->rgbaScratch.data());
+        }
 #    else
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA, GL_UNSIGNED_BYTE, ctx.data);
 #    endif
@@ -819,14 +844,25 @@ extern "C"
             return;
         }
 
-        std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
-        if (gPendingUploads.size() < kMaxPendingUploads)
+        lottie_animation_wrapper* dropped = nullptr;
         {
+            std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
+            if (gPendingUploads.size() >= kMaxPendingUploads)
+            {
+                dropped = gPendingUploads.front();
+                gPendingUploads.pop();
+            }
+
             gPendingUploads.push(animation);
         }
-        else
+
+        if (dropped != nullptr && dropped != animation)
         {
-            state->uploadQueued.store(false, std::memory_order_release);
+            InstanceState* droppedState = GetState(dropped, /*create=*/false);
+            if (droppedState != nullptr)
+            {
+                droppedState->uploadQueued.store(false, std::memory_order_release);
+            }
         }
     }
 
@@ -931,6 +967,9 @@ extern "C"
                     break;
                 case Renderer::OpenGL:
                 default:
+#if defined(__ANDROID__)
+                    DetectGLExtensions();
+#endif
                     break;
             }
         }
@@ -959,6 +998,9 @@ extern "C"
             }
             gRenderer = Renderer::Unknown;
             gBoundAnimation = nullptr;
+#if defined(__ANDROID__)
+            gHasBGRAExt = false;
+#endif
             {
                 std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
                 for (auto& entry : gInstances)

@@ -41,9 +41,15 @@ namespace LottiePlugin
 
         private void LateUpdate()
         {
-            if (sRenderEventFunc != IntPtr.Zero)
+            if (sRenderEventFunc == IntPtr.Zero)
             {
-                GL.IssuePluginEvent(sRenderEventFunc, 0);
+                return;
+            }
+
+            int budget = LottieScheduler.MaxUploadsPerFrame;
+            for (int i = 0; i < budget; i++)
+            {
+                GL.IssuePluginEvent(sRenderEventFunc, i + 1);
             }
         }
 

@@ -4,8 +4,8 @@ namespace LottiePlugin
 {
     internal static class LottieScheduler
     {
-        public static int MaxAsyncStartsPerFrame = 6;
-        public static int MaxUploadsPerFrame = 8;
+        public static int MaxAsyncStartsPerFrame = Mathf.Max(SystemInfo.processorCount * 2, 16);
+        public static int MaxUploadsPerFrame = Mathf.Max(SystemInfo.processorCount * 4, 32);
 
         private static int sStarted;
 
