@@ -1,5 +1,6 @@
-#ifndef _VORBIS_PLUGIN_H_
-#define _VORBIS_PLUGIN_H_
+// Correct include guard
+#ifndef _LOTTIE_PLUGIN_H_
+#define _LOTTIE_PLUGIN_H_
 
 #include "ExportApi.h"
 #include <stdio.h>
@@ -7,24 +8,30 @@
 #include <future>
 #include <rlottie.h>
 
-// Provide Unity macro fallbacks only when the Unity PluginAPI is unavailable.
-#if !defined(HAVE_UNITY_PLUGINAPI)
-#   ifndef UNITY_INTERFACE_API
-#       if defined(_MSC_VER)
-#           define UNITY_INTERFACE_API __stdcall
-#       else
-#           define UNITY_INTERFACE_API
-#       endif
-#   endif
+// --- Unity PluginAPI integration -------------------------------------------
+// If we build with the official Unity PluginAPI headers, include them here so
+// UNITY_INTERFACE_API is defined BEFORE we typedef UnityRenderingEvent.
+#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
+#   include "IUnityInterface.h"
+#endif
 
-#   ifndef UNITY_INTERFACE_EXPORT
-#       if defined(_MSC_VER)
-#           define UNITY_INTERFACE_EXPORT __declspec(dllexport)
-#       else
-#           define UNITY_INTERFACE_EXPORT __attribute__((visibility("default")))
-#       endif
+// Provide portable fallbacks when PluginAPI headers are not available.
+#if !defined(UNITY_INTERFACE_API)
+#   if defined(_MSC_VER)
+#       define UNITY_INTERFACE_API __stdcall
+#   else
+#       define UNITY_INTERFACE_API
 #   endif
 #endif
+
+#if !defined(UNITY_INTERFACE_EXPORT)
+#   if defined(_MSC_VER)
+#       define UNITY_INTERFACE_EXPORT __declspec(dllexport)
+#   else
+#       define UNITY_INTERFACE_EXPORT __attribute__((visibility("default")))
+#   endif
+#endif
+// --------------------------------------------------------------------------
 
 typedef struct lottie_animation_wrapper {
     lottie_animation_wrapper *self;
@@ -82,7 +89,9 @@ extern "C" {
         const char* log_file_name,
         int32_t log_file_roll_size_mb);
 
-    // GPU texture upload helpers
+    // Match Unity's expected render-event callback signature. Now that
+    // UNITY_INTERFACE_API is guaranteed to be defined, this typedef parses cleanly
+    // on all compilers (MSVC/Clang/GCC/ObjC++).
     typedef void (UNITY_INTERFACE_API *UnityRenderingEvent)(int eventID);
 
     EXPORT_API void* lottie_create_texture(int width, int height);
@@ -93,4 +102,4 @@ extern "C" {
     EXPORT_API UnityRenderingEvent lottie_get_render_event_func(void);
 }
 
-#endif // !_VORBIS_PLUGIN_H_
+#endif // !_LOTTIE_PLUGIN_H_
