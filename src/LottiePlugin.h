@@ -4,6 +4,7 @@
 #include "ExportApi.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <future>
 #include <rlottie.h>
 
 #ifndef UNITY_INTERFACE_API
@@ -62,6 +63,10 @@ extern "C" {
         lottie_render_data* render_data,
         uint32_t frame_number,
         bool keep_aspect_ratio);
+    EXPORT_API int32_t lottie_render_try_get_future_result(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data,
+        int32_t* ready);
     EXPORT_API int32_t lottie_render_get_future_result(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data);

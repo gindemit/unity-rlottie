@@ -91,6 +91,13 @@ namespace LottiePlugin
             bool keepAspectRatio);
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_render_try_get_future_result")]
+        internal static extern int LottieRenderTryGetFutureResult(
+            IntPtr animationWrapper,
+            IntPtr renderData,
+            out int ready);
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_render_get_future_result")]
         internal static extern int LottieRenderGetFutureResult(
             IntPtr animationWrapper,

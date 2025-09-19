@@ -33,6 +33,9 @@ namespace LottiePlugin.UI
         [SerializeField] private bool _ignoreInputWhileAnimating = true;
         [SerializeField] private State[] _states;
         [SerializeField] private ButtonClickedEvent _onClick = new ButtonClickedEvent();
+        [SerializeField] private int _targetFps = 30;
+        [SerializeField] private int _resolutionDivider = 1;
+        [SerializeField] private bool _pauseIfCulled = true;
 
         private int _currentStateIndex;
         private LottieAnimation _lottieAnimation;
@@ -92,7 +95,8 @@ namespace LottiePlugin.UI
                 _animationJson.text,
                 string.Empty,
                 _textureWidth,
-                _textureHeight);
+                _textureHeight,
+                CreateOptions());
                 SetTextureToTheTargetRawImage();
             }
             return _lottieAnimation;
@@ -156,6 +160,25 @@ namespace LottiePlugin.UI
                 _lottieAnimation.Stop();
             }
             _updateAnimationCoroutine = null;
+        }
+
+        private LottieAnimationOptions CreateOptions()
+        {
+            return new LottieAnimationOptions
+            {
+                TargetFps = Mathf.Max(1, _targetFps),
+                ResolutionDivider = Mathf.Max(1, _resolutionDivider),
+                PauseIfCulled = _pauseIfCulled,
+                VisibilityEvaluator = () =>
+                {
+                    if (_rawImage == null)
+                    {
+                        return false;
+                    }
+
+                    return _rawImage.isActiveAndEnabled && !_rawImage.canvasRenderer.cull;
+                }
+            };
         }
     }
 }

@@ -2,6 +2,7 @@
 #include "vdebug.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -12,6 +13,41 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#if !defined(__EMSCRIPTEN__)
+#    include "IUnityInterface.h"
+#    include "IUnityProfiler.h"
+
+static IUnityProfiler* sProfiler = nullptr;
+static UnityProfilerMarkerDesc* sMkGetResult = nullptr;
+static UnityProfilerMarkerDesc* sMkPublish = nullptr;
+static UnityProfilerMarkerDesc* sMkUpload = nullptr;
+
+static inline void ProfBegin(UnityProfilerMarkerDesc* d)
+{
+    if (sProfiler != nullptr && sProfiler->IsAvailable() && d != nullptr)
+    {
+        sProfiler->BeginSample(d);
+    }
+}
+
+static inline void ProfEnd(UnityProfilerMarkerDesc* d)
+{
+    if (sProfiler != nullptr && sProfiler->IsAvailable() && d != nullptr)
+    {
+        sProfiler->EndSample(d);
+    }
+}
+#else
+struct UnityProfilerMarkerDesc;
+
+static inline void ProfBegin(UnityProfilerMarkerDesc*) {}
+static inline void ProfEnd(UnityProfilerMarkerDesc*) {}
+
+static UnityProfilerMarkerDesc* sMkGetResult = nullptr;
+static UnityProfilerMarkerDesc* sMkPublish = nullptr;
+static UnityProfilerMarkerDesc* sMkUpload = nullptr;
+#endif
 
 #if defined(_WIN32)
 #    include <d3d11.h>
@@ -97,6 +133,7 @@ namespace
 
     std::mutex gPendingUploadsMutex;
     std::queue<lottie_animation_wrapper*> gPendingUploads;
+    constexpr size_t kMaxPendingUploads = 32;
 
     enum UnityGfxRenderer
     {
@@ -636,12 +673,45 @@ extern "C"
         return 0;
     }
 
+    EXPORT_API int32_t lottie_render_try_get_future_result(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data,
+        int32_t* ready)
+    {
+        if (render_data == nullptr || ready == nullptr)
+        {
+            return -1;
+        }
+
+        *ready = 0;
+
+        if (!render_data->render_future.valid() ||
+            render_data->render_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+        {
+            return 0;
+        }
+
+        render_data->render_future.get();
+
+        ProfBegin(sMkPublish);
+        PublishUpload(animation_wrapper, render_data);
+        ProfEnd(sMkPublish);
+
+        *ready = 1;
+        return 0;
+    }
+
     EXPORT_API int32_t lottie_render_get_future_result(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data)
     {
+        ProfBegin(sMkGetResult);
         render_data->render_future.get();
+        ProfEnd(sMkGetResult);
+
+        ProfBegin(sMkPublish);
         PublishUpload(animation_wrapper, render_data);
+        ProfEnd(sMkPublish);
         return 0;
     }
 #endif
@@ -743,10 +813,19 @@ extern "C"
 
         state->requestedVersion.store(latest, std::memory_order_release);
         const bool enqueue = !state->uploadQueued.exchange(true, std::memory_order_acq_rel);
-        if (enqueue)
+        if (!enqueue)
         {
-            std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
+        if (gPendingUploads.size() < kMaxPendingUploads)
+        {
             gPendingUploads.push(animation);
+        }
+        else
+        {
+            state->uploadQueued.store(false, std::memory_order_release);
         }
     }
 
@@ -764,7 +843,9 @@ extern "C"
 
         if (animation != nullptr)
         {
+            ProfBegin(sMkUpload);
             PerformUploadFor(animation);
+            ProfEnd(sMkUpload);
         }
     }
 
@@ -773,8 +854,20 @@ extern "C"
         return OnRenderEvent;
     }
 
-    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(void* /*unityInterfaces*/)
+    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(void* unityInterfaces)
     {
+#if !defined(__EMSCRIPTEN__)
+        auto* ifaces = static_cast<IUnityInterfaces*>(unityInterfaces);
+        sProfiler = ifaces != nullptr ? ifaces->Get<IUnityProfiler>() : nullptr;
+        if (sProfiler != nullptr && sProfiler->IsAvailable())
+        {
+            sProfiler->CreateMarker(&sMkGetResult, "Lottie/GetFutureResult", kUnityProfilerCategoryScripts, kUnityProfilerMarkerFlagDefault, 0);
+            sProfiler->CreateMarker(&sMkPublish, "Lottie/PublishUpload", kUnityProfilerCategoryRender, kUnityProfilerMarkerFlagDefault, 0);
+            sProfiler->CreateMarker(&sMkUpload, "Lottie/PerformUpload", kUnityProfilerCategoryRender, kUnityProfilerMarkerFlagDefault, 0);
+        }
+#else
+        (void)unityInterfaces;
+#endif
     }
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
@@ -805,6 +898,13 @@ extern "C"
             std::queue<lottie_animation_wrapper*> empty;
             std::swap(gPendingUploads, empty);
         }
+
+#if !defined(__EMSCRIPTEN__)
+        sProfiler = nullptr;
+        sMkGetResult = nullptr;
+        sMkPublish = nullptr;
+        sMkUpload = nullptr;
+#endif
     }
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
