@@ -5,6 +5,8 @@ cmake_minimum_required (VERSION 3.16)
 project(LottiePlugin)
 
 option(RLOTTIE_ANDROID_PAGE_SIZE_16K "Build Android libraries with 16KB page size" OFF)
+option(USE_UNITY_PLUGINAPI "Use Unity PluginAPI headers (IUnityInterface.h/IUnityProfiler.h)" ON)
+set(UNITY_PLUGINAPI_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dependency/unity-pluginapi" CACHE PATH "Path to Unity PluginAPI headers")
 
 set(BUILD_SHARED_LIBS FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
@@ -44,8 +46,11 @@ endif()
 add_subdirectory(${RLOTTIE_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build)
 # Make rlottie compile as C++17 (doesn't affect your plugin target)
 target_compile_features(rlottie PUBLIC cxx_std_17)
-
 target_compile_definitions(rlottie PRIVATE LOTTIE_LOGGING_SUPPORT)
+if (MSVC)
+    target_compile_definitions(rlottie PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
 include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/vector/ ${RLOTTIE_ROOT}/vs2019/)
 message("Lottie root directory: ${RLOTTIE_ROOT}")
 
@@ -97,29 +102,40 @@ if(MSVC)
                             /Zc:__cplusplus # enable C++17 features
                             /permissive-) # standards compliant mode
     target_compile_options(LottiePlugin
-                        PUBLIC
                         PRIVATE
                             /std:c++17
-                            /EHsc- # disable exceptions
+                            /EHsc # enable exceptions
                             /Zc:__cplusplus # enable C++17 features
                             /permissive- # standards compliant mode
                             /W3 # warning level
                         )
 else()
     target_compile_options(LottiePlugin
-                        PUBLIC
                         PRIVATE
                             -std=c++17
-                            -fno-exceptions
-                            -fno-unwind-tables
-                            -fno-asynchronous-unwind-tables
-                            -fno-rtti
                             -Wall
                             -fvisibility=hidden
                             -Wnon-virtual-dtor
                             -Woverloaded-virtual
                             -Wno-unused-parameter
                         )
+    if (RLOTTIE_WEB_ASSEMBLY OR ANDROID)
+        target_compile_options(LottiePlugin
+                            PRIVATE
+                                -fno-exceptions
+                                -fno-unwind-tables
+                                -fno-asynchronous-unwind-tables
+                                -fno-rtti)
+    endif()
+endif()
+
+if (USE_UNITY_PLUGINAPI)
+    if (EXISTS "${UNITY_PLUGINAPI_DIR}/IUnityInterface.h" AND EXISTS "${UNITY_PLUGINAPI_DIR}/IUnityProfiler.h")
+        target_include_directories(LottiePlugin PRIVATE "${UNITY_PLUGINAPI_DIR}")
+        target_compile_definitions(LottiePlugin PRIVATE HAVE_UNITY_PLUGINAPI=1)
+    else()
+        message(FATAL_ERROR "USE_UNITY_PLUGINAPI=ON but Unity headers not found in '${UNITY_PLUGINAPI_DIR}'")
+    endif()
 endif()
 
 add_dependencies(LottiePlugin rlottie)
