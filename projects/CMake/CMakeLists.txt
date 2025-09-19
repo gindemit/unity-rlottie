@@ -9,6 +9,20 @@ option(RLOTTIE_ANDROID_PAGE_SIZE_16K "Build Android libraries with 16KB page siz
 set(BUILD_SHARED_LIBS FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+if (ipo_supported)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+endif()
+
+if (MSVC)
+    add_compile_options("$<$<CONFIG:Release>:/O2>" "$<$<CONFIG:Release>:/GL>")
+    add_link_options("$<$<CONFIG:Release>:/LTCG>")
+else()
+    add_compile_options("$<$<CONFIG:Release>:-O3>")
+    add_link_options("$<$<CONFIG:Release>:-flto>")
+endif()
+
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)
 set (PIXMAN_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/pixman)
 
@@ -110,6 +124,11 @@ endif()
 
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
+
+if (ipo_supported)
+    set_property(TARGET rlottie PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set_property(TARGET LottiePlugin PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+endif()
 
 if (WIN32)
     # D3D11 is provided by the Windows SDK

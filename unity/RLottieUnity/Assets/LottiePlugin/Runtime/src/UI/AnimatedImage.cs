@@ -34,6 +34,9 @@ namespace LottiePlugin.UI
         [SerializeField] private bool _playOnAwake = true;
         [SerializeField] private bool _loop = true;
         [SerializeField] private bool _stopOnLastFrame = true;
+        [SerializeField] private int _targetFps = 30;
+        [SerializeField] private int _resolutionDivider = 1;
+        [SerializeField] private bool _pauseIfCulled = true;
 
         private LottieAnimation _lottieAnimation;
         private Coroutine _renderLottieAnimationCoroutine;
@@ -111,7 +114,8 @@ namespace LottiePlugin.UI
                 json,
                 resourcesPath,
                 width,
-                height);
+                height,
+                CreateOptions());
             _rawImage.texture = _lottieAnimation.Texture;
             _lottieAnimation.Started += OnAnimationStarted;
             _lottieAnimation.Paused += OnAnimationPaused;
@@ -138,7 +142,8 @@ namespace LottiePlugin.UI
                 _animationJson.text,
                 string.Empty,
                 _textureWidth,
-                _textureHeight);
+                _textureHeight,
+                CreateOptions());
                 _rawImage.texture = _lottieAnimation.Texture;
                 _lottieAnimation.Started += OnAnimationStarted;
                 _lottieAnimation.Paused += OnAnimationPaused;
@@ -177,6 +182,25 @@ namespace LottiePlugin.UI
         private void OnAnimationStarted(LottieAnimation animation)
         {
             Started.Invoke(this);
+        }
+
+        private LottieAnimationOptions CreateOptions()
+        {
+            return new LottieAnimationOptions
+            {
+                TargetFps = Mathf.Max(1, _targetFps),
+                ResolutionDivider = Mathf.Max(1, _resolutionDivider),
+                PauseIfCulled = _pauseIfCulled,
+                VisibilityEvaluator = () =>
+                {
+                    if (_rawImage == null)
+                    {
+                        return false;
+                    }
+
+                    return _rawImage.isActiveAndEnabled && !_rawImage.canvasRenderer.cull;
+                }
+            };
         }
         private void OnAnimationPaused(LottieAnimation animation)
         {
