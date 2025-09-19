@@ -142,11 +142,11 @@ namespace LottiePlugin
             }
             if (_nativeTexturePtr != IntPtr.Zero)
             {
-                NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
-                NativeBridge.LpDestroyTexture(_nativeTexturePtr);
+                NativeBridge.LottieBindLottieInstance(_animationWrapperIntPtr);
+                NativeBridge.LottieDestroyTexture(_nativeTexturePtr);
                 _nativeTexturePtr = IntPtr.Zero;
             }
-            NativeBridge.LpBindLottieInstance(IntPtr.Zero);
+            NativeBridge.LottieBindLottieInstance(IntPtr.Zero);
 #endif
             NativeBridge.Dispose(_animationWrapper);
             NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
@@ -239,8 +239,8 @@ namespace LottiePlugin
             int bufferSize = (int)(width * height * sizeof(uint));
             _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-            NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
-            _nativeTexturePtr = NativeBridge.LpCreateTexture((int)width, (int)height);
+            NativeBridge.LottieBindLottieInstance(_animationWrapperIntPtr);
+            _nativeTexturePtr = NativeBridge.LottieCreateTexture((int)width, (int)height);
             Texture = Texture2D.CreateExternalTexture(
                 (int)width,
                 (int)height,
@@ -304,9 +304,9 @@ namespace LottiePlugin
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
         private void RequestTextureUpload()
         {
-            NativeBridge.LpBindLottieInstance(_animationWrapperIntPtr);
+            NativeBridge.LottieBindLottieInstance(_animationWrapperIntPtr);
 
-            IntPtr currentPtr = NativeBridge.LpGetNativeTexturePtr();
+            IntPtr currentPtr = NativeBridge.LottieGetNativeTexturePtr();
             if (currentPtr != _nativeTexturePtr)
             {
                 if (currentPtr != IntPtr.Zero)
@@ -319,7 +319,7 @@ namespace LottiePlugin
                     _nativeTexturePtr = IntPtr.Zero;
                 }
             }
-            NativeBridge.LpUpdateTexture();
+            NativeBridge.LottieUpdateTexture();
         }
 #endif
 

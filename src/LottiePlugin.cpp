@@ -19,11 +19,11 @@
 #    include "IUnityProfiler.h"
 
 static IUnityProfiler* sProfiler = nullptr;
-static UnityProfilerMarkerDesc* sMkGetResult = nullptr;
-static UnityProfilerMarkerDesc* sMkPublish = nullptr;
-static UnityProfilerMarkerDesc* sMkUpload = nullptr;
+static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
+static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
+static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 
-static inline void ProfBegin(UnityProfilerMarkerDesc* d)
+static inline void ProfBegin(const UnityProfilerMarkerDesc* d)
 {
     if (sProfiler != nullptr && sProfiler->IsAvailable() && d != nullptr)
     {
@@ -31,7 +31,7 @@ static inline void ProfBegin(UnityProfilerMarkerDesc* d)
     }
 }
 
-static inline void ProfEnd(UnityProfilerMarkerDesc* d)
+static inline void ProfEnd(const UnityProfilerMarkerDesc* d)
 {
     if (sProfiler != nullptr && sProfiler->IsAvailable() && d != nullptr)
     {
@@ -39,14 +39,15 @@ static inline void ProfEnd(UnityProfilerMarkerDesc* d)
     }
 }
 #else
+struct IUnityInterfaces;
 struct UnityProfilerMarkerDesc;
 
-static inline void ProfBegin(UnityProfilerMarkerDesc*) {}
-static inline void ProfEnd(UnityProfilerMarkerDesc*) {}
+static inline void ProfBegin(const UnityProfilerMarkerDesc*) {}
+static inline void ProfEnd(const UnityProfilerMarkerDesc*) {}
 
-static UnityProfilerMarkerDesc* sMkGetResult = nullptr;
-static UnityProfilerMarkerDesc* sMkPublish = nullptr;
-static UnityProfilerMarkerDesc* sMkUpload = nullptr;
+static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
+static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
+static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 #endif
 
 #if defined(_WIN32)
@@ -759,7 +760,7 @@ extern "C"
     }
 
 #if !defined(__EMSCRIPTEN__)
-    EXPORT_API void* lp_create_texture(int width, int height)
+    EXPORT_API void* lottie_create_texture(int width, int height)
     {
         InstanceState* state = GetState(gBoundAnimation);
         if (!EnsureTexture(state, width, height))
@@ -769,19 +770,19 @@ extern "C"
         return state != nullptr ? state->nativeTex : nullptr;
     }
 
-    EXPORT_API void lp_destroy_texture(void* /*tex*/)
+    EXPORT_API void lottie_destroy_texture(void* /*tex*/)
     {
         InstanceState* state = GetState(gBoundAnimation, /*create=*/false);
         ResetTextureState(state);
     }
 
-    EXPORT_API void* lp_get_native_texture_ptr(void)
+    EXPORT_API void* lottie_get_native_texture_ptr(void)
     {
         InstanceState* state = GetState(gBoundAnimation, /*create=*/false);
         return state != nullptr ? state->nativeTex : nullptr;
     }
 
-    EXPORT_API int lp_bind_lottie_instance(lottie_animation_wrapper* animation_wrapper)
+    EXPORT_API int lottie_bind_lottie_instance(lottie_animation_wrapper* animation_wrapper)
     {
         gBoundAnimation = animation_wrapper;
         if (gBoundAnimation == nullptr)
@@ -791,7 +792,7 @@ extern "C"
         return GetState(gBoundAnimation) != nullptr ? 1 : 0;
     }
 
-    EXPORT_API void lp_update_texture(void)
+    EXPORT_API void lottie_update_texture(void)
     {
         lottie_animation_wrapper* animation = gBoundAnimation;
         if (animation == nullptr)
@@ -849,16 +850,15 @@ extern "C"
         }
     }
 
-    EXPORT_API UnityRenderingEvent lp_get_render_event_func(void)
+    EXPORT_API UnityRenderingEvent lottie_get_render_event_func(void)
     {
         return OnRenderEvent;
     }
 
-    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(void* unityInterfaces)
+    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
     {
 #if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
-        auto* ifaces = static_cast<IUnityInterfaces*>(unityInterfaces);
-        sProfiler = ifaces != nullptr ? ifaces->Get<IUnityProfiler>() : nullptr;
+        sProfiler = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityProfiler>() : nullptr;
         if (sProfiler != nullptr && sProfiler->IsAvailable())
         {
             sProfiler->CreateMarker(&sMkGetResult, "Lottie/GetFutureResult", kUnityProfilerCategoryScripts, kUnityProfilerMarkerFlagDefault, 0);
@@ -977,6 +977,26 @@ extern "C"
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityRenderEvent(int eventID)
     {
         OnRenderEvent(eventID);
+    }
+
+    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_unity_plugin_load(IUnityInterfaces* ifaces)
+    {
+        UnityPluginLoad(ifaces);
+    }
+
+    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_unity_plugin_unload()
+    {
+        UnityPluginUnload();
+    }
+
+    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_unity_set_graphics_device(void* device, int deviceType, int eventType)
+    {
+        UnitySetGraphicsDevice(device, deviceType, eventType);
+    }
+
+    extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_unity_render_event(int eventID)
+    {
+        UnityRenderEvent(eventID);
     }
 #endif // !__EMSCRIPTEN__
 }
