@@ -105,7 +105,7 @@ namespace LottiePlugin
 
         private void InitializeOptions(LottieAnimationOptions options)
         {
-            options ??= new LottieAnimationOptions();
+            options = options ?? new LottieAnimationOptions();
             _resolutionDivider = Mathf.Max(1, options.ResolutionDivider);
             _targetFps = Mathf.Max(1, options.TargetFps);
             PauseIfCulled = options.PauseIfCulled;
