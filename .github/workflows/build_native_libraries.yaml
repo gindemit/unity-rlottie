@@ -404,7 +404,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
-          path: out/Plugins/Linux
+          path: out/Plugins/Linux/x86_64
 
       - name: Download artifacts webgl
         uses: actions/download-artifact@v4
