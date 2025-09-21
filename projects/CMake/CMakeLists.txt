@@ -48,7 +48,7 @@ add_subdirectory(${RLOTTIE_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build)
 target_compile_features(rlottie PUBLIC cxx_std_17)
 target_compile_definitions(rlottie PRIVATE LOTTIE_LOGGING_SUPPORT)
 if (MSVC)
-    target_compile_definitions(rlottie PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(rlottie PRIVATE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
 endif()
 
 include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/vector/ ${RLOTTIE_ROOT}/vs2019/)
