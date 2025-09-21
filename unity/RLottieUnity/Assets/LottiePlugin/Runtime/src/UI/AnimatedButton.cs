@@ -63,6 +63,16 @@ namespace LottiePlugin.UI
             base.OnDestroy();
             DisposeLottieAnimation();
         }
+
+        protected override void OnDisable()
+        {
+            base.OnDisable();
+            if (_updateAnimationCoroutine != null)
+            {
+                StopCoroutine(_updateAnimationCoroutine);
+                _updateAnimationCoroutine = null;
+            }
+        }
         public void ResetState()
         {
             _currentStateIndex = 0;
