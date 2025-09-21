@@ -27,13 +27,15 @@
 #endif
 // -----------------------------------------------------------------------------
 
-#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__)
 #    include "IUnityInterface.h"
 #    include "IUnityProfiler.h"
 #    include "IUnityGraphics.h"
 #    if defined(_WIN32)
 #        include "IUnityGraphicsD3D12.h"
 #    endif
+#    include "IUnityLog.h"
+
 
 static IUnityProfiler* sProfiler = nullptr;
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
@@ -107,7 +109,7 @@ namespace
         }
     }
 #endif
-#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__)
     struct UploadContext
     {
         const uint8_t* data = nullptr;
@@ -152,6 +154,8 @@ namespace
         std::vector<uint8_t> rgbaScratch;
 #endif
     };
+
+#endif // !defined(__EMSCRIPTEN__)
 
     lottie_animation_wrapper* gBoundAnimation = nullptr;
 
@@ -1153,7 +1157,7 @@ extern "C"
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
     {
-#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__)
         sProfiler = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityProfiler>() : nullptr;
         if (sProfiler != nullptr && sProfiler->IsAvailable())
         {
@@ -1162,7 +1166,7 @@ extern "C"
             sProfiler->CreateMarker(&sMkUpload, "Lottie/PerformUpload", kUnityProfilerCategoryRender, kUnityProfilerMarkerFlagDefault, 0);
         }
 
-#    if defined(_WIN32)
+#if defined(_WIN32)
         sD3D12v8 = nullptr;
         sD3D12 = nullptr;
         sD3D12v6 = nullptr;
@@ -1183,7 +1187,7 @@ extern "C"
                 }
             }
         }
-#    endif
+#endif
 #else
         (void)unityInterfaces;
 #endif
@@ -1220,7 +1224,7 @@ extern "C"
             std::swap(gPendingUploads, empty);
         }
 
-#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__)
         sProfiler = nullptr;
         sMkGetResult = nullptr;
         sMkPublish = nullptr;
