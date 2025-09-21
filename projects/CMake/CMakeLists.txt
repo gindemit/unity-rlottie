@@ -128,6 +128,11 @@ else()
     endif()
 endif()
 
+if (EXISTS "${UNITY_PLUGINAPI_DIR}/IUnityInterface.h" AND EXISTS "${UNITY_PLUGINAPI_DIR}/IUnityProfiler.h")
+    target_include_directories(LottiePlugin PRIVATE "${UNITY_PLUGINAPI_DIR}")
+else()
+    message(FATAL_ERROR "No Unity headers found in '${UNITY_PLUGINAPI_DIR}'")
+endif()
 
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
