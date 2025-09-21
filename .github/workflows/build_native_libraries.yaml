@@ -352,8 +352,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: dev
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           submodules: recursive
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Download artifacts windows
         uses: actions/download-artifact@v4
@@ -400,6 +403,8 @@ jobs:
       - name: Commit and push native libraries
         env:
           MY_SECRET: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || (github.ref_name == 'dev' && 'development' || github.ref_name) }}
+          TARGET_REPOSITORY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
         run: |
           cp -f out/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
           cp -f out/Plugins/Windows/x86_64/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86_64/LottiePlugin.dll
@@ -427,6 +432,8 @@ jobs:
           git tag -a 0.5.0-dev.${{ github.run_number }} -m "New native libraries version: 0.5.0-dev.${{ github.run_number }}"
           git config -l | grep 'http\..*\.extraheader' | cut -d= -f1 | xargs -L1 git config --unset-all
           echo "Trying to push..."
-          git push --set-upstream https://token:$MY_SECRET@github.com/gindemit/unity-rlottie.git
-          git push --tags --set-upstream https://token:$MY_SECRET@github.com/gindemit/unity-rlottie.git
+          git remote set-url origin https://token:$MY_SECRET@github.com/${TARGET_REPOSITORY}.git
+          echo "Pushing to ${TARGET_REPOSITORY}:${TARGET_BRANCH}"
+          git push origin HEAD:${TARGET_BRANCH}
+          git push origin --tags
 
