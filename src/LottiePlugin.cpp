@@ -191,14 +191,6 @@ namespace
         kUnityGfxRendererVulkan = 21
     };
 
-    enum UnityGfxDeviceEventType
-    {
-        kUnityGfxDeviceEventInitialize = 0,
-        kUnityGfxDeviceEventShutdown = 1,
-        kUnityGfxDeviceEventBeforeReset = 2,
-        kUnityGfxDeviceEventAfterReset = 3
-    };
-
     Renderer ToRenderer(int deviceType)
     {
         switch (deviceType)
@@ -1230,7 +1222,7 @@ extern "C"
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
     {
-        if (eventType == kUnityGfxDeviceEventInitialize)
+        if (eventType == ::kUnityGfxDeviceEventInitialize)
         {
             gRenderer = ToRenderer(deviceType);
             gDevice = device;
@@ -1279,7 +1271,7 @@ extern "C"
                     break;
             }
         }
-        else if (eventType == kUnityGfxDeviceEventShutdown)
+        else if (eventType == ::kUnityGfxDeviceEventShutdown)
         {
             gDevice = nullptr;
             switch (gRenderer)
