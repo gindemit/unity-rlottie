@@ -147,7 +147,7 @@ if (ipo_supported)
 endif()
 
 if (WIN32)
-    # D3D11 is provided by the Windows SDK
+    target_link_libraries(LottiePlugin d3d12 dxgi)
 elseif(RLOTTIE_OSX OR RLOTTIE_IOS)
     find_library(METAL_FRAMEWORK Metal)
     find_library(FOUNDATION_FRAMEWORK Foundation)

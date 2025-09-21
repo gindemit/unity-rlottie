@@ -18,11 +18,17 @@
 #if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
 #    include "IUnityInterface.h"
 #    include "IUnityProfiler.h"
+#    include "IUnityGraphics.h"
+#    include "IUnityGraphicsD3D12.h"
 
 static IUnityProfiler* sProfiler = nullptr;
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
+static IUnityGraphicsD3D12v8* sD3D12v8 = nullptr;
+static IUnityGraphicsD3D12v7* sD3D12 = nullptr;
+static IUnityGraphicsD3D12v6* sD3D12v6 = nullptr;
+static IUnityGraphicsD3D12v5* sD3D12v5 = nullptr;
 
 static inline void ProfBegin(const UnityProfilerMarkerDesc* d)
 {
@@ -52,7 +58,11 @@ static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 #endif
 
 #if defined(_WIN32)
+#    include <d3d12.h>
+#    include <dxgi1_6.h>
 #    include <d3d11.h>
+#    pragma comment(lib, "d3d12.lib")
+#    pragma comment(lib, "dxgi.lib")
 #    pragma comment(lib, "d3d11.lib")
 #endif
 
@@ -111,6 +121,11 @@ namespace
         int texH = 0;
         void* nativeTex = nullptr;
 #if defined(_WIN32)
+        ID3D12Resource* d3d12Tex = nullptr;
+        ID3D12Resource* d3d12Upload = nullptr;
+        UINT64 d3d12UploadSz = 0;
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT d3d12Footprint{};
+        D3D12_RESOURCE_STATES d3d12TexState = D3D12_RESOURCE_STATE_COMMON;
         ID3D11Texture2D* d3dTex = nullptr;
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         id<MTLTexture> metalTex = nil;
@@ -127,6 +142,7 @@ namespace
     enum class Renderer
     {
         Unknown,
+        D3D12,
         D3D11,
         Metal,
         OpenGL,
@@ -136,6 +152,8 @@ namespace
     void* gDevice = nullptr;
 
 #if defined(_WIN32)
+    ID3D12Device* gD3D12Device = nullptr;
+    ID3D12CommandQueue* gD3D12Queue = nullptr;
     ID3D11Device* gD3DDevice = nullptr;
     ID3D11DeviceContext* gD3DContext = nullptr;
 #endif
@@ -180,6 +198,8 @@ namespace
         {
             case kUnityGfxRendererD3D11:
                 return Renderer::D3D11;
+            case kUnityGfxRendererD3D12:
+                return Renderer::D3D12;
             case kUnityGfxRendererOpenGL:
             case kUnityGfxRendererOpenGLES20:
             case kUnityGfxRendererOpenGLES30:
@@ -224,6 +244,19 @@ namespace
         }
 
 #if defined(_WIN32)
+        if (state->d3d12Upload)
+        {
+            state->d3d12Upload->Release();
+            state->d3d12Upload = nullptr;
+        }
+        if (state->d3d12Tex)
+        {
+            state->d3d12Tex->Release();
+            state->d3d12Tex = nullptr;
+        }
+        state->d3d12Footprint = {};
+        state->d3d12UploadSz = 0;
+        state->d3d12TexState = D3D12_RESOURCE_STATE_COMMON;
         if (state->d3dTex)
         {
             state->d3dTex->Release();
@@ -265,6 +298,98 @@ namespace
 
         switch (gRenderer)
         {
+            case Renderer::D3D12:
+#if defined(_WIN32)
+            {
+                if (gD3D12Device == nullptr)
+                {
+                    return false;
+                }
+
+                D3D12_RESOURCE_DESC texDesc{};
+                texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+                texDesc.Alignment = 0;
+                texDesc.Width = static_cast<UINT64>(width);
+                texDesc.Height = static_cast<UINT>(height);
+                texDesc.DepthOrArraySize = 1;
+                texDesc.MipLevels = 1;
+                texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+                texDesc.SampleDesc.Count = 1;
+                texDesc.SampleDesc.Quality = 0;
+                texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+                texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+                D3D12_HEAP_PROPERTIES heapDefault{};
+                heapDefault.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+                ID3D12Resource* texture = nullptr;
+                HRESULT hr = gD3D12Device->CreateCommittedResource(
+                    &heapDefault,
+                    D3D12_HEAP_FLAG_NONE,
+                    &texDesc,
+                    D3D12_RESOURCE_STATE_COMMON,
+                    nullptr,
+                    IID_PPV_ARGS(&texture));
+                if (FAILED(hr) || texture == nullptr)
+                {
+                    if (texture != nullptr)
+                    {
+                        texture->Release();
+                    }
+                    return false;
+                }
+
+                UINT64 totalBytes = 0;
+                gD3D12Device->GetCopyableFootprints(&texDesc, 0, 1, 0, &state->d3d12Footprint, nullptr, nullptr, &totalBytes);
+                state->d3d12UploadSz = totalBytes;
+
+                D3D12_HEAP_PROPERTIES heapUpload{};
+                heapUpload.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+                D3D12_RESOURCE_DESC uploadDesc{};
+                uploadDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                uploadDesc.Alignment = 0;
+                uploadDesc.Width = totalBytes;
+                uploadDesc.Height = 1;
+                uploadDesc.DepthOrArraySize = 1;
+                uploadDesc.MipLevels = 1;
+                uploadDesc.Format = DXGI_FORMAT_UNKNOWN;
+                uploadDesc.SampleDesc.Count = 1;
+                uploadDesc.SampleDesc.Quality = 0;
+                uploadDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+                uploadDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+                ID3D12Resource* upload = nullptr;
+                hr = gD3D12Device->CreateCommittedResource(
+                    &heapUpload,
+                    D3D12_HEAP_FLAG_NONE,
+                    &uploadDesc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ,
+                    nullptr,
+                    IID_PPV_ARGS(&upload));
+                if (FAILED(hr) || upload == nullptr)
+                {
+                    if (upload != nullptr)
+                    {
+                        upload->Release();
+                    }
+                    texture->Release();
+                    state->d3d12UploadSz = 0;
+                    state->d3d12Footprint = {};
+                    return false;
+                }
+
+                state->d3d12Tex = texture;
+                state->d3d12Upload = upload;
+                state->d3d12TexState = D3D12_RESOURCE_STATE_COMMON;
+                state->nativeTex = texture;
+                state->texW = width;
+                state->texH = height;
+                return true;
+            }
+#else
+                return false;
+#endif
             case Renderer::D3D11:
 #if defined(_WIN32)
             {
@@ -396,6 +521,123 @@ namespace
     }
 #endif
 
+#if defined(_WIN32)
+    ID3D12GraphicsCommandList* AcquireUnityD3D12CommandList()
+    {
+        if (sD3D12v8 != nullptr)
+        {
+            UnityGraphicsD3D12RecordingState recordingState{};
+            if (sD3D12v8->CommandRecordingState(&recordingState))
+            {
+                return recordingState.commandList;
+            }
+        }
+
+        if (sD3D12 != nullptr)
+        {
+            UnityGraphicsD3D12RecordingState recordingState{};
+            if (sD3D12->CommandRecordingState(&recordingState))
+            {
+                return recordingState.commandList;
+            }
+        }
+
+        if (sD3D12v6 != nullptr)
+        {
+            UnityGraphicsD3D12RecordingState recordingState{};
+            if (sD3D12v6->CommandRecordingState(&recordingState))
+            {
+                return recordingState.commandList;
+            }
+        }
+
+        return nullptr;
+    }
+
+    void D3D12StageBGRAUpload(InstanceState* state, const UploadContext& ctx)
+    {
+        if (state == nullptr || state->d3d12Upload == nullptr || ctx.data == nullptr)
+        {
+            return;
+        }
+
+        void* mapped = nullptr;
+        D3D12_RANGE noRead{0, 0};
+        if (FAILED(state->d3d12Upload->Map(0, &noRead, &mapped)) || mapped == nullptr)
+        {
+            return;
+        }
+
+        uint8_t* dstBase = reinterpret_cast<uint8_t*>(mapped) + state->d3d12Footprint.Offset;
+        const uint8_t* src = ctx.data;
+        const uint32_t rowPitch = state->d3d12Footprint.Footprint.RowPitch;
+        for (uint32_t y = 0; y < ctx.height; ++y)
+        {
+            uint8_t* dst = dstBase + static_cast<size_t>(y) * rowPitch;
+            const uint8_t* rowSrc = src + static_cast<size_t>(y) * ctx.stride;
+            std::memcpy(dst, rowSrc, static_cast<size_t>(ctx.width) * 4u);
+        }
+
+        state->d3d12Upload->Unmap(0, nullptr);
+    }
+
+    void UploadD3D12(InstanceState* state, const UploadContext& ctx)
+    {
+        if (state == nullptr || state->d3d12Tex == nullptr || state->d3d12Upload == nullptr || ctx.data == nullptr)
+        {
+            return;
+        }
+
+        D3D12StageBGRAUpload(state, ctx);
+
+        ID3D12GraphicsCommandList* cmd = AcquireUnityD3D12CommandList();
+        if (cmd == nullptr)
+        {
+            return;
+        }
+
+        const D3D12_RESOURCE_STATES currentState = state->d3d12TexState;
+        if (currentState != D3D12_RESOURCE_STATE_COPY_DEST)
+        {
+            D3D12_RESOURCE_BARRIER toCopy{};
+            toCopy.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            toCopy.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            toCopy.Transition.pResource = state->d3d12Tex;
+            toCopy.Transition.Subresource = 0;
+            toCopy.Transition.StateBefore = currentState;
+            toCopy.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+            cmd->ResourceBarrier(1, &toCopy);
+        }
+
+        D3D12_TEXTURE_COPY_LOCATION dst{};
+        dst.pResource = state->d3d12Tex;
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        dst.SubresourceIndex = 0;
+
+        D3D12_TEXTURE_COPY_LOCATION src{};
+        src.pResource = state->d3d12Upload;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        src.PlacedFootprint = state->d3d12Footprint;
+
+        cmd->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+
+        D3D12_RESOURCE_BARRIER toSample{};
+        toSample.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        toSample.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        toSample.Transition.pResource = state->d3d12Tex;
+        toSample.Transition.Subresource = 0;
+        toSample.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        toSample.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        cmd->ResourceBarrier(1, &toSample);
+
+        state->d3d12TexState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        if (sD3D12v8 != nullptr)
+        {
+            sD3D12v8->NotifyResourceState(state->d3d12Tex, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, false);
+        }
+    }
+#endif
+
     void UploadD3D11(InstanceState* state, const UploadContext& ctx)
     {
 #if defined(_WIN32)
@@ -502,6 +744,11 @@ namespace
 
         switch (gRenderer)
         {
+            case Renderer::D3D12:
+#if defined(_WIN32)
+                UploadD3D12(state, ctx);
+#endif
+                break;
             case Renderer::D3D11:
                 UploadD3D11(state, ctx);
                 break;
@@ -901,6 +1148,27 @@ extern "C"
             sProfiler->CreateMarker(&sMkPublish, "Lottie/PublishUpload", kUnityProfilerCategoryRender, kUnityProfilerMarkerFlagDefault, 0);
             sProfiler->CreateMarker(&sMkUpload, "Lottie/PerformUpload", kUnityProfilerCategoryRender, kUnityProfilerMarkerFlagDefault, 0);
         }
+
+        sD3D12v8 = nullptr;
+        sD3D12 = nullptr;
+        sD3D12v6 = nullptr;
+        sD3D12v5 = nullptr;
+        if (unityInterfaces != nullptr)
+        {
+            sD3D12v8 = unityInterfaces->Get<IUnityGraphicsD3D12v8>();
+            if (sD3D12v8 == nullptr)
+            {
+                sD3D12 = unityInterfaces->Get<IUnityGraphicsD3D12v7>();
+            }
+            if (sD3D12 == nullptr)
+            {
+                sD3D12v6 = unityInterfaces->Get<IUnityGraphicsD3D12v6>();
+                if (sD3D12v6 == nullptr)
+                {
+                    sD3D12v5 = unityInterfaces->Get<IUnityGraphicsD3D12v5>();
+                }
+            }
+        }
 #else
         (void)unityInterfaces;
 #endif
@@ -912,6 +1180,8 @@ extern "C"
         gDevice = nullptr;
         gRenderer = Renderer::Unknown;
 #if defined(_WIN32)
+        gD3D12Queue = nullptr;
+        gD3D12Device = nullptr;
         if (gD3DContext)
         {
             gD3DContext->Release();
@@ -940,6 +1210,10 @@ extern "C"
         sMkGetResult = nullptr;
         sMkPublish = nullptr;
         sMkUpload = nullptr;
+        sD3D12v8 = nullptr;
+        sD3D12 = nullptr;
+        sD3D12v6 = nullptr;
+        sD3D12v5 = nullptr;
 #endif
     }
 
@@ -951,6 +1225,27 @@ extern "C"
             gDevice = device;
             switch (gRenderer)
             {
+                case Renderer::D3D12:
+#if defined(_WIN32)
+                    gD3D12Device = reinterpret_cast<ID3D12Device*>(device);
+                    if (sD3D12v8 != nullptr)
+                    {
+                        gD3D12Queue = sD3D12v8->GetCommandQueue();
+                    }
+                    else if (sD3D12 != nullptr)
+                    {
+                        gD3D12Queue = sD3D12->GetCommandQueue();
+                    }
+                    else if (sD3D12v6 != nullptr)
+                    {
+                        gD3D12Queue = sD3D12v6->GetCommandQueue();
+                    }
+                    else if (sD3D12v5 != nullptr)
+                    {
+                        gD3D12Queue = sD3D12v5->GetCommandQueue();
+                    }
+#endif
+                    break;
                 case Renderer::D3D11:
 #if defined(_WIN32)
                     gD3DDevice = reinterpret_cast<ID3D11Device*>(device);
@@ -978,6 +1273,12 @@ extern "C"
             gDevice = nullptr;
             switch (gRenderer)
             {
+                case Renderer::D3D12:
+#if defined(_WIN32)
+                    gD3D12Queue = nullptr;
+                    gD3D12Device = nullptr;
+#endif
+                    break;
                 case Renderer::D3D11:
 #if defined(_WIN32)
                     if (gD3DContext)
