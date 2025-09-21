@@ -70,6 +70,15 @@ namespace LottiePlugin.UI
             DisposeLottieAnimation();
         }
 
+        private void OnDisable()
+        {
+            if (_renderLottieAnimationCoroutine != null)
+            {
+                StopCoroutine(_renderLottieAnimationCoroutine);
+                _renderLottieAnimationCoroutine = null;
+            }
+        }
+
         public void Play()
         {
             if (_renderLottieAnimationCoroutine != null)

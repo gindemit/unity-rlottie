@@ -72,8 +72,15 @@ namespace LottiePlugin
         {
             for (int i = 0; i < _pixelDatas.Length; ++i)
             {
-                _pixelDatas[i].Dispose();
-                NativeBridge.Dispose(_animationWrappers[i]);
+                if (_pixelDatas[i].IsCreated)
+                {
+                    _pixelDatas[i].Dispose();
+                }
+                if (_animationWrapperIntPtrs[i] != IntPtr.Zero)
+                {
+                    NativeBridge.Dispose(ref _animationWrapperIntPtrs[i]);
+                }
+                _animationWrappers[i] = default;
                 NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtrs[i]);
             }
             _pixelDatas = null;
