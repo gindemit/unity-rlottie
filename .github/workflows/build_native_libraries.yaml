@@ -243,8 +243,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
-          path: |
-            out/Release/Plugins/Linux/x86_64/libLottiePlugin.so
+          path: out/Release/Plugins/Linux/x86_64/
 
   build_webgl:
     runs-on: ubuntu-latest
@@ -432,7 +431,7 @@ jobs:
           mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64
           cp -f out/Plugins/iOS/x86_64/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64/libLottiePlugin.a
           cp -f out/Plugins/iOS/x86_64/librlottie.a     unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64/librlottie.a
-          cp -f out/Release/Plugins/Linux/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+          cp -f out/Plugins/Linux/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
           mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL
           cp -f out/Plugins/WebGL/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/libLottiePlugin.a
           cp -f out/Plugins/WebGL/librlottie.a     unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/librlottie.a
