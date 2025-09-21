@@ -129,10 +129,19 @@ namespace
         void* nativeTex = nullptr;
 #if defined(_WIN32)
         ID3D12Resource* d3d12Tex = nullptr;
+
+        // Upload ring
         ID3D12Resource* d3d12Upload = nullptr;
-        UINT64 d3d12UploadSz = 0;
+        void* d3d12UploadMapped = nullptr;
+        UINT d3d12UploadSlotCount = 3;
+        UINT d3d12UploadWriteIdx = 0;
+        UINT64 d3d12UploadSlotBytes = 0;
+
+        // Footprint for a single subresource copy
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT d3d12Footprint{};
         D3D12_RESOURCE_STATES d3d12TexState = D3D12_RESOURCE_STATE_COMMON;
+
+        // D3D11
         ID3D11Texture2D* d3dTex = nullptr;
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         id<MTLTexture> metalTex = nil;
@@ -245,6 +254,11 @@ namespace
 #if defined(_WIN32)
         if (state->d3d12Upload)
         {
+            if (state->d3d12UploadMapped)
+            {
+                state->d3d12Upload->Unmap(0, nullptr);
+                state->d3d12UploadMapped = nullptr;
+            }
             state->d3d12Upload->Release();
             state->d3d12Upload = nullptr;
         }
@@ -254,7 +268,8 @@ namespace
             state->d3d12Tex = nullptr;
         }
         state->d3d12Footprint = {};
-        state->d3d12UploadSz = 0;
+        state->d3d12UploadSlotBytes = 0;
+        state->d3d12UploadWriteIdx = 0;
         state->d3d12TexState = D3D12_RESOURCE_STATE_COMMON;
         if (state->d3dTex)
         {
@@ -300,38 +315,30 @@ namespace
             case Renderer::D3D12:
 #if defined(_WIN32)
             {
-                if (gD3D12Device == nullptr)
+                if (!gD3D12Device)
                 {
                     return false;
                 }
 
                 D3D12_RESOURCE_DESC texDesc{};
                 texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-                texDesc.Alignment = 0;
                 texDesc.Width = static_cast<UINT64>(width);
                 texDesc.Height = static_cast<UINT>(height);
                 texDesc.DepthOrArraySize = 1;
                 texDesc.MipLevels = 1;
                 texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
                 texDesc.SampleDesc.Count = 1;
-                texDesc.SampleDesc.Quality = 0;
                 texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-                texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-                D3D12_HEAP_PROPERTIES heapDefault{};
-                heapDefault.Type = D3D12_HEAP_TYPE_DEFAULT;
-
+                D3D12_HEAP_PROPERTIES heapDefault{ D3D12_HEAP_TYPE_DEFAULT };
                 ID3D12Resource* texture = nullptr;
                 HRESULT hr = gD3D12Device->CreateCommittedResource(
-                    &heapDefault,
-                    D3D12_HEAP_FLAG_NONE,
-                    &texDesc,
-                    D3D12_RESOURCE_STATE_COMMON,
-                    nullptr,
+                    &heapDefault, D3D12_HEAP_FLAG_NONE, &texDesc,
+                    D3D12_RESOURCE_STATE_COMMON, nullptr,
                     IID_PPV_ARGS(&texture));
-                if (FAILED(hr) || texture == nullptr)
+                if (FAILED(hr) || !texture)
                 {
-                    if (texture != nullptr)
+                    if (texture)
                     {
                         texture->Release();
                     }
@@ -339,47 +346,53 @@ namespace
                 }
 
                 UINT64 totalBytes = 0;
-                gD3D12Device->GetCopyableFootprints(&texDesc, 0, 1, 0, &state->d3d12Footprint, nullptr, nullptr, &totalBytes);
-                state->d3d12UploadSz = totalBytes;
+                gD3D12Device->GetCopyableFootprints(
+                    &texDesc, 0, 1, 0, &state->d3d12Footprint, nullptr, nullptr, &totalBytes);
 
-                D3D12_HEAP_PROPERTIES heapUpload{};
-                heapUpload.Type = D3D12_HEAP_TYPE_UPLOAD;
+                state->d3d12UploadSlotBytes = totalBytes;
+                const UINT64 uploadBytes = totalBytes * state->d3d12UploadSlotCount;
 
+                D3D12_HEAP_PROPERTIES heapUpload{ D3D12_HEAP_TYPE_UPLOAD };
                 D3D12_RESOURCE_DESC uploadDesc{};
                 uploadDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-                uploadDesc.Alignment = 0;
-                uploadDesc.Width = totalBytes;
+                uploadDesc.Width = uploadBytes;
                 uploadDesc.Height = 1;
                 uploadDesc.DepthOrArraySize = 1;
                 uploadDesc.MipLevels = 1;
-                uploadDesc.Format = DXGI_FORMAT_UNKNOWN;
-                uploadDesc.SampleDesc.Count = 1;
-                uploadDesc.SampleDesc.Quality = 0;
                 uploadDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-                uploadDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
                 ID3D12Resource* upload = nullptr;
                 hr = gD3D12Device->CreateCommittedResource(
-                    &heapUpload,
-                    D3D12_HEAP_FLAG_NONE,
-                    &uploadDesc,
-                    D3D12_RESOURCE_STATE_GENERIC_READ,
-                    nullptr,
+                    &heapUpload, D3D12_HEAP_FLAG_NONE, &uploadDesc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                     IID_PPV_ARGS(&upload));
-                if (FAILED(hr) || upload == nullptr)
+                if (FAILED(hr) || !upload)
                 {
-                    if (upload != nullptr)
+                    if (upload)
                     {
                         upload->Release();
                     }
                     texture->Release();
-                    state->d3d12UploadSz = 0;
                     state->d3d12Footprint = {};
+                    state->d3d12UploadSlotBytes = 0;
+                    return false;
+                }
+
+                void* mapped = nullptr;
+                hr = upload->Map(0, nullptr, &mapped);
+                if (FAILED(hr) || !mapped)
+                {
+                    upload->Release();
+                    texture->Release();
+                    state->d3d12Footprint = {};
+                    state->d3d12UploadSlotBytes = 0;
                     return false;
                 }
 
                 state->d3d12Tex = texture;
                 state->d3d12Upload = upload;
+                state->d3d12UploadMapped = mapped;
+                state->d3d12UploadWriteIdx = 0;
                 state->d3d12TexState = D3D12_RESOURCE_STATE_COMMON;
                 state->nativeTex = texture;
                 state->texW = width;
@@ -555,34 +568,34 @@ namespace
 
     void D3D12StageBGRAUpload(InstanceState* state, const UploadContext& ctx)
     {
-        if (state == nullptr || state->d3d12Upload == nullptr || ctx.data == nullptr)
+#if defined(_WIN32)
+        if (!state || !state->d3d12Upload || !state->d3d12UploadMapped || !ctx.data)
         {
             return;
         }
 
-        void* mapped = nullptr;
-        D3D12_RANGE noRead{0, 0};
-        if (FAILED(state->d3d12Upload->Map(0, &noRead, &mapped)) || mapped == nullptr)
-        {
-            return;
-        }
+        const UINT64 slotBase = state->d3d12UploadSlotBytes * state->d3d12UploadWriteIdx;
+        const UINT rowPitch = state->d3d12Footprint.Footprint.RowPitch;
 
-        uint8_t* dstBase = reinterpret_cast<uint8_t*>(mapped) + state->d3d12Footprint.Offset;
+        uint8_t* dstBase = reinterpret_cast<uint8_t*>(state->d3d12UploadMapped)
+            + slotBase
+            + state->d3d12Footprint.Offset;
+
         const uint8_t* src = ctx.data;
-        const uint32_t rowPitch = state->d3d12Footprint.Footprint.RowPitch;
         for (uint32_t y = 0; y < ctx.height; ++y)
         {
-            uint8_t* dst = dstBase + static_cast<size_t>(y) * rowPitch;
-            const uint8_t* rowSrc = src + static_cast<size_t>(y) * ctx.stride;
-            std::memcpy(dst, rowSrc, static_cast<size_t>(ctx.width) * 4u);
+            std::memcpy(
+                dstBase + static_cast<size_t>(y) * rowPitch,
+                src + static_cast<size_t>(y) * ctx.stride,
+                ctx.stride);
         }
-
-        state->d3d12Upload->Unmap(0, nullptr);
+#endif
     }
 
     void UploadD3D12(InstanceState* state, const UploadContext& ctx)
     {
-        if (state == nullptr || state->d3d12Tex == nullptr || state->d3d12Upload == nullptr || ctx.data == nullptr)
+#if defined(_WIN32)
+        if (!state || !state->d3d12Tex || !state->d3d12Upload || !ctx.data)
         {
             return;
         }
@@ -595,17 +608,15 @@ namespace
             return;
         }
 
-        const D3D12_RESOURCE_STATES currentState = state->d3d12TexState;
-        if (currentState != D3D12_RESOURCE_STATE_COPY_DEST)
+        if (state->d3d12TexState != D3D12_RESOURCE_STATE_COPY_DEST)
         {
-            D3D12_RESOURCE_BARRIER toCopy{};
-            toCopy.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            toCopy.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-            toCopy.Transition.pResource = state->d3d12Tex;
-            toCopy.Transition.Subresource = 0;
-            toCopy.Transition.StateBefore = currentState;
-            toCopy.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-            cmd->ResourceBarrier(1, &toCopy);
+            D3D12_RESOURCE_BARRIER b{};
+            b.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            b.Transition.pResource = state->d3d12Tex;
+            b.Transition.Subresource = 0;
+            b.Transition.StateBefore = state->d3d12TexState;
+            b.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+            cmd->ResourceBarrier(1, &b);
         }
 
         D3D12_TEXTURE_COPY_LOCATION dst{};
@@ -617,25 +628,28 @@ namespace
         src.pResource = state->d3d12Upload;
         src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         src.PlacedFootprint = state->d3d12Footprint;
+        src.PlacedFootprint.Offset += state->d3d12UploadSlotBytes * state->d3d12UploadWriteIdx;
 
         cmd->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
 
-        D3D12_RESOURCE_BARRIER toSample{};
-        toSample.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        toSample.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        toSample.Transition.pResource = state->d3d12Tex;
-        toSample.Transition.Subresource = 0;
-        toSample.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        toSample.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        cmd->ResourceBarrier(1, &toSample);
+        D3D12_RESOURCE_BARRIER toSRV{};
+        toSRV.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        toSRV.Transition.pResource = state->d3d12Tex;
+        toSRV.Transition.Subresource = 0;
+        toSRV.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        toSRV.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        cmd->ResourceBarrier(1, &toSRV);
 
         state->d3d12TexState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        if (sD3D12v8 != nullptr)
+
+        if (sD3D12v8)
         {
             sD3D12v8->NotifyResourceState(state->d3d12Tex, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, false);
         }
-    }
+
+        state->d3d12UploadWriteIdx = (state->d3d12UploadWriteIdx + 1) % state->d3d12UploadSlotCount;
 #endif
+    }
 
     void UploadD3D11(InstanceState* state, const UploadContext& ctx)
     {
