@@ -15,20 +15,36 @@
 #include <utility>
 #include <vector>
 
+// --- Platform GPU headers FIRST ------------------------------------------------
+#if defined(_WIN32)
+#    define WIN32_LEAN_AND_MEAN
+#    include <d3d11.h>
+#    include <d3d12.h>
+#    include <dxgi1_6.h>
+#    pragma comment(lib, "d3d12.lib")
+#    pragma comment(lib, "dxgi.lib")
+#    pragma comment(lib, "d3d11.lib")
+#endif
+// -----------------------------------------------------------------------------
+
 #if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
 #    include "IUnityInterface.h"
 #    include "IUnityProfiler.h"
 #    include "IUnityGraphics.h"
-#    include "IUnityGraphicsD3D12.h"
+#    if defined(_WIN32)
+#        include "IUnityGraphicsD3D12.h"
+#    endif
 
 static IUnityProfiler* sProfiler = nullptr;
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
+#    if defined(_WIN32)
 static IUnityGraphicsD3D12v8* sD3D12v8 = nullptr;
 static IUnityGraphicsD3D12v7* sD3D12 = nullptr;
 static IUnityGraphicsD3D12v6* sD3D12v6 = nullptr;
 static IUnityGraphicsD3D12v5* sD3D12v5 = nullptr;
+#    endif
 
 static inline void ProfBegin(const UnityProfilerMarkerDesc* d)
 {
@@ -55,15 +71,6 @@ static inline void ProfEnd(const UnityProfilerMarkerDesc*) {}
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
-#endif
-
-#if defined(_WIN32)
-#    include <d3d12.h>
-#    include <dxgi1_6.h>
-#    include <d3d11.h>
-#    pragma comment(lib, "d3d12.lib")
-#    pragma comment(lib, "dxgi.lib")
-#    pragma comment(lib, "d3d11.lib")
 #endif
 
 #if defined(__APPLE__)
@@ -1149,6 +1156,7 @@ extern "C"
             sProfiler->CreateMarker(&sMkUpload, "Lottie/PerformUpload", kUnityProfilerCategoryRender, kUnityProfilerMarkerFlagDefault, 0);
         }
 
+#    if defined(_WIN32)
         sD3D12v8 = nullptr;
         sD3D12 = nullptr;
         sD3D12v6 = nullptr;
@@ -1169,6 +1177,7 @@ extern "C"
                 }
             }
         }
+#    endif
 #else
         (void)unityInterfaces;
 #endif
@@ -1210,10 +1219,12 @@ extern "C"
         sMkGetResult = nullptr;
         sMkPublish = nullptr;
         sMkUpload = nullptr;
+#    if defined(_WIN32)
         sD3D12v8 = nullptr;
         sD3D12 = nullptr;
         sD3D12v6 = nullptr;
         sD3D12v5 = nullptr;
+#    endif
 #endif
     }
 
