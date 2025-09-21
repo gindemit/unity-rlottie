@@ -132,10 +132,9 @@ namespace LottiePlugin
             LottieLoadFromFile(filePath, out animationWrapper);
             return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
         }
-        internal static void Dispose(LottieAnimationWrapper lottieAnimationWrapper)
+        internal static void Dispose(ref IntPtr animationWrapperPtr)
         {
-            LottieDisposeWrapper(ref lottieAnimationWrapper.self);
-            Debug.Assert(lottieAnimationWrapper.self == IntPtr.Zero);
+            LottieDisposeWrapper(ref animationWrapperPtr);
         }
     }
 }
