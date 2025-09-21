@@ -96,6 +96,14 @@ static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 
 namespace
 {
+#if !defined(__EMSCRIPTEN__)
+  // Forward declarations so Clang/GCC know these names before use
+  struct InstanceState; // forward declare the struct used in maps
+
+  void PerformUploadFor(lottie_animation_wrapper* animation);
+  void PublishUpload(lottie_animation_wrapper* animation,
+                      const lottie_render_data* render_data);
+#endif
 #if defined(__ANDROID__)
     static bool gHasBGRAExt = false;
 
@@ -182,12 +190,14 @@ namespace
     id<MTLDevice> gMetalDevice = nil;
 #endif
 
+#if !defined(__EMSCRIPTEN__)
     std::mutex gInstancesMutex;
     std::unordered_map<lottie_animation_wrapper*, std::unique_ptr<InstanceState>> gInstances;
 
     std::mutex gPendingUploadsMutex;
     std::queue<lottie_animation_wrapper*> gPendingUploads;
     constexpr size_t kMaxPendingUploads = 1024;
+#endif
 
     enum UnityGfxRenderer
     {
@@ -1211,6 +1221,7 @@ extern "C"
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         gMetalDevice = nil;
 #endif
+#if !defined(__EMSCRIPTEN__)
         std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
         for (auto& entry : gInstances)
         {
@@ -1223,6 +1234,7 @@ extern "C"
             std::queue<lottie_animation_wrapper*> empty;
             std::swap(gPendingUploads, empty);
         }
+#endif
 
 #if !defined(__EMSCRIPTEN__)
         sProfiler = nullptr;
