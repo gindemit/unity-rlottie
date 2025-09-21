@@ -2,15 +2,17 @@ name: Build and Test
 
 on:
   push:
-    branches:
-      - dev
+    branches: [dev]
     paths:
       - 'dependency/**'
       - 'projects/**'
       - 'src/**'
   pull_request:
-    branches:
-      - dev
+    branches: [dev]
+    paths:
+      - 'dependency/**'
+      - 'projects/**'
+      - 'src/**'
 
 jobs:
   build_windows:
@@ -352,6 +354,13 @@ jobs:
   commit_and_push_native_libraries:
     needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl, build_ios_simulator_x64]
     runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -432,8 +441,8 @@ jobs:
           git config --global user.email "konstantin.gindemit@gmail.com"
           git config --global user.name "Konstantin Gindemit"
           git remote -v
-          git commit --allow-empty -m "New native libraries version: 0.5.0-dev.${{ github.run_number }}"
-          git tag -a 0.5.0-dev.${{ github.run_number }} -m "New native libraries version: 0.5.0-dev.${{ github.run_number }}"
+          git commit --allow-empty -m "[skip ci] New native libraries version: 0.5.0-dev.${{ github.run_number }}"
+          git tag -a 0.5.0-dev.${{ github.run_number }} -m "[skip ci] New native libraries version: 0.5.0-dev.${{ github.run_number }}"
           git config -l | grep 'http\..*\.extraheader' | cut -d= -f1 | xargs -L1 git config --unset-all
           echo "Trying to push..."
           git remote set-url origin https://token:$MY_SECRET@github.com/${TARGET_REPOSITORY}.git
