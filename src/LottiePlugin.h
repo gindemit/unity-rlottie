@@ -11,7 +11,7 @@
 // --- Unity PluginAPI integration -------------------------------------------
 // If we build with the official Unity PluginAPI headers, include them here so
 // UNITY_INTERFACE_API is defined BEFORE we typedef UnityRenderingEvent.
-#if defined(HAVE_UNITY_PLUGINAPI) && !defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__)
 #   include "IUnityInterface.h"
 #endif
 

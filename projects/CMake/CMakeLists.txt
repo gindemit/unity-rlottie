@@ -5,7 +5,6 @@ cmake_minimum_required (VERSION 3.16)
 project(LottiePlugin)
 
 option(RLOTTIE_ANDROID_PAGE_SIZE_16K "Build Android libraries with 16KB page size" OFF)
-option(USE_UNITY_PLUGINAPI "Use Unity PluginAPI headers (IUnityInterface.h/IUnityProfiler.h)" ON)
 set(UNITY_PLUGINAPI_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dependency/unity-pluginapi" CACHE PATH "Path to Unity PluginAPI headers")
 
 set(BUILD_SHARED_LIBS FALSE)
@@ -129,14 +128,6 @@ else()
     endif()
 endif()
 
-if (USE_UNITY_PLUGINAPI)
-    if (EXISTS "${UNITY_PLUGINAPI_DIR}/IUnityInterface.h" AND EXISTS "${UNITY_PLUGINAPI_DIR}/IUnityProfiler.h")
-        target_include_directories(LottiePlugin PRIVATE "${UNITY_PLUGINAPI_DIR}")
-        target_compile_definitions(LottiePlugin PRIVATE HAVE_UNITY_PLUGINAPI=1)
-    else()
-        message(FATAL_ERROR "USE_UNITY_PLUGINAPI=ON but Unity headers not found in '${UNITY_PLUGINAPI_DIR}'")
-    endif()
-endif()
 
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
