@@ -105,12 +105,12 @@ namespace LottiePlugin.Sample.SceneUI.UI
         {
             while (true)
             {
-                yield return _waitForEndOfFrame;
+                yield return null;
                 if (_animationPreviews != null)
                 {
                     for (int i = 0; i < _animationPreviews.Count; ++i)
                     {
-                        _animationPreviews[i].DoUpdate();
+                        _animationPreviews[i].DoUpdateAsync();
                     }
                 }
             }

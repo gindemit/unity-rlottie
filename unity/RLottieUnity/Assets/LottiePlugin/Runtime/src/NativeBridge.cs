@@ -89,7 +89,7 @@ namespace LottiePlugin
         
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
-            EntryPoint = "initialize_logger")]
+            EntryPoint = "lottie_initialize_logger")]
         internal static extern int InitializeLogger(
             [MarshalAs(UnmanagedType.LPStr)] string logDirectoryPath,
             [MarshalAs(UnmanagedType.LPStr)] string logFileName,

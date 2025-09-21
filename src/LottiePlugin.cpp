@@ -131,7 +131,10 @@ extern "C" {
         *render_data = nullptr;
         return 0;
     }
-    EXPORT_API int32_t initialize_logger(const char* log_dir_path, const char* log_file_name, int32_t log_file_roll_size_mb) {
+    EXPORT_API int32_t lottie_initialize_logger(
+        const char* log_dir_path,
+        const char* log_file_name,
+        int32_t log_file_roll_size_mb) {
         fprintf(stderr, "Initializing logger (stderr)\n");
         // print the paths
         fprintf(stderr, "log_dir_path: %s\n", log_dir_path);
