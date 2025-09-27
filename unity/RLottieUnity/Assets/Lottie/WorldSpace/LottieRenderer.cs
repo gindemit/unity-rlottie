@@ -183,7 +183,7 @@ public sealed partial class LottieRenderer : MonoBehaviour
     private bool isMeshDirty;
     internal void MarkMeshAsDirty()
     {
-        if(isColorDirty) return;
+        if(isMeshDirty) return;
         isMeshDirty  = true;
         LottieUpdater.PreRendering[3] += Rebuild;
         void Rebuild()
