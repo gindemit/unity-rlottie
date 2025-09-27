@@ -1,0 +1,16 @@
+{
+  "name": "Lottie",
+  "rootNamespace": "",
+  "references": [
+    "LightSideCore"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
