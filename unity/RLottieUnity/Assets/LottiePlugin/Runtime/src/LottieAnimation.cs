@@ -10,8 +10,6 @@ namespace LottiePlugin
 {
     public sealed class LottieAnimation : IDisposable
     {
-        private static bool sLoggerInitialized;
-
         public event Action<LottieAnimation> Started;
         public event Action<LottieAnimation> Paused;
         public event Action<LottieAnimation> Stopped;
@@ -159,29 +157,12 @@ namespace LottiePlugin
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height)
         {
             ThrowIf.String.IsNullOrEmpty(filePath, nameof(filePath));
-            InitializeLogger(Application.persistentDataPath, "rlottie.log", 1);
             return new LottieAnimation(filePath, width, height);
         }
         public static LottieAnimation LoadFromJsonData(string jsonData, string resourcesPath, uint width, uint height)
         {
             ThrowIf.String.IsNullOrEmpty(jsonData, nameof(jsonData));
-            InitializeLogger(Application.persistentDataPath, "rlottie.log", 1);
             return new LottieAnimation(jsonData, resourcesPath, width, height);
-        }
-        public static void InitializeLogger(string logDirectoryPath, string logFileName, int logFileRollSizeMB)
-        {
-            ThrowIf.String.IsNullOrEmpty(logDirectoryPath, nameof(logDirectoryPath));
-            ThrowIf.String.IsNullOrEmpty(logFileName, nameof(logFileName));
-            if (sLoggerInitialized)
-            {
-                return;
-            }
-            if (!logDirectoryPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-            {
-                logDirectoryPath += Path.DirectorySeparatorChar;
-            }
-            NativeBridge.InitializeLogger(logDirectoryPath, logFileName, logFileRollSizeMB);
-            sLoggerInitialized = true;
         }
     }
 }
