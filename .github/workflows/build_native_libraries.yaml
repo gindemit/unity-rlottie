@@ -2,13 +2,17 @@ name: Build and Test
 
 on:
   push:
-    branches: [dev]
+    branches:
+      - dev
+      - codex/remove-texture.apply-and-move-updates-to-native
     paths:
       - 'dependency/**'
       - 'projects/**'
       - 'src/**'
   pull_request:
-    branches: [dev]
+    branches:
+      - dev
+      - codex/remove-texture.apply-and-move-updates-to-native
     paths:
       - 'dependency/**'
       - 'projects/**'
@@ -415,7 +419,7 @@ jobs:
       - name: Commit and push native libraries
         env:
           MY_SECRET: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || (github.ref_name == 'dev' && 'development' || github.ref_name) }}
+          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           TARGET_REPOSITORY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
         run: |
           cp -f out/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
