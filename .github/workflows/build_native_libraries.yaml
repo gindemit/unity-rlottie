@@ -2,18 +2,21 @@ name: Build and Test
 
 on:
   push:
-    branches: [dev]
+    branches:
+      - dev
+      - codex/remove-texture.apply-and-move-updates-to-native
     paths:
       - 'dependency/**'
       - 'projects/**'
       - 'src/**'
   pull_request:
-    branches: [dev]
+    branches:
+      - dev
+      - codex/remove-texture.apply-and-move-updates-to-native
     paths:
       - 'dependency/**'
       - 'projects/**'
       - 'src/**'
-
 jobs:
   build_windows:
     runs-on: windows-latest
