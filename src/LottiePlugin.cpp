@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-// --- Platform GPU headers FIRST ------------------------------------------------
+// --- Platform GPU headers FIRST ---
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <d3d11.h>
@@ -25,7 +25,7 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
 #endif
-// -----------------------------------------------------------------------------
+// ----------------------------------
 
 #if !defined(__EMSCRIPTEN__)
 #include "IUnityInterface.h"
