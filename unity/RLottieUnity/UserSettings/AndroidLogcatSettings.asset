@@ -1,26 +1,13 @@
 {
-    "m_SelectedDeviceId": "RF8M82SBYJP",
-    "m_SelectedPackage": {
-        "deviceId": "RF8M82SBYJP",
-        "name": "com.DefaultCompany.LottiePlugin",
-        "processId": 8712,
+    "m_SelectedDeviceId": "R5CX15QS3BA",
+    "m_SelectedProcess": {
+        "deviceId": "",
+        "name": "",
+        "processId": 0,
         "exited": false
     },
     "m_SelectedPriority": 0,
-    "m_KnownPackagesForSerialization": [
-        {
-            "deviceId": "RF8M82SBYJP",
-            "name": "com.sec.android.app.launcher",
-            "processId": 1969,
-            "exited": false
-        },
-        {
-            "deviceId": "RF8M82SBYJP",
-            "name": "com.DefaultCompany.LottiePlugin",
-            "processId": 8712,
-            "exited": false
-        }
-    ],
+    "m_KnownProcessesForSerialization": [],
     "m_Tags": {
         "m_Entries": [
             {
@@ -53,8 +40,11 @@
             }
         ]
     },
+    "m_ExtraWindowState": {
+        "Type": 0,
+        "Height": 0.0
+    },
     "m_MemoryViewerState": {
-        "MemoryWindowHeight": 300.0,
         "MemoryWindowWidth": 170.0,
         "MemoryTypeEnabled": [
             true,
@@ -69,7 +59,7 @@
             true
         ],
         "MemoryGroup": 2,
-        "Behavior": 0
+        "AutoCapture": true
     },
     "m_FilterOptions": {
         "m_Filter": "",
@@ -87,5 +77,24 @@
         "BitRateK": 20000,
         "DisplayIdEnabled": false,
         "DisplayId": ""
-    }
+    },
+    "m_ScreenCaptureSettings": {
+        "Mode": 0,
+        "m_LastSaveLocation": [
+            "C:\\Work\\git\\gindemit\\unity-rlottie\\unity\\RLottieUnity",
+            "C:\\Work\\git\\gindemit\\unity-rlottie\\unity\\RLottieUnity"
+        ]
+    },
+    "m_InputSettings": {
+        "ShiftModifier": false,
+        "SendText": "",
+        "PosixKillSignal": 0,
+        "TargetProcess": {
+            "deviceId": "",
+            "name": "",
+            "processId": 0,
+            "exited": false
+        }
+    },
+    "m_AutoScroll": 0
 }
