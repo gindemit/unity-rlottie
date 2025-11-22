@@ -161,6 +161,7 @@ PlayerSettings:
   androidSupportedAspectRatio: 1
   androidMaxAspectRatio: 2.1
   applicationIdentifier:
+    Android: com.DefaultCompany.LottiePlugin
     Standalone: com.DefaultCompany.LottiePlugin
   buildNumber:
     Standalone: 0
