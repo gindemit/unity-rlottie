@@ -46,6 +46,8 @@ static IUnityGraphicsD3D12v8* sD3D12v8 = nullptr;
 static IUnityGraphicsD3D12v7* sD3D12 = nullptr;
 static IUnityGraphicsD3D12v6* sD3D12v6 = nullptr;
 static IUnityGraphicsD3D12v5* sD3D12v5 = nullptr;
+static ID3D12CommandAllocator* sD3D12Allocator = nullptr;
+static ID3D12GraphicsCommandList* sD3D12CmdList = nullptr;
 #    endif
 
 static inline void ProfBegin(const UnityProfilerMarkerDesc* d)
@@ -548,6 +550,27 @@ namespace
 #endif
 
 #if defined(_WIN32)
+    struct D3D12CommandContext
+    {
+        ID3D12GraphicsCommandList* cmd = nullptr;
+        bool ownsCommandList = false;
+    };
+
+    void ReleaseOwnedD3D12CommandList()
+    {
+        if (sD3D12CmdList != nullptr)
+        {
+            sD3D12CmdList->Release();
+            sD3D12CmdList = nullptr;
+        }
+
+        if (sD3D12Allocator != nullptr)
+        {
+            sD3D12Allocator->Release();
+            sD3D12Allocator = nullptr;
+        }
+    }
+
     ID3D12GraphicsCommandList* AcquireUnityD3D12CommandList()
     {
         if (sD3D12v8 != nullptr)
@@ -578,6 +601,68 @@ namespace
         }
 
         return nullptr;
+    }
+
+    D3D12CommandContext AcquireD3D12CommandContext()
+    {
+        D3D12CommandContext ctx{};
+        ctx.cmd = AcquireUnityD3D12CommandList();
+        if (ctx.cmd != nullptr)
+        {
+            return ctx;
+        }
+
+        if (sD3D12v5 == nullptr || gD3D12Device == nullptr || gD3D12Queue == nullptr)
+        {
+            return ctx;
+        }
+
+        if (sD3D12Allocator == nullptr)
+        {
+            if (FAILED(gD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sD3D12Allocator))))
+            {
+                ReleaseOwnedD3D12CommandList();
+                return ctx;
+            }
+        }
+        else
+        {
+            sD3D12Allocator->Reset();
+        }
+
+        if (sD3D12CmdList == nullptr)
+        {
+            if (FAILED(gD3D12Device->CreateCommandList(
+                    0,
+                    D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    sD3D12Allocator,
+                    nullptr,
+                    IID_PPV_ARGS(&sD3D12CmdList))))
+            {
+                ReleaseOwnedD3D12CommandList();
+                return ctx;
+            }
+        }
+        else
+        {
+            sD3D12CmdList->Reset(sD3D12Allocator, nullptr);
+        }
+
+        ctx.cmd = sD3D12CmdList;
+        ctx.ownsCommandList = true;
+        return ctx;
+    }
+
+    void SubmitD3D12CommandContext(const D3D12CommandContext& ctx)
+    {
+        if (!ctx.ownsCommandList || ctx.cmd == nullptr || gD3D12Queue == nullptr)
+        {
+            return;
+        }
+
+        ctx.cmd->Close();
+        ID3D12CommandList* lists[] = { ctx.cmd };
+        gD3D12Queue->ExecuteCommandLists(1, lists);
     }
 
     void D3D12StageBGRAUpload(InstanceState* state, const UploadContext& ctx)
@@ -616,7 +701,8 @@ namespace
 
         D3D12StageBGRAUpload(state, ctx);
 
-        ID3D12GraphicsCommandList* cmd = AcquireUnityD3D12CommandList();
+        D3D12CommandContext ctxWrapper = AcquireD3D12CommandContext();
+        ID3D12GraphicsCommandList* cmd = ctxWrapper.cmd;
         if (cmd == nullptr)
         {
             return;
@@ -662,6 +748,7 @@ namespace
         }
 
         state->d3d12UploadWriteIdx = (state->d3d12UploadWriteIdx + 1) % state->d3d12UploadSlotCount;
+        SubmitD3D12CommandContext(ctxWrapper);
 #endif
     }
 
@@ -1211,6 +1298,7 @@ extern "C"
 #if defined(_WIN32)
         gD3D12Queue = nullptr;
         gD3D12Device = nullptr;
+        ReleaseOwnedD3D12CommandList();
         if (gD3DContext)
         {
             gD3DContext->Release();
@@ -1310,6 +1398,7 @@ extern "C"
 #if defined(_WIN32)
                     gD3D12Queue = nullptr;
                     gD3D12Device = nullptr;
+                    ReleaseOwnedD3D12CommandList();
 #endif
                     break;
                 case Renderer::D3D11:
