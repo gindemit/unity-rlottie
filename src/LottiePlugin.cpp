@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -71,30 +72,45 @@ static inline void ProfEnd(const UnityProfilerMarkerDesc* d)
 // Global log level (default: Warning)
 static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_WARNING);
 
-static inline void LottieLogInfo(lottie_animation_wrapper* animation, const char* message)
+static inline void LottieLogInfo(lottie_animation_wrapper* animation, const char* format, ...)
 {
     LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
     if (level >= LOTTIE_LOG_INFO && sLog)
     {
-        UNITY_LOG(sLog, message);
+        char buffer[512];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+        UNITY_LOG(sLog, buffer);
     }
 }
 
-static inline void LottieLogWarning(lottie_animation_wrapper* animation, const char* message)
+static inline void LottieLogWarning(lottie_animation_wrapper* animation, const char* format, ...)
 {
     LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
     if (level >= LOTTIE_LOG_WARNING && sLog)
     {
-        UNITY_LOG_WARNING(sLog, message);
+        char buffer[512];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+        UNITY_LOG_WARNING(sLog, buffer);
     }
 }
 
-static inline void LottieLogError(lottie_animation_wrapper* animation, const char* message)
+static inline void LottieLogError(lottie_animation_wrapper* animation, const char* format, ...)
 {
     LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
     if (level >= LOTTIE_LOG_ERROR && sLog)
     {
-        UNITY_LOG_ERROR(sLog, message);
+        char buffer[512];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+        UNITY_LOG_ERROR(sLog, buffer);
     }
 }
 #else
@@ -111,9 +127,9 @@ static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 // WebGL stubs for logging
 static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_WARNING);
 
-static inline void LottieLogInfo(lottie_animation_wrapper*, const char*) {}
-static inline void LottieLogWarning(lottie_animation_wrapper*, const char*) {}
-static inline void LottieLogError(lottie_animation_wrapper*, const char*) {}
+static inline void LottieLogInfo(lottie_animation_wrapper*, const char*, ...) {}
+static inline void LottieLogWarning(lottie_animation_wrapper*, const char*, ...) {}
+static inline void LottieLogError(lottie_animation_wrapper*, const char*, ...) {}
 #endif
 
 #if defined(__APPLE__)
@@ -1041,7 +1057,10 @@ namespace
         animation_wrapper->height = height;
         animation_wrapper->animation = std::move(animation);
         animation_wrapper->logLevel = sGlobalLogLevel.load();
-        LottieLogInfo(animation_wrapper, "[Lottie] Created animation wrapper: width=%d, height=%d, fps=%.2f, frames=%d, duration=%.2fs");
+        LottieLogInfo(animation_wrapper, "[Lottie] Created animation wrapper: width=%lld, height=%lld, fps=%.2f, frames=%lld, duration=%.2fs",
+                     (long long)animation_wrapper->width, (long long)animation_wrapper->height,
+                     animation_wrapper->frameRate, (long long)animation_wrapper->totalFrame,
+                     animation_wrapper->duration);
         return animation_wrapper;
     }
 }
@@ -1053,7 +1072,9 @@ extern "C"
         const char* resource_path,
         lottie_animation_wrapper** animation_wrapper)
     {
-        LottieLogInfo(nullptr, "[Lottie] Loading animation from data, resource_path=%s");
+        const char* path_display = (resource_path == nullptr) ? "(null)" : 
+                                    (resource_path[0] == '\0') ? "(empty)" : resource_path;
+        LottieLogInfo(nullptr, "[Lottie] Loading animation from data, resource_path='%s'", path_display);
         const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
         auto animation = rlottie::Animation::loadFromData(std::string(json_data), std::string(resource_path), null_func);
         if (!animation)
@@ -1071,7 +1092,7 @@ extern "C"
         const char* file_path,
         lottie_animation_wrapper** animation_wrapper)
     {
-        LottieLogInfo(nullptr, "[Lottie] Loading animation from file: %s");
+        LottieLogInfo(nullptr, "[Lottie] Loading animation from file: %s", file_path ? file_path : "(null)");
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
 
         if (!animation)
@@ -1275,14 +1296,14 @@ extern "C"
     EXPORT_API int32_t lottie_set_global_log_level(LottieLogLevel log_level)
     {
         sGlobalLogLevel.store(log_level);
-        LottieLogInfo(nullptr, "[Lottie] Global log level changed");
+        LottieLogInfo(nullptr, "[Lottie] Global log level changed to %d", (int)log_level);
         return 0;
     }
 
 #if !defined(__EMSCRIPTEN__)
     EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
     {
-        LottieLogInfo(animation, "[Lottie] Creating texture: width=%d, height=%d");
+        LottieLogInfo(animation, "[Lottie] Creating texture: width=%d, height=%d", width, height);
         InstanceState* state = GetState(animation);
         if (!EnsureTexture(animation, state, width, height))
         {
