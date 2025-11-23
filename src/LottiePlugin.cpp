@@ -989,13 +989,19 @@ namespace
 #endif
                 break;
             case Renderer::D3D11:
+#if defined(_WIN32)
                 UploadD3D11(state, ctx);
+#endif
                 break;
             case Renderer::Metal:
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
                 UploadMetal(state, ctx);
+#endif
                 break;
             case Renderer::OpenGL:
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
                 UploadOpenGL(state, ctx);
+#endif
                 break;
             case Renderer::Unknown:
             default:
@@ -1140,7 +1146,6 @@ extern "C"
             std::swap(gPendingUploads, filtered);
         }
 #endif
-        lottie_animation_wrapper* wrapper_to_delete = *animation_wrapper;
         delete (*animation_wrapper);
         *animation_wrapper = nullptr;
         LottieLogInfo(nullptr, "[Lottie] Animation wrapper disposed successfully");
