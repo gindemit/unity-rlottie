@@ -4,6 +4,14 @@ using UnityEngine;
 
 namespace LottiePlugin
 {
+    public enum LottieLogLevel
+    {
+        None = 0,
+        Error = 1,
+        Warning = 2,
+        Info = 3
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct LottieAnimationWrapper
     {
@@ -121,6 +129,13 @@ namespace LottiePlugin
             [MarshalAs(UnmanagedType.LPStr)] string logDirectoryPath,
             [MarshalAs(UnmanagedType.LPStr)] string logFileName,
             int logFileRollSizeMB);
+        
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_set_log_level")]
+        internal static extern int LottieSetLogLevel(
+            IntPtr animationWrapper,
+            LottieLogLevel logLevel);
 
         internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)
         {

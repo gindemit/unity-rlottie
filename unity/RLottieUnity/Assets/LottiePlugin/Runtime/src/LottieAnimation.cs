@@ -15,6 +15,7 @@ namespace LottiePlugin
         public int ResolutionDivider { get; set; } = 1;
         public bool PauseIfCulled { get; set; } = true;
         public Func<bool> VisibilityEvaluator { get; set; }
+        public LottieLogLevel LogLevel { get; set; } = LottieLogLevel.Warning;
     }
 
     public sealed class LottieAnimation : IDisposable
@@ -53,6 +54,21 @@ namespace LottiePlugin
             get => _visibilityEvaluator;
             set => _visibilityEvaluator = value;
         }
+        public LottieLogLevel LogLevel
+        {
+            get => _logLevel;
+            set
+            {
+                if (_logLevel != value)
+                {
+                    _logLevel = value;
+                    if (_animationWrapperIntPtr != IntPtr.Zero)
+                    {
+                        NativeBridge.LottieSetLogLevel(_animationWrapperIntPtr, _logLevel);
+                    }
+                }
+            }
+        }
 
         private IntPtr _animationWrapperIntPtr;
         private LottieAnimationWrapper _animationWrapper;
@@ -69,6 +85,7 @@ namespace LottiePlugin
         private Func<bool> _visibilityEvaluator;
         private bool _asyncDrawWasCalled;
         private bool _disposed;
+        private LottieLogLevel _logLevel = LottieLogLevel.Warning;
 
         private Action<int> DrawOneFrameCached;
         private Action<int> DrawOneFrameAsyncPrepareCached;
@@ -125,6 +142,11 @@ namespace LottiePlugin
             _targetFps = Mathf.Max(1, options.TargetFps);
             PauseIfCulled = options.PauseIfCulled;
             _visibilityEvaluator = options.VisibilityEvaluator;
+            _logLevel = options.LogLevel;
+            if (_animationWrapperIntPtr != IntPtr.Zero)
+            {
+                NativeBridge.LottieSetLogLevel(_animationWrapperIntPtr, _logLevel);
+            }
             UpdateFrameDelta();
         }
 

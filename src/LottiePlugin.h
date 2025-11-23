@@ -33,6 +33,14 @@
 #endif
 // --------------------------------------------------------------------------
 
+// Log level enum matching industry standards
+typedef enum {
+    LOTTIE_LOG_NONE = 0,
+    LOTTIE_LOG_ERROR = 1,
+    LOTTIE_LOG_WARNING = 2,
+    LOTTIE_LOG_INFO = 3
+} LottieLogLevel;
+
 typedef struct lottie_animation_wrapper {
     lottie_animation_wrapper *self;
     std::unique_ptr<rlottie::Animation> animation;
@@ -41,6 +49,7 @@ typedef struct lottie_animation_wrapper {
     double duration;
     int64_t width;
     int64_t height;
+    LottieLogLevel logLevel;
 } lottie_animation_wrapper;
 
 typedef struct lottie_render_data {
@@ -88,6 +97,10 @@ extern "C" {
         const char* log_dir_path,
         const char* log_file_name,
         int32_t log_file_roll_size_mb);
+    
+    EXPORT_API int32_t lottie_set_log_level(
+        lottie_animation_wrapper* animation_wrapper,
+        LottieLogLevel log_level);
 
     // Match Unity's expected render-event callback signature. Now that
     // UNITY_INTERFACE_API is guaranteed to be defined, this typedef parses cleanly

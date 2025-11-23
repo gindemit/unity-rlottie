@@ -37,6 +37,7 @@ namespace LottiePlugin.UI
         [SerializeField] private int _targetFps = 30;
         [SerializeField] private int _resolutionDivider = 1;
         [SerializeField] private bool _pauseIfCulled = true;
+        [SerializeField] private LottieLogLevel _logLevel = LottieLogLevel.Warning;
 
         private LottieAnimation _lottieAnimation;
         private Coroutine _renderLottieAnimationCoroutine;
@@ -200,6 +201,7 @@ namespace LottiePlugin.UI
                 TargetFps = Mathf.Max(1, _targetFps),
                 ResolutionDivider = Mathf.Max(1, _resolutionDivider),
                 PauseIfCulled = _pauseIfCulled,
+                LogLevel = _logLevel,
                 VisibilityEvaluator = () =>
                 {
                     if (_rawImage == null)
