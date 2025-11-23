@@ -206,8 +206,6 @@ namespace
 
 #endif // !defined(__EMSCRIPTEN__)
 
-    lottie_animation_wrapper* gBoundAnimation = nullptr;
-
     enum class Renderer
     {
         Unknown,
@@ -262,21 +260,21 @@ namespace
         {
             case kUnityGfxRendererD3D11:
                 result = Renderer::D3D11;
-                LottieLogInfo(gBoundAnimation, "[Lottie] Graphics device type: D3D11");
+                LottieLogInfo(nullptr, "[Lottie] Graphics device type: D3D11");
                 break;
             case kUnityGfxRendererD3D12:
                 result = Renderer::D3D12;
-                LottieLogInfo(gBoundAnimation, "[Lottie] Graphics device type: D3D12");
+                LottieLogInfo(nullptr, "[Lottie] Graphics device type: D3D12");
                 break;
             case kUnityGfxRendererOpenGL:
             case kUnityGfxRendererOpenGLES20:
             case kUnityGfxRendererOpenGLES30:
                 result = Renderer::OpenGL;
-                LottieLogInfo(gBoundAnimation, "[Lottie] Graphics device type: OpenGL/GLES");
+                LottieLogInfo(nullptr, "[Lottie] Graphics device type: OpenGL/GLES");
                 break;
             case kUnityGfxRendererMetal:
                 result = Renderer::Metal;
-                LottieLogInfo(gBoundAnimation, "[Lottie] Graphics device type: Metal");
+                LottieLogInfo(nullptr, "[Lottie] Graphics device type: Metal");
                 break;
             default:
                 result = Renderer::Unknown;
@@ -298,31 +296,31 @@ namespace
         auto it = gInstances.find(animation);
         if (it != gInstances.end())
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] Found existing instance state");
+            LottieLogInfo(animation, "[Lottie] Found existing instance state");
             return it->second.get();
         }
 
         if (!create)
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] Instance state not found, create=false");
+            LottieLogInfo(animation, "[Lottie] Instance state not found, create=false");
             return nullptr;
         }
 
         auto instance = std::make_unique<InstanceState>();
         InstanceState* raw = instance.get();
         gInstances.emplace(animation, std::move(instance));
-        LottieLogInfo(gBoundAnimation, "[Lottie] Created new instance state");
+        LottieLogInfo(animation, "[Lottie] Created new instance state");
         return raw;
     }
 
-    void ResetTextureState(InstanceState* state)
+    void ResetTextureState(lottie_animation_wrapper* animation, InstanceState* state)
     {
         if (state == nullptr)
         {
-            LottieLogWarning(nullptr, "[Lottie] ResetTextureState called with null state");
+            LottieLogWarning(animation, "[Lottie] ResetTextureState called with null state");
             return;
         }
-        LottieLogInfo(gBoundAnimation, "[Lottie] Resetting texture state");
+        LottieLogInfo(animation, "[Lottie] Resetting texture state");
 
 #if defined(_WIN32)
         if (state->d3d12Upload)
@@ -369,22 +367,22 @@ namespace
         state->uploadQueued.store(false, std::memory_order_release);
     }
 
-    bool EnsureTexture(InstanceState* state, int width, int height)
+    bool EnsureTexture(lottie_animation_wrapper* animation, InstanceState* state, int width, int height)
     {
         if (state == nullptr || width <= 0 || height <= 0)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] EnsureTexture: invalid parameters");
+            LottieLogWarning(animation, "[Lottie] EnsureTexture: invalid parameters");
             return false;
         }
 
         if (state->texW == width && state->texH == height && state->nativeTex != nullptr)
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] EnsureTexture: texture already exists with matching dimensions");
+            LottieLogInfo(animation, "[Lottie] EnsureTexture: texture already exists with matching dimensions");
             return true;
         }
 
-        LottieLogInfo(gBoundAnimation, "[Lottie] EnsureTexture: creating new texture %dx%d");
-        ResetTextureState(state);
+        LottieLogInfo(animation, "[Lottie] EnsureTexture: creating new texture %dx%d");
+        ResetTextureState(animation, state);
 
         switch (gRenderer)
         {
@@ -393,7 +391,7 @@ namespace
             {
                 if (!gD3D12Device)
                 {
-                    LottieLogError(gBoundAnimation, "[Lottie] D3D12 device is null");
+                    LottieLogError(animation, "[Lottie] D3D12 device is null");
                     return false;
                 }
 
@@ -425,7 +423,7 @@ namespace
                 {
                     char errorMsg[256];
                     snprintf(errorMsg, sizeof(errorMsg), "[Lottie] Failed to create D3D12 texture resource. HRESULT: 0x%08X", hr);
-                    LottieLogError(gBoundAnimation, errorMsg);
+                    LottieLogError(animation, errorMsg);
                     if (texture)
                     {
                         texture->Release();
@@ -471,7 +469,7 @@ namespace
                       errorMsg,
                       sizeof(errorMsg),
                       "[Lottie] Failed to create D3D12 upload buffer. HRESULT: 0x%08X, uploadBytes: %llu", hr, static_cast<unsigned long long>(uploadBytes));
-                    LottieLogError(gBoundAnimation, errorMsg);
+                    LottieLogError(animation, errorMsg);
 
                     if (upload)
                     {
@@ -489,7 +487,7 @@ namespace
                 {
                     char errorMsg[256];
                     snprintf(errorMsg, sizeof(errorMsg), "[Lottie] Failed to map D3D12 upload buffer. HRESULT: 0x%08X", hr);
-                    LottieLogError(gBoundAnimation, errorMsg);
+                    LottieLogError(animation, errorMsg);
                     upload->Release();
                     texture->Release();
                     state->d3d12Footprint = {};
@@ -505,7 +503,7 @@ namespace
                 state->nativeTex = texture;
                 state->texW = width;
                 state->texH = height;
-                LottieLogInfo(gBoundAnimation, "[Lottie] D3D12 texture created successfully");
+                LottieLogInfo(animation, "[Lottie] D3D12 texture created successfully");
                 return true;
             }
 #else
@@ -516,7 +514,7 @@ namespace
             {
                 if (gD3DDevice == nullptr)
                 {
-                    LottieLogError(gBoundAnimation, "[Lottie] D3D11 device is null");
+                    LottieLogError(animation, "[Lottie] D3D11 device is null");
                     return false;
                 }
 
@@ -535,7 +533,7 @@ namespace
                 HRESULT hr = gD3DDevice->CreateTexture2D(&desc, nullptr, &texture);
                 if (FAILED(hr) || texture == nullptr)
                 {
-                    LottieLogError(gBoundAnimation, "[Lottie] Failed to create D3D11 texture");
+                    LottieLogError(animation, "[Lottie] Failed to create D3D11 texture");
                     if (texture != nullptr)
                     {
                         texture->Release();
@@ -547,7 +545,7 @@ namespace
                 state->nativeTex = texture;
                 state->texW = width;
                 state->texH = height;
-                LottieLogInfo(gBoundAnimation, "[Lottie] D3D11 texture created successfully");
+                LottieLogInfo(animation, "[Lottie] D3D11 texture created successfully");
                 return true;
             }
 #else
@@ -558,7 +556,7 @@ namespace
             {
                 if (gMetalDevice == nil)
                 {
-                    LottieLogError(gBoundAnimation, "[Lottie] Metal device is nil");
+                    LottieLogError(animation, "[Lottie] Metal device is nil");
                     return false;
                 }
 
@@ -572,7 +570,7 @@ namespace
                 id<MTLTexture> texture = [gMetalDevice newTextureWithDescriptor:descriptor];
                 if (texture == nil)
                 {
-                    LottieLogError(gBoundAnimation, "[Lottie] Failed to create Metal texture");
+                    LottieLogError(animation, "[Lottie] Failed to create Metal texture");
                     return false;
                 }
 
@@ -580,7 +578,7 @@ namespace
                 state->nativeTex = (__bridge void*)texture;
                 state->texW = width;
                 state->texH = height;
-                LottieLogInfo(gBoundAnimation, "[Lottie] Metal texture created successfully");
+                LottieLogInfo(animation, "[Lottie] Metal texture created successfully");
                 return true;
             }
 #else
@@ -595,7 +593,7 @@ namespace
                 }
                 if (state->glTex == 0)
                 {
-                    LottieLogError(gBoundAnimation, "[Lottie] Failed to generate OpenGL texture");
+                    LottieLogError(animation, "[Lottie] Failed to generate OpenGL texture");
                     return false;
                 }
                 glBindTexture(GL_TEXTURE_2D, state->glTex);
@@ -617,7 +615,7 @@ namespace
                 state->nativeTex = reinterpret_cast<void*>(static_cast<uintptr_t>(state->glTex));
                 state->texW = width;
                 state->texH = height;
-                LottieLogInfo(gBoundAnimation, "[Lottie] OpenGL texture created successfully");
+                LottieLogInfo(animation, "[Lottie] OpenGL texture created successfully");
                 return true;
             }
 #else
@@ -625,7 +623,7 @@ namespace
 #endif
             case Renderer::Unknown:
             default:
-                LottieLogError(gBoundAnimation, "[Lottie] EnsureTexture: Unknown or unsupported renderer");
+                LottieLogError(animation, "[Lottie] EnsureTexture: Unknown or unsupported renderer");
                 return false;
         }
     }
@@ -924,21 +922,21 @@ namespace
     {
         if (animation == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] PerformUploadFor: animation is null");
+            LottieLogWarning(nullptr, "[Lottie] PerformUploadFor: animation is null");
             return;
         }
 
         InstanceState* state = GetState(animation, /*create=*/false);
         if (state == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] PerformUploadFor: state is null");
+            LottieLogWarning(animation, "[Lottie] PerformUploadFor: state is null");
             return;
         }
 
         const uint64_t requested = state->requestedVersion.load(std::memory_order_acquire);
         if (requested == 0 || requested == state->uploadedVersion)
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] PerformUploadFor: no new data to upload");
+            LottieLogInfo(animation, "[Lottie] PerformUploadFor: no new data to upload");
             state->uploadQueued.store(false, std::memory_order_release);
             return;
         }
@@ -951,19 +949,19 @@ namespace
 
         if (ctx.data == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] PerformUploadFor: upload context data is null");
+            LottieLogWarning(animation, "[Lottie] PerformUploadFor: upload context data is null");
             state->uploadQueued.store(false, std::memory_order_release);
             return;
         }
 
-        if (!EnsureTexture(state, static_cast<int>(ctx.width), static_cast<int>(ctx.height)))
+        if (!EnsureTexture(animation, state, static_cast<int>(ctx.width), static_cast<int>(ctx.height)))
         {
-            LottieLogError(gBoundAnimation, "[Lottie] PerformUploadFor: EnsureTexture failed");
+            LottieLogError(animation, "[Lottie] PerformUploadFor: EnsureTexture failed");
             state->uploadQueued.store(false, std::memory_order_release);
             return;
         }
 
-        LottieLogInfo(gBoundAnimation, "[Lottie] PerformUploadFor: uploading texture data");
+        LottieLogInfo(animation, "[Lottie] PerformUploadFor: uploading texture data");
         switch (gRenderer)
         {
             case Renderer::D3D12:
@@ -987,21 +985,21 @@ namespace
 
         state->uploadedVersion = requested;
         state->uploadQueued.store(false, std::memory_order_release);
-        LottieLogInfo(gBoundAnimation, "[Lottie] PerformUploadFor: upload completed successfully");
+        LottieLogInfo(animation, "[Lottie] PerformUploadFor: upload completed successfully");
     }
 
     void PublishUpload(lottie_animation_wrapper* animation, const lottie_render_data* render_data)
     {
         if (animation == nullptr || render_data == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] PublishUpload: null animation or render_data");
+            LottieLogWarning(animation, "[Lottie] PublishUpload: null animation or render_data");
             return;
         }
 
         InstanceState* state = GetState(animation);
         if (state == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] PublishUpload: could not get state");
+            LottieLogWarning(animation, "[Lottie] PublishUpload: could not get state");
             return;
         }
 
@@ -1017,7 +1015,7 @@ namespace
         }
 
         state->uploadVersion.fetch_add(1, std::memory_order_release);
-        LottieLogInfo(gBoundAnimation, "[Lottie] PublishUpload: upload published, version incremented");
+        LottieLogInfo(animation, "[Lottie] PublishUpload: upload published, version incremented");
     }
 #endif // !__EMSCRIPTEN__
 
@@ -1028,7 +1026,7 @@ namespace
         if (animation_wrapper == nullptr)
         {
             fprintf(stderr, "Couldnt allocate lottie_animation_wrapper!");
-            LottieLogError(gBoundAnimation, "[Lottie] Failed to allocate lottie_animation_wrapper");
+            LottieLogError(nullptr, "[Lottie] Failed to allocate lottie_animation_wrapper");
             return nullptr;
         }
 
@@ -1043,7 +1041,7 @@ namespace
         animation_wrapper->height = height;
         animation_wrapper->animation = std::move(animation);
         animation_wrapper->logLevel = sGlobalLogLevel.load();
-        LottieLogInfo(gBoundAnimation, "[Lottie] Created animation wrapper: width=%d, height=%d, fps=%.2f, frames=%d, duration=%.2fs");
+        LottieLogInfo(animation_wrapper, "[Lottie] Created animation wrapper: width=%d, height=%d, fps=%.2f, frames=%d, duration=%.2fs");
         return animation_wrapper;
     }
 }
@@ -1055,17 +1053,17 @@ extern "C"
         const char* resource_path,
         lottie_animation_wrapper** animation_wrapper)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Loading animation from data, resource_path=%s");
+        LottieLogInfo(nullptr, "[Lottie] Loading animation from data, resource_path=%s");
         const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
         auto animation = rlottie::Animation::loadFromData(std::string(json_data), std::string(resource_path), null_func);
         if (!animation)
         {
             fprintf(stderr, "Couldnt load from data '%s'.", resource_path);
-            LottieLogError(gBoundAnimation, "[Lottie] Failed to load animation from data");
+            LottieLogError(nullptr, "[Lottie] Failed to load animation from data");
             return -1;
         }
         *animation_wrapper = create_animation_wrapper(animation);
-        LottieLogInfo(gBoundAnimation, "[Lottie] Successfully loaded animation from data");
+        LottieLogInfo(*animation_wrapper, "[Lottie] Successfully loaded animation from data");
         return *animation_wrapper == nullptr ? -1 : 0;
     }
 
@@ -1073,24 +1071,24 @@ extern "C"
         const char* file_path,
         lottie_animation_wrapper** animation_wrapper)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Loading animation from file: %s");
+        LottieLogInfo(nullptr, "[Lottie] Loading animation from file: %s");
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
 
         if (!animation)
         {
             fprintf(stderr, "Couldnt load from file '%s'.", file_path);
-            LottieLogError(gBoundAnimation, "[Lottie] Failed to load animation from file");
+            LottieLogError(nullptr, "[Lottie] Failed to load animation from file");
             return -1;
         }
 
         *animation_wrapper = create_animation_wrapper(animation);
-        LottieLogInfo(gBoundAnimation, "[Lottie] Successfully loaded animation from file");
+        LottieLogInfo(*animation_wrapper, "[Lottie] Successfully loaded animation from file");
         return 0;
     }
 
     EXPORT_API int32_t lottie_dispose_wrapper(lottie_animation_wrapper** animation_wrapper)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Disposing animation wrapper");
+        LottieLogInfo(animation_wrapper ? *animation_wrapper : nullptr, "[Lottie] Disposing animation wrapper");
 #if !defined(__EMSCRIPTEN__)
         if (animation_wrapper != nullptr && *animation_wrapper != nullptr)
         {
@@ -1099,7 +1097,7 @@ extern "C"
                 auto it = gInstances.find(*animation_wrapper);
                 if (it != gInstances.end())
                 {
-                    ResetTextureState(it->second.get());
+                    ResetTextureState(*animation_wrapper, it->second.get());
                     gInstances.erase(it);
                 }
             }
@@ -1118,9 +1116,10 @@ extern "C"
             std::swap(gPendingUploads, filtered);
         }
 #endif
+        lottie_animation_wrapper* wrapper_to_delete = *animation_wrapper;
         delete (*animation_wrapper);
         *animation_wrapper = nullptr;
-        LottieLogInfo(gBoundAnimation, "[Lottie] Animation wrapper disposed successfully");
+        LottieLogInfo(nullptr, "[Lottie] Animation wrapper disposed successfully");
         return 0;
     }
 
@@ -1130,7 +1129,7 @@ extern "C"
         uint32_t frame_number,
         bool keep_aspect_ratio)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Rendering frame %d immediately");
+        LottieLogInfo(animation_wrapper, "[Lottie] Rendering frame %d immediately");
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
@@ -1140,7 +1139,7 @@ extern "C"
 #if !defined(__EMSCRIPTEN__)
         PublishUpload(animation_wrapper, render_data);
 #endif
-        LottieLogInfo(gBoundAnimation, "[Lottie] Frame rendered successfully");
+        LottieLogInfo(animation_wrapper, "[Lottie] Frame rendered successfully");
         return 0;
     }
 
@@ -1176,14 +1175,14 @@ extern "C"
         uint32_t frame_number,
         bool keep_aspect_ratio)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Creating async render future for frame %d");
+        LottieLogInfo(animation_wrapper, "[Lottie] Creating async render future for frame %d");
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
             render_data->height,
             render_data->bytesPerLine);
         render_data->render_future = animation_wrapper->animation->render(frame_number, surface, keep_aspect_ratio);
-        LottieLogInfo(gBoundAnimation, "[Lottie] Async render future created");
+        LottieLogInfo(animation_wrapper, "[Lottie] Async render future created");
         return 0;
     }
 
@@ -1194,7 +1193,7 @@ extern "C"
     {
         if (render_data == nullptr || ready == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] try_get_future_result called with null parameters");
+            LottieLogWarning(animation_wrapper, "[Lottie] try_get_future_result called with null parameters");
             return -1;
         }
 
@@ -1206,7 +1205,7 @@ extern "C"
             return 0;
         }
 
-        LottieLogInfo(gBoundAnimation, "[Lottie] Render future ready, getting result");
+        LottieLogInfo(animation_wrapper, "[Lottie] Render future ready, getting result");
         render_data->render_future.get();
 
         ProfBegin(sMkPublish);
@@ -1214,7 +1213,7 @@ extern "C"
         ProfEnd(sMkPublish);
 
         *ready = 1;
-        LottieLogInfo(gBoundAnimation, "[Lottie] Future result retrieved and published");
+        LottieLogInfo(animation_wrapper, "[Lottie] Future result retrieved and published");
         return 0;
     }
 
@@ -1222,7 +1221,7 @@ extern "C"
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Waiting for render future result");
+        LottieLogInfo(animation_wrapper, "[Lottie] Waiting for render future result");
         ProfBegin(sMkGetResult);
         render_data->render_future.get();
         ProfEnd(sMkGetResult);
@@ -1230,28 +1229,28 @@ extern "C"
         ProfBegin(sMkPublish);
         PublishUpload(animation_wrapper, render_data);
         ProfEnd(sMkPublish);
-        LottieLogInfo(gBoundAnimation, "[Lottie] Future result retrieved and uploaded");
+        LottieLogInfo(animation_wrapper, "[Lottie] Future result retrieved and uploaded");
         return 0;
     }
 #endif
 
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Allocating render data");
+        LottieLogInfo(nullptr, "[Lottie] Allocating render data");
         *render_data = new lottie_render_data();
         if (*render_data == nullptr)
         {
             fprintf(stderr, "Couldnt allocate lottie_render_data!");
-            LottieLogError(gBoundAnimation, "[Lottie] Failed to allocate render data");
+            LottieLogError(nullptr, "[Lottie] Failed to allocate render data");
             return -1;
         }
-        LottieLogInfo(gBoundAnimation, "[Lottie] Render data allocated successfully");
+        LottieLogInfo(nullptr, "[Lottie] Render data allocated successfully");
         return 0;
     }
 
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Disposing render data");
+        LottieLogInfo(nullptr, "[Lottie] Disposing render data");
         delete (*render_data);
         *render_data = nullptr;
         return 0;
@@ -1274,59 +1273,44 @@ extern "C"
     }
 
 #if !defined(__EMSCRIPTEN__)
-    EXPORT_API void* lottie_create_texture(int width, int height)
+    EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Creating texture: width=%d, height=%d");
-        InstanceState* state = GetState(gBoundAnimation);
-        if (!EnsureTexture(state, width, height))
+        LottieLogInfo(animation, "[Lottie] Creating texture: width=%d, height=%d");
+        InstanceState* state = GetState(animation);
+        if (!EnsureTexture(animation, state, width, height))
         {
-            LottieLogError(gBoundAnimation, "[Lottie] Failed to ensure texture");
+            LottieLogError(animation, "[Lottie] Failed to ensure texture");
             return nullptr;
         }
-        LottieLogInfo(gBoundAnimation, "[Lottie] Texture created successfully");
+        LottieLogInfo(animation, "[Lottie] Texture created successfully");
         return state != nullptr ? state->nativeTex : nullptr;
     }
 
-    EXPORT_API void lottie_destroy_texture(void* /*tex*/)
+    EXPORT_API void lottie_destroy_texture(lottie_animation_wrapper* animation, void* /*tex*/)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Destroying texture");
-        InstanceState* state = GetState(gBoundAnimation, /*create=*/false);
-        ResetTextureState(state);
+        LottieLogInfo(animation, "[Lottie] Destroying texture");
+        InstanceState* state = GetState(animation, /*create=*/false);
+        ResetTextureState(animation, state);
     }
 
-    EXPORT_API void* lottie_get_native_texture_ptr(void)
+    EXPORT_API void* lottie_get_native_texture_ptr(lottie_animation_wrapper* animation)
     {
-        InstanceState* state = GetState(gBoundAnimation, /*create=*/false);
+        InstanceState* state = GetState(animation, /*create=*/false);
         return state != nullptr ? state->nativeTex : nullptr;
     }
 
-    EXPORT_API int lottie_bind_lottie_instance(lottie_animation_wrapper* animation_wrapper)
+    EXPORT_API void lottie_update_texture(lottie_animation_wrapper* animation)
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Binding lottie instance");
-        gBoundAnimation = animation_wrapper;
-        if (gBoundAnimation == nullptr)
-        {
-            LottieLogWarning(gBoundAnimation, "[Lottie] Bound animation is null");
-            return 0;
-        }
-        bool success = GetState(gBoundAnimation) != nullptr;
-        LottieLogInfo(gBoundAnimation, "[Lottie] Lottie instance bound successfully");
-        return success ? 1 : 0;
-    }
-
-    EXPORT_API void lottie_update_texture(void)
-    {
-        lottie_animation_wrapper* animation = gBoundAnimation;
         if (animation == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] update_texture: no bound animation");
+            LottieLogWarning(nullptr, "[Lottie] update_texture: animation is null");
             return;
         }
 
         InstanceState* state = GetState(animation, /*create=*/false);
         if (state == nullptr)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] update_texture: no instance state");
+            LottieLogWarning(animation, "[Lottie] update_texture: no instance state");
             return;
         }
 
@@ -1340,10 +1324,10 @@ extern "C"
         const bool enqueue = !state->uploadQueued.exchange(true, std::memory_order_acq_rel);
         if (!enqueue)
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] Upload already queued, skipping");
+            LottieLogInfo(animation, "[Lottie] Upload already queued, skipping");
             return;
         }
-        LottieLogInfo(gBoundAnimation, "[Lottie] Queueing texture upload");
+        LottieLogInfo(animation, "[Lottie] Queueing texture upload");
 
         lottie_animation_wrapper* dropped = nullptr;
         {
@@ -1359,7 +1343,7 @@ extern "C"
 
         if (dropped != nullptr && dropped != animation)
         {
-            LottieLogWarning(gBoundAnimation, "[Lottie] Upload queue full, dropping oldest upload");
+            LottieLogWarning(dropped, "[Lottie] Upload queue full, dropping oldest upload");
             InstanceState* droppedState = GetState(dropped, /*create=*/false);
             if (droppedState != nullptr)
             {
@@ -1382,7 +1366,7 @@ extern "C"
 
         if (animation != nullptr)
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] Performing GPU upload on render thread");
+            LottieLogInfo(animation, "[Lottie] Performing GPU upload on render thread");
             ProfBegin(sMkUpload);
             PerformUploadFor(animation);
             ProfEnd(sMkUpload);
@@ -1398,7 +1382,7 @@ extern "C"
     {
 #if !defined(__EMSCRIPTEN__)
         sLog = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityLog>() : nullptr;
-        LottieLogInfo(gBoundAnimation, "[Lottie] Plugin loading...");
+        LottieLogInfo(nullptr, "[Lottie] Plugin loading...");
         sProfiler = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityProfiler>() : nullptr;
         if (sProfiler != nullptr && sProfiler->IsAvailable())
         {
@@ -1428,7 +1412,7 @@ extern "C"
                 }
             }
         }
-        LottieLogInfo(gBoundAnimation, "[Lottie] Plugin loaded successfully");
+        LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully");
 #endif
 #else
         (void)unityInterfaces;
@@ -1437,8 +1421,7 @@ extern "C"
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
     {
-        LottieLogInfo(gBoundAnimation, "[Lottie] Plugin unloading...");
-        gBoundAnimation = nullptr;
+        LottieLogInfo(nullptr, "[Lottie] Plugin unloading...");
         gDevice = nullptr;
         gRenderer = Renderer::Unknown;
 #if defined(_WIN32)
@@ -1459,7 +1442,7 @@ extern "C"
         std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
         for (auto& entry : gInstances)
         {
-            ResetTextureState(entry.second.get());
+            ResetTextureState(entry.first, entry.second.get());
         }
         gInstances.clear();
 
@@ -1481,7 +1464,7 @@ extern "C"
         sD3D12v6 = nullptr;
         sD3D12v5 = nullptr;
 #    endif
-        LottieLogInfo(gBoundAnimation, "[Lottie] Plugin unloaded successfully");
+        LottieLogInfo(nullptr, "[Lottie] Plugin unloaded successfully");
         sLog = nullptr;
 #endif
     }
@@ -1490,7 +1473,7 @@ extern "C"
     {
         if (eventType == ::kUnityGfxDeviceEventInitialize)
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] Graphics device initializing");
+            LottieLogInfo(nullptr, "[Lottie] Graphics device initializing");
             gRenderer = ToRenderer(deviceType);
             gDevice = device;
             switch (gRenderer)
@@ -1540,7 +1523,7 @@ extern "C"
         }
         else if (eventType == ::kUnityGfxDeviceEventShutdown)
         {
-            LottieLogInfo(gBoundAnimation, "[Lottie] Graphics device shutting down");
+            LottieLogInfo(nullptr, "[Lottie] Graphics device shutting down");
             gDevice = nullptr;
             switch (gRenderer)
             {
@@ -1570,7 +1553,6 @@ extern "C"
                     break;
             }
             gRenderer = Renderer::Unknown;
-            gBoundAnimation = nullptr;
 #if defined(__ANDROID__)
             gHasBGRAExt = false;
 #endif
@@ -1578,7 +1560,7 @@ extern "C"
                 std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
                 for (auto& entry : gInstances)
                 {
-                    ResetTextureState(entry.second.get());
+                    ResetTextureState(entry.first, entry.second.get());
                 }
             }
             {

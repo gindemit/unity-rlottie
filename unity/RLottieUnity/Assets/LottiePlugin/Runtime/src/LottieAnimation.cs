@@ -210,11 +210,9 @@ namespace LottiePlugin
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
             if (_nativeTexturePtr != IntPtr.Zero)
             {
-                NativeBridge.LottieBindLottieInstance(_animationWrapperIntPtr);
-                NativeBridge.LottieDestroyTexture(_nativeTexturePtr);
+                NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
                 _nativeTexturePtr = IntPtr.Zero;
             }
-            NativeBridge.LottieBindLottieInstance(IntPtr.Zero);
 #endif
 
             if (_lottieRenderDataIntPtr != IntPtr.Zero)
@@ -343,8 +341,7 @@ namespace LottiePlugin
             _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             _ownsPixelData = true;
             _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-            NativeBridge.LottieBindLottieInstance(_animationWrapperIntPtr);
-            _nativeTexturePtr = NativeBridge.LottieCreateTexture((int)width, (int)height);
+            _nativeTexturePtr = NativeBridge.LottieCreateTexture(_animationWrapperIntPtr, (int)width, (int)height);
             
             if (_nativeTexturePtr == IntPtr.Zero)
             {
@@ -414,9 +411,7 @@ namespace LottiePlugin
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
         private void RequestTextureUpload()
         {
-            NativeBridge.LottieBindLottieInstance(_animationWrapperIntPtr);
-
-            IntPtr currentPtr = NativeBridge.LottieGetNativeTexturePtr();
+            IntPtr currentPtr = NativeBridge.LottieGetNativeTexturePtr(_animationWrapperIntPtr);
             if (currentPtr != _nativeTexturePtr)
             {
                 if (currentPtr != IntPtr.Zero)
@@ -429,7 +424,7 @@ namespace LottiePlugin
                     _nativeTexturePtr = IntPtr.Zero;
                 }
             }
-            NativeBridge.LottieUpdateTexture();
+            NativeBridge.LottieUpdateTexture(_animationWrapperIntPtr);
         }
 #endif
 
