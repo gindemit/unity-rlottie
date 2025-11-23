@@ -893,6 +893,8 @@ namespace
 #endif
     }
 
+#endif // _WIN32
+
     void UploadMetal(InstanceState* state, const UploadContext& ctx)
     {
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
@@ -934,6 +936,7 @@ namespace
 #endif
     }
 
+#if !defined(__EMSCRIPTEN__)
     void PerformUploadFor(lottie_animation_wrapper* animation)
     {
         if (animation == nullptr)
