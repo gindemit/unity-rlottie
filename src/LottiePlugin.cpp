@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -361,15 +362,23 @@ namespace
 
                 D3D12_RESOURCE_DESC texDesc{};
                 texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+                texDesc.Alignment = 0;
                 texDesc.Width = static_cast<UINT64>(width);
                 texDesc.Height = static_cast<UINT>(height);
                 texDesc.DepthOrArraySize = 1;
                 texDesc.MipLevels = 1;
                 texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
                 texDesc.SampleDesc.Count = 1;
+                texDesc.SampleDesc.Quality = 0;
                 texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+                texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
                 D3D12_HEAP_PROPERTIES heapDefault{ D3D12_HEAP_TYPE_DEFAULT };
+                heapDefault.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+                heapDefault.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+                heapDefault.CreationNodeMask = 1;
+                heapDefault.VisibleNodeMask = 1;
+                
                 ID3D12Resource* texture = nullptr;
                 HRESULT hr = gD3D12Device->CreateCommittedResource(
                     &heapDefault, D3D12_HEAP_FLAG_NONE, &texDesc,
@@ -377,7 +386,12 @@ namespace
                     IID_PPV_ARGS(&texture));
                 if (FAILED(hr) || !texture)
                 {
-                    if (sLog) UNITY_LOG_ERROR(sLog, "[Lottie] Failed to create D3D12 texture resource");
+                    if (sLog)
+                    {
+                        char errorMsg[256];
+                        snprintf(errorMsg, sizeof(errorMsg), "[Lottie] Failed to create D3D12 texture resource. HRESULT: 0x%08X", hr);
+                        UNITY_LOG_ERROR(sLog, errorMsg);
+                    }
                     if (texture)
                     {
                         texture->Release();
@@ -393,13 +407,23 @@ namespace
                 const UINT64 uploadBytes = totalBytes * state->d3d12UploadSlotCount;
 
                 D3D12_HEAP_PROPERTIES heapUpload{ D3D12_HEAP_TYPE_UPLOAD };
+                heapUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+                heapUpload.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+                heapUpload.CreationNodeMask = 1;
+                heapUpload.VisibleNodeMask = 1;
+                
                 D3D12_RESOURCE_DESC uploadDesc{};
                 uploadDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                uploadDesc.Alignment = 0;
                 uploadDesc.Width = uploadBytes;
                 uploadDesc.Height = 1;
                 uploadDesc.DepthOrArraySize = 1;
                 uploadDesc.MipLevels = 1;
+                uploadDesc.Format = DXGI_FORMAT_UNKNOWN;
+                uploadDesc.SampleDesc.Count = 1;
+                uploadDesc.SampleDesc.Quality = 0;
                 uploadDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+                uploadDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
                 ID3D12Resource* upload = nullptr;
                 hr = gD3D12Device->CreateCommittedResource(
@@ -408,7 +432,12 @@ namespace
                     IID_PPV_ARGS(&upload));
                 if (FAILED(hr) || !upload)
                 {
-                    if (sLog) UNITY_LOG_ERROR(sLog, "[Lottie] Failed to create D3D12 upload buffer");
+                    if (sLog)
+                    {
+                        char errorMsg[256];
+                        snprintf(errorMsg, sizeof(errorMsg), "[Lottie] Failed to create D3D12 upload buffer. HRESULT: 0x%08X, uploadBytes: %llu", hr, static_cast<unsigned long long>(uploadBytes));
+                        UNITY_LOG_ERROR(sLog, errorMsg);
+                    }
                     if (upload)
                     {
                         upload->Release();
@@ -423,7 +452,12 @@ namespace
                 hr = upload->Map(0, nullptr, &mapped);
                 if (FAILED(hr) || !mapped)
                 {
-                    if (sLog) UNITY_LOG_ERROR(sLog, "[Lottie] Failed to map D3D12 upload buffer");
+                    if (sLog)
+                    {
+                        char errorMsg[256];
+                        snprintf(errorMsg, sizeof(errorMsg), "[Lottie] Failed to map D3D12 upload buffer. HRESULT: 0x%08X", hr);
+                        UNITY_LOG_ERROR(sLog, errorMsg);
+                    }
                     upload->Release();
                     texture->Release();
                     state->d3d12Footprint = {};
