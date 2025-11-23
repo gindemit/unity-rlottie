@@ -252,6 +252,11 @@ namespace
     std::mutex gPendingUploadsMutex;
     std::queue<lottie_animation_wrapper*> gPendingUploads;
     constexpr size_t kMaxPendingUploads = 1024;
+
+    // Forward declarations for functions used within this block
+    InstanceState* GetState(lottie_animation_wrapper* animation, bool create = true);
+    void ResetTextureState(lottie_animation_wrapper* animation, InstanceState* state);
+    bool EnsureTexture(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
 #endif
 
     enum UnityGfxRenderer
@@ -300,7 +305,8 @@ namespace
         return result;
     }
 
-    InstanceState* GetState(lottie_animation_wrapper* animation, bool create = true)
+#if !defined(__EMSCRIPTEN__)
+    InstanceState* GetState(lottie_animation_wrapper* animation, bool create)
     {
         if (animation == nullptr)
         {
@@ -643,6 +649,7 @@ namespace
                 return false;
         }
     }
+#endif // !defined(__EMSCRIPTEN__)
 
 #if defined(__ANDROID__)
     void ConvertBGRAtoRGBA(std::vector<uint8_t>& buffer, const UploadContext& ctx)
