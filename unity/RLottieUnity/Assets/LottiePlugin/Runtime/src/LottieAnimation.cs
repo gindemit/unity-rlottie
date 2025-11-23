@@ -323,6 +323,12 @@ namespace LottiePlugin
             _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
             NativeBridge.LottieBindLottieInstance(_animationWrapperIntPtr);
             _nativeTexturePtr = NativeBridge.LottieCreateTexture((int)width, (int)height);
+            
+            if (_nativeTexturePtr == IntPtr.Zero)
+            {
+                throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
+            }
+            
             Texture = Texture2D.CreateExternalTexture(
                 (int)width,
                 (int)height,
