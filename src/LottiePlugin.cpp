@@ -895,9 +895,10 @@ namespace
 
 #endif // _WIN32
 
+#if !defined(__EMSCRIPTEN__)
     void UploadMetal(InstanceState* state, const UploadContext& ctx)
     {
-#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+#if defined(__APPLE__)
         if (state == nullptr || state->metalTex == nil || ctx.data == nullptr)
         {
             return;
@@ -910,7 +911,7 @@ namespace
 
     void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
     {
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__)
         if (state == nullptr || state->glTex == 0 || ctx.data == nullptr)
         {
             return;
@@ -935,6 +936,7 @@ namespace
 #    endif
 #endif
     }
+#endif // !defined(__EMSCRIPTEN__)
 
 #if !defined(__EMSCRIPTEN__)
     void PerformUploadFor(lottie_animation_wrapper* animation)
