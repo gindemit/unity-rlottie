@@ -1257,30 +1257,6 @@ extern "C"
         return 0;
     }
 
-    EXPORT_API int32_t lottie_initialize_logger(
-        const char* log_dir_path,
-        const char* log_file_name,
-        int32_t log_file_roll_size_mb)
-    {
-        fprintf(stderr, "Initializing logger (stderr)\n");
-        // print the paths
-        fprintf(stderr, "log_dir_path: %s\n", log_dir_path);
-        fprintf(stderr, "log_file_name: %s\n", log_file_name);
-        fprintf(stderr, "log_file_roll_size_mb: %d\n", log_file_roll_size_mb);
-        fprintf(stdout, "Initializing logger (stdout)\n");
-        initialize(GuaranteedLogger(), std::string(log_dir_path), std::string(log_file_name), log_file_roll_size_mb);
-        set_log_level(LogLevel::INFO);
-
-        vDebug << "Initialized logger (debug) test message";
-        vWarning << "Initialized logger (warning) test message";
-        vCritical << "Initialized logger (critical) test message";
-        // print the paths
-        vDebug << "log_dir_path: " << log_dir_path;
-        vDebug << "log_file_name: " << log_file_name;
-        vDebug << "log_file_roll_size_mb: " << log_file_roll_size_mb;
-        return 0;
-    }
-
     EXPORT_API int32_t lottie_set_log_level(
         lottie_animation_wrapper* animation_wrapper,
         LottieLogLevel log_level)
