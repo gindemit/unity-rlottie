@@ -439,6 +439,15 @@ namespace LottiePlugin
             return new LottieAnimation(jsonData, resourcesPath, width, height, options);
         }
 
+        /// <summary>
+        /// Sets the global log level for all Lottie animations. This affects animations that don't have an instance-specific log level set.
+        /// </summary>
+        /// <param name="logLevel">The global log level to set</param>
+        public static void SetGlobalLogLevel(LottieLogLevel logLevel)
+        {
+            NativeBridge.LottieSetGlobalLogLevel(logLevel);
+        }
+
         private void RegisterAliveInstance()
         {
             lock (sAliveLock)

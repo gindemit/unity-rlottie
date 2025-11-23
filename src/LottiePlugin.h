@@ -96,6 +96,8 @@ extern "C" {
     EXPORT_API int32_t lottie_set_log_level(
         lottie_animation_wrapper* animation_wrapper,
         LottieLogLevel log_level);
+    
+    EXPORT_API int32_t lottie_set_global_log_level(LottieLogLevel log_level);
 
     // Match Unity's expected render-event callback signature. Now that
     // UNITY_INTERFACE_API is guaranteed to be defined, this typedef parses cleanly

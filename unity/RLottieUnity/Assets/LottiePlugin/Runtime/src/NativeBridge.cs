@@ -126,6 +126,11 @@ namespace LottiePlugin
             IntPtr animationWrapper,
             LottieLogLevel logLevel);
 
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_set_global_log_level")]
+        internal static extern int LottieSetGlobalLogLevel(LottieLogLevel logLevel);
+
         internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)
         {
             LottieLoadFromData(filePath, resourcesPath, out animationWrapper);

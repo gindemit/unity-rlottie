@@ -1272,6 +1272,13 @@ extern "C"
         return 0;
     }
 
+    EXPORT_API int32_t lottie_set_global_log_level(LottieLogLevel log_level)
+    {
+        sGlobalLogLevel.store(log_level);
+        LottieLogInfo(nullptr, "[Lottie] Global log level changed");
+        return 0;
+    }
+
 #if !defined(__EMSCRIPTEN__)
     EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
     {
