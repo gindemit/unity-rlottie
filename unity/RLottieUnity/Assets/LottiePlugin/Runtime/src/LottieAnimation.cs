@@ -340,22 +340,18 @@ namespace LottiePlugin
                 bytesPerLine = width * sizeof(uint)
             };
 
-            // Vulkan and OpenGLCore (on Windows) use CPU-side rendering with managed textures, similar to WebGL
-            // OpenGLCore on Windows can have timing issues with context initialization, so we use CPU rendering
+            // Only Vulkan and WebGL use CPU-side rendering with managed textures
+            // All other platforms (D3D11, D3D12, Metal, OpenGLCore) use native GPU texture upload
 #if UNITY_WEBGL && !UNITY_EDITOR
             _usesCPURendering = true;
 #else
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
-            _usesCPURendering = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan ||
-                               (deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore && 
-                                UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsEditor) ||
-                               (deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore && 
-                                UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsPlayer);
+            _usesCPURendering = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
 #endif
 
             if (_usesCPURendering)
             {
-                // WebGL, Vulkan, and OpenGLCore (Windows): Use managed Texture2D with CPU-side updates
+                // WebGL and Vulkan: Use managed Texture2D with CPU-side updates
                 Texture = new Texture2D(
                     (int)width,
                     (int)height,
@@ -368,7 +364,7 @@ namespace LottiePlugin
             }
             else
             {
-                // D3D11, D3D12, Metal, OpenGL (non-Windows): Use external native textures
+                // D3D11, D3D12, Metal, OpenGLCore: Use external native textures with GPU upload
                 int bufferSize = (int)(width * height * sizeof(uint));
                 _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
                 _ownsPixelData = true;

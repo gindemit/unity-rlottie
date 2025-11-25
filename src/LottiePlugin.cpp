@@ -661,6 +661,13 @@ namespace
                 while (glGetError() != GL_NO_ERROR) {}
 #endif
 
+                // Check if this is deferred creation (Windows OpenGL)
+                if (state->glTex == 0 && state->nativeTex == reinterpret_cast<void*>(static_cast<uintptr_t>(0x1)))
+                {
+                    LottieLogInfo(animation, "[Lottie] Performing deferred OpenGL texture creation");
+                    state->nativeTex = nullptr; // Clear dummy pointer
+                }
+
                 if (state->glTex == 0)
                 {
                     glGenTextures(1, &state->glTex);
@@ -1402,6 +1409,32 @@ extern "C"
     {
         LottieLogInfo(animation, "[Lottie] Creating texture: width=%d, height=%d", width, height);
         InstanceState* state = GetState(animation);
+        
+        // For OpenGL on Windows, defer actual texture creation until first upload
+        // to avoid calling GL functions before the context is ready
+        if (gRenderer == Renderer::OpenGL)
+        {
+#if defined(_WIN32)
+            // Store dimensions for lazy creation during first upload
+            state->texW = width;
+            state->texH = height;
+            // Return a dummy non-null pointer so C# knows we're using native rendering
+            state->nativeTex = reinterpret_cast<void*>(static_cast<uintptr_t>(0x1));
+            LottieLogInfo(animation, "[Lottie] OpenGL texture creation deferred until first upload");
+            return state->nativeTex;
+#else
+            // Non-Windows OpenGL: create immediately (context should be ready)
+            if (!EnsureTexture(animation, state, width, height))
+            {
+                LottieLogError(animation, "[Lottie] Failed to ensure texture");
+                return nullptr;
+            }
+            LottieLogInfo(animation, "[Lottie] Texture created successfully");
+            return state != nullptr ? state->nativeTex : nullptr;
+#endif
+        }
+        
+        // For D3D11, D3D12, Metal, Vulkan: create immediately as before
         if (!EnsureTexture(animation, state, width, height))
         {
             LottieLogError(animation, "[Lottie] Failed to ensure texture");
