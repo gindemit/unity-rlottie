@@ -670,10 +670,12 @@ namespace
 
                 if (state->glTex == 0)
                 {
+                    LottieLogInfo(animation, "[Lottie] Generating new OpenGL texture");
                     glGenTextures(1, &state->glTex);
 #if defined(_WIN32) || defined(__ANDROID__)
                     CheckGLError(animation, "glGenTextures");
 #endif
+                    LottieLogInfo(animation, "[Lottie] Generated OpenGL texture ID: %u", state->glTex);
                 }
                 if (state->glTex == 0)
                 {
@@ -1003,11 +1005,29 @@ namespace
 #if !defined(__APPLE__)
         if (state == nullptr || state->glTex == 0 || ctx.data == nullptr)
         {
+            LottieLogWarning(nullptr, "[Lottie] UploadOpenGL: Invalid parameters (state=%p, glTex=%u, data=%p)",
+                           state, state ? state->glTex : 0, ctx.data);
             return;
         }
 
+        LottieLogInfo(nullptr, "[Lottie] UploadOpenGL: Uploading to texture %u, size=%ux%u, stride=%u",
+                     state->glTex, ctx.width, ctx.height, ctx.stride);
+
+#if defined(_WIN32) || defined(__ANDROID__)
+        // Clear any existing errors
+        while (glGetError() != GL_NO_ERROR) {}
+#endif
+
         glBindTexture(GL_TEXTURE_2D, state->glTex);
+#if defined(_WIN32) || defined(__ANDROID__)
+        CheckGLError(nullptr, "glBindTexture in UploadOpenGL");
+#endif
+
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+#if defined(_WIN32) || defined(__ANDROID__)
+        CheckGLError(nullptr, "glPixelStorei in UploadOpenGL");
+#endif
+
 #    if defined(__ANDROID__)
         if (gHasBGRAExt)
         {
@@ -1023,6 +1043,18 @@ namespace
 #    else
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA, GL_UNSIGNED_BYTE, ctx.data);
 #    endif
+
+#if defined(_WIN32) || defined(__ANDROID__)
+        CheckGLError(nullptr, "glTexSubImage2D in UploadOpenGL");
+#endif
+
+        // Ensure OpenGL commands are executed
+        glFlush();
+#if defined(_WIN32) || defined(__ANDROID__)
+        CheckGLError(nullptr, "glFlush in UploadOpenGL");
+#endif
+
+        LottieLogInfo(nullptr, "[Lottie] UploadOpenGL: Upload completed successfully");
 #endif
     }
 #endif // !defined(__EMSCRIPTEN__)
