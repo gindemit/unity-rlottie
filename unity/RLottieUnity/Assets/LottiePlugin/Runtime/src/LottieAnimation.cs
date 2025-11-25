@@ -340,16 +340,22 @@ namespace LottiePlugin
                 bytesPerLine = width * sizeof(uint)
             };
 
-            // Vulkan uses CPU-side rendering with managed textures, similar to WebGL
+            // Vulkan and OpenGLCore (on Windows) use CPU-side rendering with managed textures, similar to WebGL
+            // OpenGLCore on Windows can have timing issues with context initialization, so we use CPU rendering
 #if UNITY_WEBGL && !UNITY_EDITOR
             _usesCPURendering = true;
 #else
-            _usesCPURendering = UnityEngine.SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
+            var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
+            _usesCPURendering = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan ||
+                               (deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore && 
+                                UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsEditor) ||
+                               (deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore && 
+                                UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsPlayer);
 #endif
 
             if (_usesCPURendering)
             {
-                // WebGL and Vulkan: Use managed Texture2D with CPU-side updates
+                // WebGL, Vulkan, and OpenGLCore (Windows): Use managed Texture2D with CPU-side updates
                 Texture = new Texture2D(
                     (int)width,
                     (int)height,
@@ -362,7 +368,7 @@ namespace LottiePlugin
             }
             else
             {
-                // D3D11, D3D12, Metal, OpenGL: Use external native textures
+                // D3D11, D3D12, Metal, OpenGL (non-Windows): Use external native textures
                 int bufferSize = (int)(width * height * sizeof(uint));
                 _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
                 _ownsPixelData = true;

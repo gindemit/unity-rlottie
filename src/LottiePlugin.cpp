@@ -248,6 +248,30 @@ namespace
         Vulkan,
     };
 
+#if !defined(__EMSCRIPTEN__) && !defined(__APPLE__) && (defined(_WIN32) || defined(__ANDROID__))
+    // Helper function to check and log OpenGL errors
+    static void CheckGLError(lottie_animation_wrapper* animation, const char* operation)
+    {
+#if defined(_WIN32)
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR)
+        {
+            char errorMsg[256];
+            snprintf(errorMsg, sizeof(errorMsg), "[Lottie] OpenGL error after %s: 0x%04X", operation, err);
+            LottieLogError(animation, errorMsg);
+        }
+#elif defined(__ANDROID__)
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR)
+        {
+            char errorMsg[256];
+            snprintf(errorMsg, sizeof(errorMsg), "[Lottie] OpenGL error after %s: 0x%04X", operation, err);
+            LottieLogError(animation, errorMsg);
+        }
+#endif
+    }
+#endif
+
     Renderer gRenderer = Renderer::Unknown;
     void* gDevice = nullptr;
 
@@ -632,20 +656,37 @@ namespace
             case Renderer::OpenGL:
 #if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
             {
+                // Clear any existing OpenGL errors
+#if defined(_WIN32) || defined(__ANDROID__)
+                while (glGetError() != GL_NO_ERROR) {}
+#endif
+
                 if (state->glTex == 0)
                 {
                     glGenTextures(1, &state->glTex);
+#if defined(_WIN32) || defined(__ANDROID__)
+                    CheckGLError(animation, "glGenTextures");
+#endif
                 }
                 if (state->glTex == 0)
                 {
                     LottieLogError(animation, "[Lottie] Failed to generate OpenGL texture");
+#if defined(_WIN32) || defined(__ANDROID__)
+                    CheckGLError(animation, "texture generation check");
+#endif
                     return false;
                 }
                 glBindTexture(GL_TEXTURE_2D, state->glTex);
+#if defined(_WIN32) || defined(__ANDROID__)
+                CheckGLError(animation, "glBindTexture");
+#endif
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+#if defined(_WIN32) || defined(__ANDROID__)
+                CheckGLError(animation, "glTexParameteri");
+#endif
 #    if defined(__ANDROID__)
                 const bool useBGRA = gHasBGRAExt;
                 const GLint internalFormat = useBGRA ? GL_RGBA8 : GL_RGBA;
@@ -657,6 +698,9 @@ namespace
                 glTexImage2D(
                     GL_TEXTURE_2D, 0, internalFormat, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
 #    endif
+#if defined(_WIN32) || defined(__ANDROID__)
+                CheckGLError(animation, "glTexImage2D");
+#endif
                 state->nativeTex = reinterpret_cast<void*>(static_cast<uintptr_t>(state->glTex));
                 state->texW = width;
                 state->texH = height;
