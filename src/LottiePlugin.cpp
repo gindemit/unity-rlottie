@@ -444,13 +444,16 @@ namespace
             return false;
         }
 
-        if (state->texW == width && state->texH == height && state->nativeTex != nullptr)
+        // Check if texture already exists with matching dimensions
+        // Exclude the dummy pointer (0x1) used for deferred OpenGL texture creation on Windows
+        const bool isDummyPointer = (state->nativeTex == reinterpret_cast<void*>(static_cast<uintptr_t>(0x1)));
+        if (state->texW == width && state->texH == height && state->nativeTex != nullptr && !isDummyPointer)
         {
             LottieLogInfo(animation, "[Lottie] EnsureTexture: texture already exists with matching dimensions");
             return true;
         }
 
-        LottieLogInfo(animation, "[Lottie] EnsureTexture: creating new texture %dx%d");
+        LottieLogInfo(animation, "[Lottie] EnsureTexture: creating new texture %dx%d", width, height);
         ResetTextureState(animation, state);
 
         switch (gRenderer)
