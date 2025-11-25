@@ -229,6 +229,7 @@ namespace
         D3D11,
         Metal,
         OpenGL,
+        Vulkan,
     };
 
     Renderer gRenderer = Renderer::Unknown;
@@ -296,6 +297,10 @@ namespace
             case kUnityGfxRendererMetal:
                 result = Renderer::Metal;
                 LottieLogInfo(nullptr, "[Lottie] Graphics device type: Metal");
+                break;
+            case kUnityGfxRendererVulkan:
+                result = Renderer::Vulkan;
+                LottieLogInfo(nullptr, "[Lottie] Graphics device type: Vulkan");
                 break;
             default:
                 result = Renderer::Unknown;
@@ -643,6 +648,13 @@ namespace
 #else
                 return false;
 #endif
+            case Renderer::Vulkan:
+                // For Vulkan, Unity manages textures internally.
+                // We render to CPU buffer and Unity handles GPU upload via Texture2D.LoadRawTextureData
+                LottieLogInfo(animation, "[Lottie] Vulkan: Using CPU-side rendering, Unity handles GPU upload");
+                state->texW = width;
+                state->texH = height;
+                return true;
             case Renderer::Unknown:
             default:
                 LottieLogError(animation, "[Lottie] EnsureTexture: Unknown or unsupported renderer");
@@ -1011,6 +1023,11 @@ namespace
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
                 UploadOpenGL(state, ctx);
 #endif
+                break;
+            case Renderer::Vulkan:
+                // Vulkan: No direct texture upload needed here.
+                // Unity's Texture2D.LoadRawTextureData + Apply handles the GPU upload.
+                LottieLogInfo(animation, "[Lottie] Vulkan: Skipping direct upload, Unity handles it");
                 break;
             case Renderer::Unknown:
             default:
@@ -1559,6 +1576,10 @@ extern "C"
 #endif
                     break;
                 case Renderer::OpenGL:
+                    break;
+                case Renderer::Vulkan:
+                    LottieLogInfo(nullptr, "[Lottie] Vulkan device initialized");
+                    break;
                 default:
 #if defined(__ANDROID__)
                     DetectGLExtensions();
@@ -1593,6 +1614,9 @@ extern "C"
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
                     gMetalDevice = nil;
 #endif
+                    break;
+                case Renderer::Vulkan:
+                    LottieLogInfo(nullptr, "[Lottie] Vulkan device shutdown");
                     break;
                 default:
                     break;
