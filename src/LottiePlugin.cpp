@@ -144,10 +144,20 @@ static inline void LottieLogError(lottie_animation_wrapper*, const char*, ...) {
 #    include <GLES3/gl3.h>
 #    include <GLES2/gl2ext.h>
 // On Apple platforms we rely on Metal; avoid desktop OpenGL headers there.
-#elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
-#    include <GL/gl.h>
-#    ifndef GL_BGRA
-#        define GL_BGRA 0x80E1
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
+#    if defined(_WIN32)
+#        include <GL/gl.h>
+#        ifndef GL_BGRA
+#            define GL_BGRA 0x80E1
+#        endif
+#        ifndef GL_CLAMP_TO_EDGE
+#            define GL_CLAMP_TO_EDGE 0x812F
+#        endif
+#    else
+#        include <GL/gl.h>
+#        ifndef GL_BGRA
+#            define GL_BGRA 0x80E1
+#        endif
 #    endif
 #endif
 
@@ -212,7 +222,7 @@ namespace
         ID3D11Texture2D* d3dTex = nullptr;
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         id<MTLTexture> metalTex = nil;
-#elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
         GLuint glTex = 0;
 #endif
 #if defined(__ANDROID__)
@@ -271,6 +281,7 @@ namespace
         kUnityGfxRendererOpenGLES20 = 8,
         kUnityGfxRendererOpenGLES30 = 11,
         kUnityGfxRendererMetal = 16,
+        kUnityGfxRendererOpenGLCore = 17,
         kUnityGfxRendererD3D12 = 18,
         kUnityGfxRendererVulkan = 21
     };
@@ -289,6 +300,7 @@ namespace
                 LottieLogInfo(nullptr, "[Lottie] Graphics device type: D3D12");
                 break;
             case kUnityGfxRendererOpenGL:
+            case kUnityGfxRendererOpenGLCore:
             case kUnityGfxRendererOpenGLES20:
             case kUnityGfxRendererOpenGLES30:
                 result = Renderer::OpenGL;
@@ -376,7 +388,7 @@ namespace
         }
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         state->metalTex = nil;
-#elif !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
         if (state->glTex != 0)
         {
             glDeleteTextures(1, &state->glTex);
@@ -612,7 +624,7 @@ namespace
                 return false;
 #endif
             case Renderer::OpenGL:
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
             {
                 if (state->glTex == 0)
                 {
@@ -931,7 +943,7 @@ namespace
 
     void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
     {
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(__APPLE__)
         if (state == nullptr || state->glTex == 0 || ctx.data == nullptr)
         {
             return;
@@ -1021,7 +1033,7 @@ namespace
 #endif
                 break;
             case Renderer::OpenGL:
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
                 UploadOpenGL(state, ctx);
 #endif
                 break;
