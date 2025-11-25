@@ -20,12 +20,15 @@
 // --- Platform GPU headers FIRST ---
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <GL/gl.h>
 #include <d3d11.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "opengl32.lib")
 #endif
 // ----------------------------------
 
@@ -144,20 +147,20 @@ static inline void LottieLogError(lottie_animation_wrapper*, const char*, ...) {
 #    include <GLES3/gl3.h>
 #    include <GLES2/gl2ext.h>
 // On Apple platforms we rely on Metal; avoid desktop OpenGL headers there.
-#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
-#    if defined(_WIN32)
-#        include <GL/gl.h>
-#        ifndef GL_BGRA
-#            define GL_BGRA 0x80E1
-#        endif
-#        ifndef GL_CLAMP_TO_EDGE
-#            define GL_CLAMP_TO_EDGE 0x812F
-#        endif
-#    else
-#        include <GL/gl.h>
-#        ifndef GL_BGRA
-#            define GL_BGRA 0x80E1
-#        endif
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__) && !defined(_WIN32)
+#    include <GL/gl.h>
+#    ifndef GL_BGRA
+#        define GL_BGRA 0x80E1
+#    endif
+#endif
+
+// Define OpenGL constants for Windows if needed
+#if defined(_WIN32)
+#    ifndef GL_BGRA
+#        define GL_BGRA 0x80E1
+#    endif
+#    ifndef GL_CLAMP_TO_EDGE
+#        define GL_CLAMP_TO_EDGE 0x812F
 #    endif
 #endif
 
@@ -220,6 +223,9 @@ namespace
 
         // D3D11
         ID3D11Texture2D* d3dTex = nullptr;
+        
+        // OpenGL (for OpenGLCore on Windows)
+        GLuint glTex = 0;
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         id<MTLTexture> metalTex = nil;
 #elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
