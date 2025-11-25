@@ -77,6 +77,7 @@ namespace LottiePlugin
         private LottieRenderData _lottieRenderData;
         private NativeArray<byte> _pixelData;
         private bool _ownsPixelData;
+        private bool _usesCPURendering;
         private float _timeSinceLastRenderCall;
         private double _frameDelta;
         private double _clipFrameDelta;
@@ -282,11 +283,16 @@ namespace LottiePlugin
         {
             NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true);
             CurrentFrame = frameNumber;
-#if UNITY_WEBGL && !UNITY_EDITOR
-            Texture.Apply();
-#else
-            RequestTextureUpload();
+            if (_usesCPURendering)
+            {
+                Texture.Apply();
+            }
+            else
+            {
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+                RequestTextureUpload();
 #endif
+            }
         }
         public void DrawOneFrameAsyncPrepare(int frameNumber)
         {
@@ -299,17 +305,24 @@ namespace LottiePlugin
                 return;
             }
 
-#if UNITY_WEBGL && !UNITY_EDITOR
-            NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
-            Texture.Apply();
-            _asyncDrawWasCalled = false;
-#else
-            if (NativeBridge.LottieRenderTryGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr, out int ready) == 0 && ready != 0)
+            if (_usesCPURendering)
             {
-                RequestTextureUpload();
+#if UNITY_WEBGL && !UNITY_EDITOR
+                NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
+#endif
+                Texture.Apply();
                 _asyncDrawWasCalled = false;
             }
+            else
+            {
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+                if (NativeBridge.LottieRenderTryGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr, out int ready) == 0 && ready != 0)
+                {
+                    RequestTextureUpload();
+                    _asyncDrawWasCalled = false;
+                }
 #endif
+            }
         }
 
         private unsafe void CreateRenderDataTexture2DMarshalToNative(uint width, uint height)
@@ -326,36 +339,49 @@ namespace LottiePlugin
                 height = height,
                 bytesPerLine = width * sizeof(uint)
             };
+
+            // Vulkan uses CPU-side rendering with managed textures, similar to WebGL
 #if UNITY_WEBGL && !UNITY_EDITOR
-            Texture = new Texture2D(
-                (int)width,
-                (int)height,
-                TextureFormat.BGRA32,
-                0,
-                false);
-            _pixelData = Texture.GetRawTextureData<byte>();
-            _ownsPixelData = false;
-            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+            _usesCPURendering = true;
 #else
-            int bufferSize = (int)(width * height * sizeof(uint));
-            _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            _ownsPixelData = true;
-            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-            _nativeTexturePtr = NativeBridge.LottieCreateTexture(_animationWrapperIntPtr, (int)width, (int)height);
-            
-            if (_nativeTexturePtr == IntPtr.Zero)
-            {
-                throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
-            }
-            
-            Texture = Texture2D.CreateExternalTexture(
-                (int)width,
-                (int)height,
-                TextureFormat.BGRA32,
-                false,
-                false,
-                _nativeTexturePtr);
+            _usesCPURendering = UnityEngine.SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
 #endif
+
+            if (_usesCPURendering)
+            {
+                // WebGL and Vulkan: Use managed Texture2D with CPU-side updates
+                Texture = new Texture2D(
+                    (int)width,
+                    (int)height,
+                    TextureFormat.BGRA32,
+                    0,
+                    false);
+                _pixelData = Texture.GetRawTextureData<byte>();
+                _ownsPixelData = false;
+                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+            }
+            else
+            {
+                // D3D11, D3D12, Metal, OpenGL: Use external native textures
+                int bufferSize = (int)(width * height * sizeof(uint));
+                _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                _ownsPixelData = true;
+                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                _nativeTexturePtr = NativeBridge.LottieCreateTexture(_animationWrapperIntPtr, (int)width, (int)height);
+                
+                if (_nativeTexturePtr == IntPtr.Zero)
+                {
+                    throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
+                }
+                
+                Texture = Texture2D.CreateExternalTexture(
+                    (int)width,
+                    (int)height,
+                    TextureFormat.BGRA32,
+                    false,
+                    false,
+                    _nativeTexturePtr);
+            }
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
         }
         private void UpdateInternal(float animationSpeed, Action<int> drawOneFrameMethod, bool scheduleAsync)
