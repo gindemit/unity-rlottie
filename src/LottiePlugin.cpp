@@ -162,6 +162,12 @@ static inline void LottieLogError(lottie_animation_wrapper*, const char*, ...) {
 #    ifndef GL_CLAMP_TO_EDGE
 #        define GL_CLAMP_TO_EDGE 0x812F
 #    endif
+#    ifndef GL_RGBA8
+#        define GL_RGBA8 0x8058
+#    endif
+#    ifndef GL_RGBA
+#        define GL_RGBA 0x1908
+#    endif
 #endif
 
 namespace
@@ -174,17 +180,42 @@ namespace
   void PublishUpload(lottie_animation_wrapper* animation,
                       const lottie_render_data* render_data);
 #endif
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(_WIN32)
     static bool gHasBGRAExt = false;
+    static bool gIsOpenGLES = false;
 
     static void DetectGLExtensions()
     {
         gHasBGRAExt = false;
-        const char* ext = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
-        if (ext != nullptr && std::strstr(ext, "GL_EXT_texture_format_BGRA8888") != nullptr)
+        gIsOpenGLES = false;
+
+        // Check if we're running OpenGL ES (ANGLE or other ES implementation)
+        const char* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        if (version != nullptr)
         {
+            gIsOpenGLES = (std::strstr(version, "OpenGL ES") != nullptr);
+            LottieLogInfo(nullptr, "[Lottie] OpenGL version: %s, isOpenGLES: %s", version, gIsOpenGLES ? "true" : "false");
+        }
+
+        const char* ext = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+        if (ext != nullptr)
+        {
+            if (std::strstr(ext, "GL_EXT_texture_format_BGRA8888") != nullptr)
+            {
+                gHasBGRAExt = true;
+            }
+            // Desktop OpenGL always supports GL_BGRA via core
+            if (!gIsOpenGLES)
+            {
+                gHasBGRAExt = true;
+            }
+        }
+        else if (!gIsOpenGLES)
+        {
+            // Desktop OpenGL supports BGRA in core
             gHasBGRAExt = true;
         }
+        LottieLogInfo(nullptr, "[Lottie] BGRA extension available: %s", gHasBGRAExt ? "true" : "false");
     }
 #endif
 #if !defined(__EMSCRIPTEN__)
@@ -226,12 +257,11 @@ namespace
         
         // OpenGL (for OpenGLCore on Windows)
         GLuint glTex = 0;
+        std::vector<uint8_t> rgbaScratch;
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         id<MTLTexture> metalTex = nil;
 #elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
         GLuint glTex = 0;
-#endif
-#if defined(__ANDROID__)
         std::vector<uint8_t> rgbaScratch;
 #endif
     };
@@ -702,10 +732,14 @@ namespace
 #if defined(_WIN32) || defined(__ANDROID__)
                 CheckGLError(animation, "glTexParameteri");
 #endif
-#    if defined(__ANDROID__)
+#    if defined(__ANDROID__) || defined(_WIN32)
                 const bool useBGRA = gHasBGRAExt;
-                const GLint internalFormat = useBGRA ? GL_RGBA8 : GL_RGBA;
-                const GLenum uploadFormat = useBGRA ? GL_BGRA_EXT : GL_RGBA;
+                // For OpenGL ES, use GL_RGBA8 or GL_RGBA based on BGRA extension support
+                // For desktop OpenGL, always use GL_RGBA8 and GL_BGRA
+                const GLint internalFormat = GL_RGBA8;
+                const GLenum uploadFormat = useBGRA ? GL_BGRA : GL_RGBA;
+                LottieLogInfo(animation, "[Lottie] EnsureTexture: useBGRA=%s, uploadFormat=0x%04X",
+                              useBGRA ? "true" : "false", uploadFormat);
                 glTexImage2D(
                     GL_TEXTURE_2D, 0, internalFormat, width, height, 0, uploadFormat, GL_UNSIGNED_BYTE, nullptr);
 #    else
@@ -745,7 +779,7 @@ namespace
     }
 #endif // !defined(__EMSCRIPTEN__)
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(_WIN32) || (!defined(__EMSCRIPTEN__) && !defined(__APPLE__))
     void ConvertBGRAtoRGBA(std::vector<uint8_t>& buffer, const UploadContext& ctx)
     {
         buffer.resize(static_cast<size_t>(ctx.width) * static_cast<size_t>(ctx.height) * 4u);
@@ -1039,14 +1073,15 @@ namespace
         CheckGLError(nullptr, "glPixelStorei in UploadOpenGL");
 #endif
 
-#    if defined(__ANDROID__)
+#    if defined(__ANDROID__) || defined(_WIN32)
         if (gHasBGRAExt)
         {
             glTexSubImage2D(
-                GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, ctx.data);
+                GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA, GL_UNSIGNED_BYTE, ctx.data);
         }
         else
         {
+            LottieLogInfo(nullptr, "[Lottie] UploadOpenGL: Converting BGRA to RGBA (no BGRA extension)");
             ConvertBGRAtoRGBA(state->rgbaScratch, ctx);
             glTexSubImage2D(
                 GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_RGBA, GL_UNSIGNED_BYTE, state->rgbaScratch.data());
@@ -1748,12 +1783,16 @@ extern "C"
 #endif
                     break;
                 case Renderer::OpenGL:
+#if defined(_WIN32) || defined(__ANDROID__)
+                    DetectGLExtensions();
+#endif
                     break;
                 case Renderer::Vulkan:
                     LottieLogInfo(nullptr, "[Lottie] Vulkan device initialized");
                     break;
                 default:
-#if defined(__ANDROID__)
+                    // For unknown renderers, try to detect GL extensions in case it's OpenGL-based
+#if defined(__ANDROID__) || defined(_WIN32)
                     DetectGLExtensions();
 #endif
                     break;
@@ -1794,8 +1833,9 @@ extern "C"
                     break;
             }
             gRenderer = Renderer::Unknown;
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(_WIN32)
             gHasBGRAExt = false;
+            gIsOpenGLES = false;
 #endif
             {
                 std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
