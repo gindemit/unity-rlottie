@@ -17,6 +17,11 @@
 #include <utility>
 #include <vector>
 
+#if defined(__ANDROID__)
+#    include <android/log.h>
+#    define LOTTIE_ANDROID_LOG_TAG "LottiePlugin"
+#endif
+
 // --- Platform GPU headers FIRST ---
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -164,8 +169,6 @@ static inline void LottieLogError(lottie_animation_wrapper*, const char*, ...) {
 #if defined(__ANDROID__)
 #    include <GLES3/gl3.h>
 #    include <GLES2/gl2ext.h>
-#    include <android/log.h>
-#    define LOTTIE_ANDROID_LOG_TAG "LottiePlugin"
 // Define GL_BGRA as an alias to GL_BGRA_EXT for consistency
 #    ifndef GL_BGRA
 #        define GL_BGRA GL_BGRA_EXT
