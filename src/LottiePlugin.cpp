@@ -78,42 +78,60 @@ static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
 static inline void LottieLogInfo(lottie_animation_wrapper* animation, const char* format, ...)
 {
     LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_INFO && sLog)
+    if (level >= LOTTIE_LOG_INFO)
     {
         char buffer[512];
         va_list args;
         va_start(args, format);
         vsnprintf(buffer, sizeof(buffer), format, args);
         va_end(args);
-        UNITY_LOG(sLog, buffer);
+#if defined(__ANDROID__)
+        __android_log_print(ANDROID_LOG_INFO, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
+#endif
+        if (sLog)
+        {
+            UNITY_LOG(sLog, buffer);
+        }
     }
 }
 
 static inline void LottieLogWarning(lottie_animation_wrapper* animation, const char* format, ...)
 {
     LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_WARNING && sLog)
+    if (level >= LOTTIE_LOG_WARNING)
     {
         char buffer[512];
         va_list args;
         va_start(args, format);
         vsnprintf(buffer, sizeof(buffer), format, args);
         va_end(args);
-        UNITY_LOG_WARNING(sLog, buffer);
+#if defined(__ANDROID__)
+        __android_log_print(ANDROID_LOG_WARN, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
+#endif
+        if (sLog)
+        {
+            UNITY_LOG_WARNING(sLog, buffer);
+        }
     }
 }
 
 static inline void LottieLogError(lottie_animation_wrapper* animation, const char* format, ...)
 {
     LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_ERROR && sLog)
+    if (level >= LOTTIE_LOG_ERROR)
     {
         char buffer[512];
         va_list args;
         va_start(args, format);
         vsnprintf(buffer, sizeof(buffer), format, args);
         va_end(args);
-        UNITY_LOG_ERROR(sLog, buffer);
+#if defined(__ANDROID__)
+        __android_log_print(ANDROID_LOG_ERROR, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
+#endif
+        if (sLog)
+        {
+            UNITY_LOG_ERROR(sLog, buffer);
+        }
     }
 }
 #else
@@ -146,6 +164,8 @@ static inline void LottieLogError(lottie_animation_wrapper*, const char*, ...) {
 #if defined(__ANDROID__)
 #    include <GLES3/gl3.h>
 #    include <GLES2/gl2ext.h>
+#    include <android/log.h>
+#    define LOTTIE_ANDROID_LOG_TAG "LottiePlugin"
 // Define GL_BGRA as an alias to GL_BGRA_EXT for consistency
 #    ifndef GL_BGRA
 #        define GL_BGRA GL_BGRA_EXT
