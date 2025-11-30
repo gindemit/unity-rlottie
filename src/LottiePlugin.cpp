@@ -72,8 +72,8 @@ static inline void ProfEnd(const UnityProfilerMarkerDesc* d)
     }
 }
 
-// Global log level (default: Info – verbose logging for debugging)
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
+// Global log level (default: Warning)
+static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_WARNING);
 
 static inline void LottieLogInfo(lottie_animation_wrapper* animation, const char* format, ...)
 {
@@ -128,7 +128,7 @@ static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 
 // WebGL stubs for logging
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
+static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_WARNING);
 
 static inline void LottieLogInfo(lottie_animation_wrapper*, const char*, ...) {}
 static inline void LottieLogWarning(lottie_animation_wrapper*, const char*, ...) {}
@@ -445,7 +445,9 @@ namespace
         }
 
         // Check if texture already exists with matching dimensions
-        if (state->texW == width && state->texH == height && state->nativeTex != nullptr)
+        // Exclude the dummy pointer (0x1) used for deferred OpenGL texture creation on Windows
+        const bool isDummyPointer = (state->nativeTex == reinterpret_cast<void*>(static_cast<uintptr_t>(0x1)));
+        if (state->texW == width && state->texH == height && state->nativeTex != nullptr && !isDummyPointer)
         {
             LottieLogInfo(animation, "[Lottie] EnsureTexture: texture already exists with matching dimensions");
             return true;
@@ -661,6 +663,13 @@ namespace
 #if defined(_WIN32) || defined(__ANDROID__)
                 while (glGetError() != GL_NO_ERROR) {}
 #endif
+
+                // Check if this is deferred creation (Windows OpenGL)
+                if (state->glTex == 0 && state->nativeTex == reinterpret_cast<void*>(static_cast<uintptr_t>(0x1)))
+                {
+                    LottieLogInfo(animation, "[Lottie] Performing deferred OpenGL texture creation");
+                    state->nativeTex = nullptr; // Clear dummy pointer
+                }
 
                 if (state->glTex == 0)
                 {
@@ -1280,7 +1289,7 @@ extern "C"
         uint32_t frame_number,
         bool keep_aspect_ratio)
     {
-        LottieLogInfo(animation_wrapper, "[Lottie] Rendering frame %u immediately", frame_number);
+        LottieLogInfo(animation_wrapper, "[Lottie] Rendering frame %d immediately");
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
@@ -1326,7 +1335,7 @@ extern "C"
         uint32_t frame_number,
         bool keep_aspect_ratio)
     {
-        LottieLogInfo(animation_wrapper, "[Lottie] Creating async render future for frame %u", frame_number);
+        LottieLogInfo(animation_wrapper, "[Lottie] Creating async render future for frame %d");
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
@@ -1433,31 +1442,40 @@ extern "C"
 #if !defined(__EMSCRIPTEN__)
     EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
     {
-        LottieLogInfo(animation, "[Lottie] Creating texture: width=%d, height=%d (renderer=%d)",
-                      width, height, (int)gRenderer);
-
+        LottieLogInfo(animation, "[Lottie] Creating texture: width=%d, height=%d", width, height);
         InstanceState* state = GetState(animation);
-
-        // If Unity hasn't initialized the graphics device yet, bail out clearly.
-        if (gRenderer == Renderer::Unknown)
+        
+        // For OpenGL on Windows, defer actual texture creation until first upload
+        // to avoid calling GL functions before the context is ready
+        if (gRenderer == Renderer::OpenGL)
         {
-            LottieLogWarning(animation, "[Lottie] lottie_create_texture called before graphics device is initialized");
-            return nullptr;
+#if defined(_WIN32)
+            // Store dimensions for lazy creation during first upload
+            state->texW = width;
+            state->texH = height;
+            // Return a dummy non-null pointer so C# knows we're using native rendering
+            state->nativeTex = reinterpret_cast<void*>(static_cast<uintptr_t>(0x1));
+            LottieLogInfo(animation, "[Lottie] OpenGL texture creation deferred until first upload");
+            return state->nativeTex;
+#else
+            // Non-Windows OpenGL: create immediately (context should be ready)
+            if (!EnsureTexture(animation, state, width, height))
+            {
+                LottieLogError(animation, "[Lottie] Failed to ensure texture");
+                return nullptr;
+            }
+            LottieLogInfo(animation, "[Lottie] Texture created successfully");
+            return state != nullptr ? state->nativeTex : nullptr;
+#endif
         }
-
+        
+        // For D3D11, D3D12, Metal, Vulkan: create immediately as before
         if (!EnsureTexture(animation, state, width, height))
         {
-            LottieLogError(animation, "[Lottie] lottie_create_texture: EnsureTexture failed for renderer=%d",
-                           (int)gRenderer);
+            LottieLogError(animation, "[Lottie] Failed to ensure texture");
             return nullptr;
         }
-
-        LottieLogInfo(animation,
-                      "[Lottie] lottie_create_texture: texture ready, nativeTex=%p, texW=%d, texH=%d",
-                      state ? state->nativeTex : nullptr,
-                      state ? state->texW : 0,
-                      state ? state->texH : 0);
-
+        LottieLogInfo(animation, "[Lottie] Texture created successfully");
         return state != nullptr ? state->nativeTex : nullptr;
     }
 
@@ -1646,8 +1664,6 @@ extern "C"
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
     {
-        LottieLogInfo(nullptr, "[Lottie] UnitySetGraphicsDevice: eventType=%d, deviceType=%d, device=%p",
-                      eventType, deviceType, device);
         if (eventType == ::kUnityGfxDeviceEventInitialize)
         {
             LottieLogInfo(nullptr, "[Lottie] Graphics device initializing");
