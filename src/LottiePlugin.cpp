@@ -738,12 +738,33 @@ namespace
 #endif
 #    if defined(__ANDROID__) || defined(_WIN32)
                 const bool useBGRA = gHasBGRAExt;
-                // For OpenGL ES, use GL_RGBA8 or GL_RGBA based on BGRA extension support
-                // For desktop OpenGL, always use GL_RGBA8 and GL_BGRA
-                const GLint internalFormat = GL_RGBA8;
-                const GLenum uploadFormat = useBGRA ? GL_BGRA : GL_RGBA;
-                LottieLogInfo(animation, "[Lottie] EnsureTexture: useBGRA=%s, uploadFormat=0x%04X",
-                              useBGRA ? "true" : "false", uploadFormat);
+                // For OpenGL ES with BGRA extension, use GL_BGRA for both internal and upload format
+                // For OpenGL ES without BGRA, use GL_RGBA for both
+                // For desktop OpenGL (non-ES), use GL_RGBA8 internal format with GL_BGRA upload format
+                GLint internalFormat;
+                GLenum uploadFormat;
+                if (gIsOpenGLES)
+                {
+                    // OpenGL ES requires matching internal and upload formats
+                    if (useBGRA)
+                    {
+                        internalFormat = GL_BGRA;
+                        uploadFormat = GL_BGRA;
+                    }
+                    else
+                    {
+                        internalFormat = GL_RGBA;
+                        uploadFormat = GL_RGBA;
+                    }
+                }
+                else
+                {
+                    // Desktop OpenGL supports GL_RGBA8 with GL_BGRA upload
+                    internalFormat = GL_RGBA8;
+                    uploadFormat = useBGRA ? GL_BGRA : GL_RGBA;
+                }
+                LottieLogInfo(animation, "[Lottie] EnsureTexture: isOpenGLES=%s, useBGRA=%s, internalFormat=0x%04X, uploadFormat=0x%04X",
+                              gIsOpenGLES ? "true" : "false", useBGRA ? "true" : "false", internalFormat, uploadFormat);
                 glTexImage2D(
                     GL_TEXTURE_2D, 0, internalFormat, width, height, 0, uploadFormat, GL_UNSIGNED_BYTE, nullptr);
 #    else
