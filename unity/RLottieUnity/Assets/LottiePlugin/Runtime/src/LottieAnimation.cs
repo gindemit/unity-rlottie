@@ -352,10 +352,16 @@ namespace LottiePlugin
             if (_usesCPURendering)
             {
                 // WebGL and Vulkan: Use managed Texture2D with CPU-side updates
+                // WebGL doesn't support BGRA32, so we use RGBA32 and swap channels in native code
+#if UNITY_WEBGL && !UNITY_EDITOR
+                TextureFormat format = TextureFormat.RGBA32;
+#else
+                TextureFormat format = TextureFormat.BGRA32;
+#endif
                 Texture = new Texture2D(
                     (int)width,
                     (int)height,
-                    TextureFormat.BGRA32,
+                    format,
                     0,
                     false);
                 _pixelData = Texture.GetRawTextureData<byte>();
