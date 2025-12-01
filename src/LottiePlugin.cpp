@@ -1447,7 +1447,8 @@ extern "C"
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
-        bool keep_aspect_ratio)
+        bool keep_aspect_ratio,
+        bool convert_bgra_to_rgba)
     {
         LottieLogInfo(animation_wrapper, "[Lottie] lottie_render_immediately called for frame %u", frame_number);
 #if defined(__EMSCRIPTEN__)
@@ -1472,11 +1473,19 @@ extern "C"
             render_data->bytesPerLine);
         animation_wrapper->animation->renderSync(frame_number, surface, keep_aspect_ratio);
 #if defined(__EMSCRIPTEN__)
-        LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, converting BGRA to RGBA...");
-        // Convert BGRA to RGBA for WebGL
-        ConvertBGRAtoRGBA(render_data->buffer, render_data->width, render_data->height);
-        LottieLogInfo(animation_wrapper, "[WebGL] lottie_render_immediately complete");
+        // Convert BGRA to RGBA for WebGL only if requested (when not using shader conversion)
+        if (convert_bgra_to_rgba)
+        {
+            LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, converting BGRA to RGBA...");
+            ConvertBGRAtoRGBA(render_data->buffer, render_data->width, render_data->height);
+            LottieLogInfo(animation_wrapper, "[WebGL] lottie_render_immediately complete");
+        }
+        else
+        {
+            LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, skipping BGRA to RGBA conversion (shader mode)");
+        }
 #else
+        (void)convert_bgra_to_rgba; // Unused on non-WebGL platforms
         PublishUpload(animation_wrapper, render_data);
 #endif
         LottieLogInfo(animation_wrapper, "[Lottie] Frame rendered successfully");
@@ -1489,7 +1498,8 @@ extern "C"
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
-        bool keep_aspect_ratio)
+        bool keep_aspect_ratio,
+        bool convert_bgra_to_rgba)
     {
         LottieLogInfo(animation_wrapper, "[WebGL] lottie_render_create_future_async called for frame %u", frame_number);
         LottieLogInfo(animation_wrapper, "[WebGL] render_data: buffer=%p, width=%u, height=%u, bytesPerLine=%u",
@@ -1514,10 +1524,17 @@ extern "C"
         LottieLogInfo(animation_wrapper, "[WebGL] Surface created, calling renderSync...");
         // WebGL single-thread fallback: do sync render instead of futures
         animation_wrapper->animation->renderSync(frame_number, surface, keep_aspect_ratio);
-        LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, converting BGRA to RGBA...");
-        // Convert BGRA to RGBA for WebGL
-        ConvertBGRAtoRGBA(render_data->buffer, render_data->width, render_data->height);
-        LottieLogInfo(animation_wrapper, "[WebGL] BGRA to RGBA conversion complete");
+        // Convert BGRA to RGBA for WebGL only if requested (when not using shader conversion)
+        if (convert_bgra_to_rgba)
+        {
+            LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, converting BGRA to RGBA...");
+            ConvertBGRAtoRGBA(render_data->buffer, render_data->width, render_data->height);
+            LottieLogInfo(animation_wrapper, "[WebGL] BGRA to RGBA conversion complete");
+        }
+        else
+        {
+            LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, skipping BGRA to RGBA conversion (shader mode)");
+        }
         return 0;
     }
 
@@ -1546,8 +1563,10 @@ extern "C"
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
-        bool keep_aspect_ratio)
+        bool keep_aspect_ratio,
+        bool convert_bgra_to_rgba)
     {
+        (void)convert_bgra_to_rgba; // Unused on non-WebGL platforms
         LottieLogInfo(animation_wrapper, "[Lottie] Creating async render future for frame %u", frame_number);
         rlottie::Surface surface(
             render_data->buffer,

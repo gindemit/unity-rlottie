@@ -75,13 +75,15 @@ extern "C" {
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
-        bool keep_aspect_ratio);
+        bool keep_aspect_ratio,
+        bool convert_bgra_to_rgba);
 
     EXPORT_API int32_t lottie_render_create_future_async(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
-        bool keep_aspect_ratio);
+        bool keep_aspect_ratio,
+        bool convert_bgra_to_rgba);
     EXPORT_API int32_t lottie_render_try_get_future_result(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
