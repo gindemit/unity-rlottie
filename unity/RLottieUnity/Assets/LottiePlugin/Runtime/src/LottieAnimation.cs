@@ -18,9 +18,8 @@ namespace LottiePlugin
         public LottieLogLevel LogLevel { get; set; } = LottieLogLevel.Warning;
     }
 
-    public sealed class LottieAnimation : IDisposable
+    public sealed partial class LottieAnimation : IDisposable
     {
-        private static bool sLoggerInitialized;
         private static readonly HashSet<LottieAnimation> sAlive = new HashSet<LottieAnimation>();
         private static readonly object sAliveLock = new object();
 
@@ -39,13 +38,7 @@ namespace LottiePlugin
         {
             get
             {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                if (_useShaderConversion && _convertedRT != null)
-                {
-                    return _convertedRT;
-                }
-#endif
-                return Texture;
+                return GetOutputTexture();
             }
         }
         
@@ -211,10 +204,7 @@ namespace LottiePlugin
         private void Dispose(bool disposing)
         {
             if (_disposed)
-            {
                 return;
-            }
-
             _disposed = true;
 
             if (disposing)
@@ -229,67 +219,28 @@ namespace LottiePlugin
                 sAlive.Remove(this);
             }
 
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-            if (_asyncDrawWasCalled && _animationWrapperIntPtr != IntPtr.Zero && _lottieRenderDataIntPtr != IntPtr.Zero)
-            {
-                NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
-                _asyncDrawWasCalled = false;
-            }
-#endif
-
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-            if (_nativeTexturePtr != IntPtr.Zero)
-            {
-                NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
-                _nativeTexturePtr = IntPtr.Zero;
-            }
-#endif
-
+            PlatformDisposeAsyncDraw();
+            PlatformDisposeNativeTexture();
             if (_lottieRenderDataIntPtr != IntPtr.Zero)
             {
                 NativeBridge.LottieDisposeRenderData(ref _lottieRenderDataIntPtr);
                 _lottieRenderDataIntPtr = IntPtr.Zero;
             }
-
             _lottieRenderData = default;
-
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-            if (_ownsPixelData && _pixelData.IsCreated)
-            {
-                _pixelData.Dispose();
-            }
-#endif
-
+            PlatformDisposePixelData();
             _pixelData = default;
             _ownsPixelData = false;
-
-#if UNITY_WEBGL && !UNITY_EDITOR
-            if (_sourceTexture != null)
-            {
-                UnityEngine.Object.DestroyImmediate(_sourceTexture);
-                _sourceTexture = null;
-            }
-            
-            if (_convertedRT != null)
-            {
-                _convertedRT.Release();
-                UnityEngine.Object.DestroyImmediate(_convertedRT);
-                _convertedRT = null;
-            }
-#endif
-
+            PlatformDisposeWebGLTextures();
             if (Texture != null)
             {
                 UnityEngine.Object.DestroyImmediate(Texture);
                 Texture = null;
             }
-
             if (_animationWrapperIntPtr != IntPtr.Zero)
             {
                 NativeBridge.Dispose(ref _animationWrapperIntPtr);
                 _animationWrapperIntPtr = IntPtr.Zero;
             }
-
             _animationWrapper = default;
             _asyncDrawWasCalled = false;
         }
@@ -325,94 +276,21 @@ namespace LottiePlugin
         }
         public void DrawOneFrame(int frameNumber)
         {
-#if UNITY_WEBGL && !UNITY_EDITOR
-            // On WebGL, pass whether to use native conversion (opposite of shader conversion)
-            bool useNativeConversion = !_useShaderConversion;
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, useNativeConversion);
-#else
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
-#endif
-            CurrentFrame = frameNumber;
-            if (_usesCPURendering)
-            {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                if (_useShaderConversion)
-                {
-                    // Apply source texture and blit with shader conversion
-                    _sourceTexture.Apply();
-                    Graphics.Blit(_sourceTexture, _convertedRT, s_BGRAtoRGBAMaterial);
-                }
-                else
-                {
-                    // Native conversion already done, just apply
-                    Texture.Apply();
-                }
-#else
-                Texture.Apply();
-#endif
-            }
-            else
-            {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-                RequestTextureUpload();
-#endif
-            }
+            PlatformDrawOneFrame(frameNumber);
         }
         public void DrawOneFrameAsyncPrepare(int frameNumber)
         {
-#if UNITY_WEBGL && !UNITY_EDITOR
-            // On WebGL, pass whether to use native conversion (opposite of shader conversion)
-            bool useNativeConversion = !_useShaderConversion;
-            NativeBridge.LottieRenderCreateFutureAsync(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, useNativeConversion);
-#else
-            NativeBridge.LottieRenderCreateFutureAsync(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
-#endif
+            PlatformDrawOneFrameAsyncPrepare(frameNumber);
         }
         public void DrawOneFrameAsyncGetResult()
         {
-            if (!_asyncDrawWasCalled)
-            {
-                return;
-            }
-
-            if (_usesCPURendering)
-            {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
-                if (_useShaderConversion)
-                {
-                    // Apply source texture and blit with shader conversion
-                    _sourceTexture.Apply();
-                    Graphics.Blit(_sourceTexture, _convertedRT, s_BGRAtoRGBAMaterial);
-                }
-                else
-                {
-                    // Native conversion already done, just apply
-                    Texture.Apply();
-                }
-#else
-                Texture.Apply();
-#endif
-                _asyncDrawWasCalled = false;
-            }
-            else
-            {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-                if (NativeBridge.LottieRenderTryGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr, out int ready) == 0 && ready != 0)
-                {
-                    RequestTextureUpload();
-                    _asyncDrawWasCalled = false;
-                }
-#endif
-            }
+            PlatformDrawOneFrameAsyncGetResult();
         }
 
         private unsafe void CreateRenderDataTexture2DMarshalToNative(uint width, uint height)
         {
             if (_lottieRenderDataIntPtr != IntPtr.Zero)
-            {
                 return;
-            }
 
             NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
             _lottieRenderData = new LottieRenderData
@@ -422,105 +300,7 @@ namespace LottiePlugin
                 bytesPerLine = width * sizeof(uint)
             };
 
-            // Only Vulkan and WebGL use CPU-side rendering with managed textures
-            // All other platforms (D3D11, D3D12, Metal, OpenGLCore) use native GPU texture upload
-#if UNITY_WEBGL && !UNITY_EDITOR
-            _usesCPURendering = true;
-            _useShaderConversion = LottieWebGLSettings.UseShaderConversion;
-            
-            // Initialize shader material if using shader conversion
-            if (_useShaderConversion && s_BGRAtoRGBAMaterial == null)
-            {
-                s_BGRAtoRGBAShader = Shader.Find("Hidden/LottiePlugin/BGRAtoRGBA");
-                if (s_BGRAtoRGBAShader != null)
-                {
-                    s_BGRAtoRGBAMaterial = new Material(s_BGRAtoRGBAShader);
-                }
-                else
-                {
-                    // Fallback to native conversion if shader not found
-                    Debug.LogWarning("[LottiePlugin] BGRA to RGBA shader not found, falling back to native conversion");
-                    _useShaderConversion = false;
-                }
-            }
-#else
-            var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
-            _usesCPURendering = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
-#endif
-
-            if (_usesCPURendering)
-            {
-                // WebGL and Vulkan: Use managed Texture2D with CPU-side updates
-#if UNITY_WEBGL && !UNITY_EDITOR
-                if (_useShaderConversion)
-                {
-                    // Shader mode: Use RGBA32 for source (shader will swap channels)
-                    // We still use RGBA32 because that's what WebGL supports for texture upload
-                    _sourceTexture = new Texture2D(
-                        (int)width,
-                        (int)height,
-                        TextureFormat.RGBA32,
-                        0,
-                        false);
-                    _pixelData = _sourceTexture.GetRawTextureData<byte>();
-                    _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-                    
-                    // Create RenderTexture for converted output
-                    _convertedRT = new RenderTexture((int)width, (int)height, 0, RenderTextureFormat.ARGB32);
-                    _convertedRT.Create();
-                    
-                    // Expose the RenderTexture as the public Texture
-                    Texture = null; // Will use _convertedRT via a property or direct access
-                }
-                else
-                {
-                    // Native mode: Use RGBA32 with native conversion
-                    Texture = new Texture2D(
-                        (int)width,
-                        (int)height,
-                        TextureFormat.RGBA32,
-                        0,
-                        false);
-                    _pixelData = Texture.GetRawTextureData<byte>();
-                    _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-                }
-#else
-                TextureFormat format = TextureFormat.BGRA32;
-                Texture = new Texture2D(
-                    (int)width,
-                    (int)height,
-                    format,
-                    0,
-                    false);
-                _pixelData = Texture.GetRawTextureData<byte>();
-                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-#endif
-                _ownsPixelData = false;
-            }
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-            else
-            {
-                // D3D11, D3D12, Metal, OpenGLCore: Use external native textures with GPU upload
-                int bufferSize = (int)(width * height * sizeof(uint));
-                _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-                _ownsPixelData = true;
-                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-                _nativeTexturePtr = NativeBridge.LottieCreateTexture(_animationWrapperIntPtr, (int)width, (int)height);
-                
-                if (_nativeTexturePtr == IntPtr.Zero)
-                {
-                    throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
-                }
-                
-                Texture = Texture2D.CreateExternalTexture(
-                    (int)width,
-                    (int)height,
-                    TextureFormat.BGRA32,
-                    false,
-                    false,
-                    _nativeTexturePtr);
-            }
-#endif
+            PlatformCreateRenderDataTexture(width, height);
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
         }
         private void UpdateInternal(float animationSpeed, Action<int> drawOneFrameMethod, bool scheduleAsync)
@@ -573,25 +353,6 @@ namespace LottiePlugin
             }
         }
 
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-        private void RequestTextureUpload()
-        {
-            IntPtr currentPtr = NativeBridge.LottieGetNativeTexturePtr(_animationWrapperIntPtr);
-            if (currentPtr != _nativeTexturePtr)
-            {
-                if (currentPtr != IntPtr.Zero)
-                {
-                    _nativeTexturePtr = currentPtr;
-                    Texture.UpdateExternalTexture(currentPtr);
-                }
-                else
-                {
-                    _nativeTexturePtr = IntPtr.Zero;
-                }
-            }
-            NativeBridge.LottieUpdateTexture(_animationWrapperIntPtr);
-        }
-#endif
 
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height, LottieAnimationOptions options = null)
         {
