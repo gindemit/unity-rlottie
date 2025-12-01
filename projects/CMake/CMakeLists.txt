@@ -45,7 +45,10 @@ endif()
 add_subdirectory(${RLOTTIE_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/rlottie_build)
 # Make rlottie compile as C++17 (doesn't affect your plugin target)
 target_compile_features(rlottie PUBLIC cxx_std_17)
-target_compile_definitions(rlottie PRIVATE LOTTIE_LOGGING_SUPPORT)
+# Enable logging support only for non-WebGL builds (NanoLogger uses threads which are not available in WebGL)
+if (NOT RLOTTIE_WEB_ASSEMBLY)
+    target_compile_definitions(rlottie PRIVATE LOTTIE_LOGGING_SUPPORT)
+endif()
 if (MSVC)
     target_compile_definitions(rlottie PRIVATE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
 endif()
@@ -68,7 +71,10 @@ else()
   add_library (LottiePlugin SHARED ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
 endif()
 
-target_compile_definitions(LottiePlugin PRIVATE LOTTIE_LOGGING_SUPPORT)
+# Enable logging support only for non-WebGL builds
+if (NOT RLOTTIE_WEB_ASSEMBLY)
+    target_compile_definitions(LottiePlugin PRIVATE LOTTIE_LOGGING_SUPPORT)
+endif()
 
 # Add WebGL to platforms that need pixman-cpp shim:
 if (RLOTTIE_IOS OR ANDROID OR RLOTTIE_OSX OR RLOTTIE_WEB_ASSEMBLY)
