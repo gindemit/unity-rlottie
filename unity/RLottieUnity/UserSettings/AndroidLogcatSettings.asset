@@ -1,13 +1,20 @@
 {
     "m_SelectedDeviceId": "R5CX15QS3BA",
     "m_SelectedProcess": {
-        "deviceId": "",
-        "name": "",
-        "processId": 0,
+        "deviceId": "R5CX15QS3BA",
+        "name": "com.DefaultCompany.LottiePlugin",
+        "processId": 5923,
         "exited": false
     },
     "m_SelectedPriority": 0,
-    "m_KnownProcessesForSerialization": [],
+    "m_KnownProcessesForSerialization": [
+        {
+            "deviceId": "R5CX15QS3BA",
+            "name": "com.DefaultCompany.LottiePlugin",
+            "processId": 5923,
+            "exited": false
+        }
+    ],
     "m_Tags": {
         "m_Entries": [
             {
@@ -62,7 +69,7 @@
         "AutoCapture": true
     },
     "m_FilterOptions": {
-        "m_Filter": "",
+        "m_Filter": "Lottie",
         "m_UseRegularExpressions": false,
         "m_MatchCase": false
     },
@@ -84,6 +91,10 @@
             "C:\\Work\\git\\gindemit\\unity-rlottie\\unity\\RLottieUnity",
             "C:\\Work\\git\\gindemit\\unity-rlottie\\unity\\RLottieUnity"
         ]
+    },
+    "m_QueryLayoutSettings": {
+        "LastLayoutSaveLocation": "",
+        "LastScreenshotSaveLocation": ""
     },
     "m_InputSettings": {
         "ShiftModifier": false,
