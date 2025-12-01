@@ -153,12 +153,41 @@ static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
 
-// WebGL stubs for logging
+// WebGL logging - output to browser console via printf
 static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
 
-static inline void LottieLogInfo(lottie_animation_wrapper*, const char*, ...) {}
-static inline void LottieLogWarning(lottie_animation_wrapper*, const char*, ...) {}
-static inline void LottieLogError(lottie_animation_wrapper*, const char*, ...) {}
+static inline void LottieLogInfo(lottie_animation_wrapper*, const char* format, ...)
+{
+    if (sGlobalLogLevel.load() < LOTTIE_LOG_INFO) return;
+    va_list args;
+    va_start(args, format);
+    printf("[Lottie INFO] ");
+    vprintf(format, args);
+    printf("\n");
+    va_end(args);
+}
+
+static inline void LottieLogWarning(lottie_animation_wrapper*, const char* format, ...)
+{
+    if (sGlobalLogLevel.load() < LOTTIE_LOG_WARNING) return;
+    va_list args;
+    va_start(args, format);
+    printf("[Lottie WARNING] ");
+    vprintf(format, args);
+    printf("\n");
+    va_end(args);
+}
+
+static inline void LottieLogError(lottie_animation_wrapper*, const char* format, ...)
+{
+    if (sGlobalLogLevel.load() < LOTTIE_LOG_ERROR) return;
+    va_list args;
+    va_start(args, format);
+    printf("[Lottie ERROR] ");
+    vprintf(format, args);
+    printf("\n");
+    va_end(args);
+}
 #endif
 
 #if defined(__APPLE__)
@@ -1396,20 +1425,58 @@ extern "C"
         return 0;
     }
 
+#if defined(__EMSCRIPTEN__)
+    // Helper function to convert BGRA to RGBA for WebGL (which doesn't support BGRA textures)
+    static void ConvertBGRAtoRGBA(uint32_t* buffer, uint32_t width, uint32_t height)
+    {
+        uint32_t pixelCount = width * height;
+        for (uint32_t i = 0; i < pixelCount; ++i)
+        {
+            uint32_t pixel = buffer[i];
+            // BGRA -> RGBA: swap B and R channels
+            uint8_t b = (pixel >> 0) & 0xFF;
+            uint8_t g = (pixel >> 8) & 0xFF;
+            uint8_t r = (pixel >> 16) & 0xFF;
+            uint8_t a = (pixel >> 24) & 0xFF;
+            buffer[i] = (a << 24) | (b << 16) | (g << 8) | r;
+        }
+    }
+#endif
+
     EXPORT_API int32_t lottie_render_immediately(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
         bool keep_aspect_ratio)
     {
-        LottieLogInfo(animation_wrapper, "[Lottie] Rendering frame %u immediately", frame_number);
+        LottieLogInfo(animation_wrapper, "[Lottie] lottie_render_immediately called for frame %u", frame_number);
+#if defined(__EMSCRIPTEN__)
+        LottieLogInfo(animation_wrapper, "[WebGL] render_data: buffer=%p, width=%u, height=%u, bytesPerLine=%u",
+            render_data->buffer, render_data->width, render_data->height, render_data->bytesPerLine);
+        
+        if (render_data->buffer == nullptr)
+        {
+            LottieLogError(animation_wrapper, "[WebGL] ERROR: render_data->buffer is NULL!");
+            return -1;
+        }
+        if (animation_wrapper == nullptr || animation_wrapper->animation == nullptr)
+        {
+            LottieLogError(animation_wrapper, "[WebGL] ERROR: animation_wrapper or animation is NULL!");
+            return -1;
+        }
+#endif
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
             render_data->height,
             render_data->bytesPerLine);
         animation_wrapper->animation->renderSync(frame_number, surface, keep_aspect_ratio);
-#if !defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__)
+        LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, converting BGRA to RGBA...");
+        // Convert BGRA to RGBA for WebGL
+        ConvertBGRAtoRGBA(render_data->buffer, render_data->width, render_data->height);
+        LottieLogInfo(animation_wrapper, "[WebGL] lottie_render_immediately complete");
+#else
         PublishUpload(animation_wrapper, render_data);
 #endif
         LottieLogInfo(animation_wrapper, "[Lottie] Frame rendered successfully");
@@ -1424,13 +1491,33 @@ extern "C"
         uint32_t frame_number,
         bool keep_aspect_ratio)
     {
+        LottieLogInfo(animation_wrapper, "[WebGL] lottie_render_create_future_async called for frame %u", frame_number);
+        LottieLogInfo(animation_wrapper, "[WebGL] render_data: buffer=%p, width=%u, height=%u, bytesPerLine=%u",
+            render_data->buffer, render_data->width, render_data->height, render_data->bytesPerLine);
+        
+        if (render_data->buffer == nullptr)
+        {
+            LottieLogError(animation_wrapper, "[WebGL] ERROR: render_data->buffer is NULL!");
+            return -1;
+        }
+        if (animation_wrapper == nullptr || animation_wrapper->animation == nullptr)
+        {
+            LottieLogError(animation_wrapper, "[WebGL] ERROR: animation_wrapper or animation is NULL!");
+            return -1;
+        }
+        
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
             render_data->height,
             render_data->bytesPerLine);
+        LottieLogInfo(animation_wrapper, "[WebGL] Surface created, calling renderSync...");
         // WebGL single-thread fallback: do sync render instead of futures
         animation_wrapper->animation->renderSync(frame_number, surface, keep_aspect_ratio);
+        LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, converting BGRA to RGBA...");
+        // Convert BGRA to RGBA for WebGL
+        ConvertBGRAtoRGBA(render_data->buffer, render_data->width, render_data->height);
+        LottieLogInfo(animation_wrapper, "[WebGL] BGRA to RGBA conversion complete");
         return 0;
     }
 
