@@ -44,6 +44,9 @@
 #if defined(_WIN32)
 #include "IUnityGraphicsD3D12.h"
 #endif
+#if defined(__APPLE__)
+#include "IUnityGraphicsMetal.h"
+#endif
 #include "IUnityLog.h"
 
 
@@ -341,6 +344,8 @@ namespace
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
     id<MTLDevice> gMetalDevice = nil;
+    IUnityGraphicsMetalV2* sMetalV2 = nullptr;
+    IUnityGraphicsMetalV1* sMetalV1 = nullptr;
 #endif
 
 #if !defined(__EMSCRIPTEN__)
@@ -695,6 +700,11 @@ namespace
                                                                       height:height
                                                                    mipmapped:NO];
                 descriptor.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+                // Use shared storage mode for CPU-writable textures on iOS
+                // This is the default on macOS but explicit is better
+#if TARGET_OS_IOS || TARGET_OS_TV
+                descriptor.storageMode = MTLStorageModeShared;
+#endif
 
                 id<MTLTexture> texture = [gMetalDevice newTextureWithDescriptor:descriptor];
                 if (texture == nil)
@@ -707,7 +717,7 @@ namespace
                 state->nativeTex = (__bridge void*)texture;
                 state->texW = width;
                 state->texH = height;
-                LottieLogInfo(animation, "[Lottie] Metal texture created successfully");
+                LottieLogInfo(animation, "[Lottie] Metal texture created successfully (size=%dx%d)", width, height);
                 return true;
             }
 #else
@@ -1084,11 +1094,21 @@ namespace
 #if defined(__APPLE__)
         if (state == nullptr || state->metalTex == nil || ctx.data == nullptr)
         {
+            LottieLogWarning(nullptr, "[Lottie] UploadMetal: Invalid parameters (state=%p, metalTex=%p, data=%p)",
+                           state, state ? (__bridge void*)state->metalTex : nullptr, ctx.data);
             return;
         }
 
+        LottieLogInfo(nullptr, "[Lottie] UploadMetal: Uploading to texture, size=%ux%u, stride=%u",
+                     ctx.width, ctx.height, ctx.stride);
+
         MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
         [state->metalTex replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
+
+        LottieLogInfo(nullptr, "[Lottie] UploadMetal: Upload completed successfully");
+#else
+        (void)state;
+        (void)ctx;
 #endif
     }
 
@@ -1725,8 +1745,20 @@ extern "C"
                 }
             }
         }
-        LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully");
 #endif
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        sMetalV2 = nullptr;
+        sMetalV1 = nullptr;
+        if (unityInterfaces != nullptr)
+        {
+            sMetalV2 = unityInterfaces->Get<IUnityGraphicsMetalV2>();
+            if (sMetalV2 == nullptr)
+            {
+                sMetalV1 = unityInterfaces->Get<IUnityGraphicsMetalV1>();
+            }
+        }
+#endif
+        LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully");
 #else
         (void)unityInterfaces;
 #endif
@@ -1776,6 +1808,10 @@ extern "C"
         sD3D12 = nullptr;
         sD3D12v6 = nullptr;
         sD3D12v5 = nullptr;
+#    endif
+#    if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        sMetalV2 = nullptr;
+        sMetalV1 = nullptr;
 #    endif
         LottieLogInfo(nullptr, "[Lottie] Plugin unloaded successfully");
         sLog = nullptr;
@@ -1827,7 +1863,28 @@ extern "C"
                     break;
                 case Renderer::Metal:
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-                    gMetalDevice = (__bridge id<MTLDevice>)device;
+                    // Try to get Metal device from Unity's Metal interface first (more reliable)
+                    if (sMetalV2 != nullptr)
+                    {
+                        gMetalDevice = sMetalV2->MetalDevice();
+                        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV2");
+                    }
+                    else if (sMetalV1 != nullptr)
+                    {
+                        gMetalDevice = sMetalV1->MetalDevice();
+                        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV1");
+                    }
+                    else if (device != nullptr)
+                    {
+                        // Fallback to the device pointer passed by Unity
+                        gMetalDevice = (__bridge id<MTLDevice>)device;
+                        LottieLogInfo(nullptr, "[Lottie] Got Metal device from bridged pointer");
+                    }
+                    
+                    if (gMetalDevice == nil)
+                    {
+                        LottieLogError(nullptr, "[Lottie] Failed to acquire Metal device");
+                    }
 #endif
                     break;
                 case Renderer::OpenGL:
