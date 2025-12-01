@@ -1441,6 +1441,19 @@ extern "C"
         // WebGL single-thread fallback: nothing to do here
         return 0;
     }
+
+    EXPORT_API int32_t lottie_render_try_get_future_result(
+        lottie_animation_wrapper* /*animation_wrapper*/,
+        lottie_render_data* /*render_data*/,
+        int32_t* ready)
+    {
+        // WebGL single-thread fallback: render was done synchronously, always ready
+        if (ready != nullptr)
+        {
+            *ready = 1;
+        }
+        return 0;
+    }
 #else
     EXPORT_API int32_t lottie_render_create_future_async(
         lottie_animation_wrapper* animation_wrapper,
