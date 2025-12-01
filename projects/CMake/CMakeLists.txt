@@ -30,6 +30,11 @@ set (PIXMAN_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/pixman)
 # Disable the LOTTIE_MODULE in rlottie
 set(LOTTIE_MODULE OFF CACHE BOOL "Disable LOTTIE MODULE SUPPORT" FORCE)
 
+# Disable threading for WebGL (Emscripten doesn't support threading by default)
+if (RLOTTIE_WEB_ASSEMBLY)
+    set(LOTTIE_THREAD OFF CACHE BOOL "Disable LOTTIE THREAD SUPPORT for WebGL" FORCE)
+endif()
+
 if (RLOTTIE_IOS)
     set(CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE NO)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/LottiePluginBuild)
