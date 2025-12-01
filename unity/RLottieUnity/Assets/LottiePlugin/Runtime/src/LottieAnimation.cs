@@ -362,6 +362,7 @@ namespace LottiePlugin
                 _ownsPixelData = false;
                 _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
             }
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
             else
             {
                 // D3D11, D3D12, Metal, OpenGLCore: Use external native textures with GPU upload
@@ -384,6 +385,7 @@ namespace LottiePlugin
                     false,
                     _nativeTexturePtr);
             }
+#endif
             Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
         }
         private void UpdateInternal(float animationSpeed, Action<int> drawOneFrameMethod, bool scheduleAsync)
