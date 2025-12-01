@@ -84,7 +84,8 @@ namespace LottiePlugin
             IntPtr animationWrapper,
             IntPtr renderData,
             int frameNumber,
-            bool keepAspectRatio);
+            bool keepAspectRatio,
+            bool convertBgraToRgba);
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
@@ -93,7 +94,8 @@ namespace LottiePlugin
             IntPtr animationWrapper,
             IntPtr renderData,
             int frameNumber,
-            bool keepAspectRatio);
+            bool keepAspectRatio,
+            bool convertBgraToRgba);
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_render_try_get_future_result")]
