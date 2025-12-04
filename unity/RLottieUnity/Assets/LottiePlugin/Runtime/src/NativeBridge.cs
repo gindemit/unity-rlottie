@@ -12,6 +12,53 @@ namespace LottiePlugin
         Info = 3
     }
 
+    /// <summary>
+    /// Handles plugin initialization for iOS.
+    /// On iOS with IL2CPP, static libraries don't get UnityPluginLoad called automatically.
+    /// We must explicitly register the plugin using UnityRegisterRenderingPluginV5.
+    /// </summary>
+    internal static class LottiePluginRegistration
+    {
+#if UNITY_IOS && !UNITY_EDITOR
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void UnityRegisterRenderingPluginV5(IntPtr loadFunc, IntPtr unloadFunc);
+
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr lottie_get_plugin_load_func();
+
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr lottie_get_plugin_unload_func();
+
+        private static bool s_Registered = false;
+#endif
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        internal static void RegisterPlugin()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            if (s_Registered)
+                return;
+
+            try
+            {
+                IntPtr loadFunc = lottie_get_plugin_load_func();
+                IntPtr unloadFunc = lottie_get_plugin_unload_func();
+                
+                Debug.Log($"[Lottie] Registering iOS plugin: loadFunc={loadFunc}, unloadFunc={unloadFunc}");
+                
+                UnityRegisterRenderingPluginV5(loadFunc, unloadFunc);
+                s_Registered = true;
+                
+                Debug.Log("[Lottie] iOS plugin registered successfully");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Lottie] Failed to register iOS plugin: {ex.Message}");
+            }
+#endif
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct LottieAnimationWrapper
     {
