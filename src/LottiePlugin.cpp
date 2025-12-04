@@ -1695,9 +1695,26 @@ extern "C"
 #if !defined(__EMSCRIPTEN__)
     EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
     {
+        // Early printf logging for iOS debugging
+#if defined(__APPLE__)
+        printf("[Lottie] lottie_create_texture called: width=%d, height=%d, renderer=%d, sUnityGraphics=%p\n",
+               width, height, (int)gRenderer, (void*)sUnityGraphics);
+        fflush(stdout);
+#endif
+        
         LottieLogInfo(animation,
-            "[Lottie] Creating texture: width=%d, height=%d (renderer=%d)",
-            width, height, (int)gRenderer);
+            "[Lottie] Creating texture: width=%d, height=%d (renderer=%d, sUnityGraphics=%p)",
+            width, height, (int)gRenderer, (void*)sUnityGraphics);
+
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        printf("[Lottie] Metal state: gMetalDevice=%p, sMetalV2=%p, sMetalV1=%p\n",
+               (__bridge void*)gMetalDevice, (void*)sMetalV2, (void*)sMetalV1);
+        fflush(stdout);
+        
+        LottieLogInfo(animation,
+            "[Lottie] Metal state: gMetalDevice=%p, sMetalV2=%p, sMetalV1=%p",
+            (__bridge void*)gMetalDevice, (void*)sMetalV2, (void*)sMetalV1);
+#endif
 
         InstanceState* state = GetState(animation);
 
@@ -1707,12 +1724,21 @@ extern "C"
         {
             LottieLogInfo(animation, "[Lottie] Attempting lazy graphics device initialization");
             ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+            LottieLogInfo(animation, "[Lottie] sUnityGraphics->GetRenderer() = %d", (int)currentRenderer);
             if (currentRenderer != ::kUnityGfxRendererNull)
             {
                 // Trigger initialization
                 OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
                 LottieLogInfo(animation, "[Lottie] Lazy initialization completed, renderer=%d", (int)gRenderer);
             }
+            else
+            {
+                LottieLogWarning(animation, "[Lottie] sUnityGraphics->GetRenderer() returned kUnityGfxRendererNull");
+            }
+        }
+        else if (gRenderer == Renderer::Unknown)
+        {
+            LottieLogWarning(animation, "[Lottie] gRenderer is Unknown and sUnityGraphics is null");
         }
 
         // If still unknown after lazy init attempt, bail out
@@ -1954,6 +1980,11 @@ extern "C"
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
     {
 #if !defined(__EMSCRIPTEN__)
+        // Early logging before sLog is set (uses printf on iOS)
+#if defined(__APPLE__)
+        printf("[Lottie] UnityPluginLoad called (unityInterfaces=%p)\n", (void*)unityInterfaces);
+        fflush(stdout);
+#endif
         sLog = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityLog>() : nullptr;
         LottieLogInfo(nullptr, "[Lottie] Plugin loading...");
         sProfiler = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityProfiler>() : nullptr;
@@ -1992,29 +2023,61 @@ extern "C"
         if (unityInterfaces != nullptr)
         {
             sMetalV2 = unityInterfaces->Get<IUnityGraphicsMetalV2>();
+            LottieLogInfo(nullptr, "[Lottie] IUnityGraphicsMetalV2: %s", sMetalV2 != nullptr ? "available" : "NOT available");
             if (sMetalV2 == nullptr)
             {
                 sMetalV1 = unityInterfaces->Get<IUnityGraphicsMetalV1>();
+                LottieLogInfo(nullptr, "[Lottie] IUnityGraphicsMetalV1: %s", sMetalV1 != nullptr ? "available" : "NOT available");
             }
+            
+            // Try to get Metal device immediately if Metal interface is available
+            if (sMetalV2 != nullptr)
+            {
+                id<MTLDevice> device = sMetalV2->MetalDevice();
+                LottieLogInfo(nullptr, "[Lottie] MetalV2->MetalDevice(): %s", device != nil ? "valid" : "nil");
+            }
+            else if (sMetalV1 != nullptr)
+            {
+                id<MTLDevice> device = sMetalV1->MetalDevice();
+                LottieLogInfo(nullptr, "[Lottie] MetalV1->MetalDevice(): %s", device != nil ? "valid" : "nil");
+            }
+        }
+        else
+        {
+            LottieLogWarning(nullptr, "[Lottie] unityInterfaces is null, cannot get Metal interface");
         }
 #endif
 
         // Get the IUnityGraphics interface and register for device event callbacks
         sUnityGraphics = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityGraphics>() : nullptr;
+        LottieLogInfo(nullptr, "[Lottie] IUnityGraphics: %s", sUnityGraphics != nullptr ? "available" : "NOT available");
+        
         if (sUnityGraphics != nullptr)
         {
             sUnityGraphics->RegisterDeviceEventCallback(OnGraphicsDeviceEvent);
+            LottieLogInfo(nullptr, "[Lottie] Registered graphics device event callback");
             
             // Check if the graphics device is already initialized (we may have missed the init event)
             ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+            LottieLogInfo(nullptr, "[Lottie] Current renderer from sUnityGraphics->GetRenderer(): %d", (int)currentRenderer);
+            
             if (currentRenderer != ::kUnityGfxRendererNull && gRenderer == Renderer::Unknown)
             {
-                LottieLogInfo(nullptr, "[Lottie] Graphics device already initialized, triggering init event");
+                LottieLogInfo(nullptr, "[Lottie] Graphics device already initialized (renderer=%d), triggering init event", (int)currentRenderer);
                 OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
+                LottieLogInfo(nullptr, "[Lottie] After init event: gRenderer=%d", (int)gRenderer);
+            }
+            else if (currentRenderer == ::kUnityGfxRendererNull)
+            {
+                LottieLogInfo(nullptr, "[Lottie] Graphics device not yet initialized (renderer is null)");
             }
         }
+        else
+        {
+            LottieLogWarning(nullptr, "[Lottie] Failed to get IUnityGraphics interface");
+        }
 
-        LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully");
+        LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully (gRenderer=%d)", (int)gRenderer);
 #else
         (void)unityInterfaces;
 #endif
