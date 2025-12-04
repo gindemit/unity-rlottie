@@ -49,7 +49,10 @@
 #endif
 #include "IUnityLog.h"
 
+// Forward declaration of graphics device event callback
+static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
 
+static IUnityGraphics* sUnityGraphics = nullptr;
 static IUnityProfiler* sProfiler = nullptr;
 static IUnityLog* sLog = nullptr;
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
@@ -717,9 +720,25 @@ namespace
             case Renderer::Metal:
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
             {
+                // Try to acquire Metal device if not yet available
                 if (gMetalDevice == nil)
                 {
-                    LottieLogError(animation, "[Lottie] Metal device is nil");
+                    LottieLogInfo(animation, "[Lottie] Metal device is nil, attempting lazy acquisition");
+                    if (sMetalV2 != nullptr)
+                    {
+                        gMetalDevice = sMetalV2->MetalDevice();
+                        LottieLogInfo(animation, "[Lottie] Got Metal device from IUnityGraphicsMetalV2 (lazy)");
+                    }
+                    else if (sMetalV1 != nullptr)
+                    {
+                        gMetalDevice = sMetalV1->MetalDevice();
+                        LottieLogInfo(animation, "[Lottie] Got Metal device from IUnityGraphicsMetalV1 (lazy)");
+                    }
+                }
+
+                if (gMetalDevice == nil)
+                {
+                    LottieLogError(animation, "[Lottie] Metal device is nil, cannot create texture");
                     return false;
                 }
 
@@ -1680,7 +1699,21 @@ extern "C"
 
         InstanceState* state = GetState(animation);
 
-        // If Unity hasn't initialized the graphics device yet, bail out clearly.
+        // If Unity hasn't initialized the graphics device yet, try to initialize it now.
+        // This can happen if the plugin missed the kUnityGfxDeviceEventInitialize event.
+        if (gRenderer == Renderer::Unknown && sUnityGraphics != nullptr)
+        {
+            LottieLogInfo(animation, "[Lottie] Attempting lazy graphics device initialization");
+            ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+            if (currentRenderer != ::kUnityGfxRendererNull)
+            {
+                // Trigger initialization
+                OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
+                LottieLogInfo(animation, "[Lottie] Lazy initialization completed, renderer=%d", (int)gRenderer);
+            }
+        }
+
+        // If still unknown after lazy init attempt, bail out
         if (gRenderer == Renderer::Unknown)
         {
             LottieLogWarning(animation,
@@ -1830,6 +1863,92 @@ extern "C"
         return OnRenderEvent;
     }
 
+    // Graphics device event callback - called by Unity when graphics device state changes
+    static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
+    {
+        if (eventType == kUnityGfxDeviceEventInitialize)
+        {
+            LottieLogInfo(nullptr, "[Lottie] OnGraphicsDeviceEvent: Initialize");
+            
+            // Get renderer type from IUnityGraphics
+            if (sUnityGraphics != nullptr)
+            {
+                // Use the global scope UnityGfxRenderer from IUnityGraphics.h
+                ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+                gRenderer = ToRenderer(static_cast<int>(currentRenderer));
+                LottieLogInfo(nullptr, "[Lottie] Graphics device type determined: %d", static_cast<int>(gRenderer));
+                
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+                if (gRenderer == Renderer::Metal)
+                {
+                    // Get Metal device from Unity's Metal interface
+                    if (sMetalV2 != nullptr)
+                    {
+                        gMetalDevice = sMetalV2->MetalDevice();
+                        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV2");
+                    }
+                    else if (sMetalV1 != nullptr)
+                    {
+                        gMetalDevice = sMetalV1->MetalDevice();
+                        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV1");
+                    }
+                    
+                    if (gMetalDevice == nil)
+                    {
+                        LottieLogError(nullptr, "[Lottie] Failed to acquire Metal device");
+                    }
+                }
+#endif
+#if defined(_WIN32)
+                // For D3D devices, we need to wait for UnitySetGraphicsDevice which provides the device pointer
+                // The callback here just sets the renderer type
+#endif
+#if defined(__ANDROID__) || defined(_WIN32)
+                if (gRenderer == Renderer::OpenGL)
+                {
+                    DetectGLExtensions();
+                }
+#endif
+            }
+        }
+        else if (eventType == kUnityGfxDeviceEventShutdown)
+        {
+            LottieLogInfo(nullptr, "[Lottie] OnGraphicsDeviceEvent: Shutdown");
+            gDevice = nullptr;
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+            gMetalDevice = nil;
+#endif
+#if defined(_WIN32)
+            gD3D12Queue = nullptr;
+            gD3D12Device = nullptr;
+            ReleaseOwnedD3D12CommandList();
+            if (gD3DContext)
+            {
+                gD3DContext->Release();
+                gD3DContext = nullptr;
+            }
+            gD3DDevice = nullptr;
+#endif
+            gRenderer = Renderer::Unknown;
+#if defined(__ANDROID__) || defined(_WIN32)
+            gHasBGRAExt = false;
+            gIsOpenGLES = false;
+#endif
+            {
+                std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
+                for (auto& entry : gInstances)
+                {
+                    ResetTextureState(entry.first, entry.second.get());
+                }
+            }
+            {
+                std::lock_guard<std::mutex> queueLock(gPendingUploadsMutex);
+                std::queue<lottie_animation_wrapper*> empty;
+                std::swap(gPendingUploads, empty);
+            }
+        }
+    }
+
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
     {
 #if !defined(__EMSCRIPTEN__)
@@ -1877,6 +1996,22 @@ extern "C"
             }
         }
 #endif
+
+        // Get the IUnityGraphics interface and register for device event callbacks
+        sUnityGraphics = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityGraphics>() : nullptr;
+        if (sUnityGraphics != nullptr)
+        {
+            sUnityGraphics->RegisterDeviceEventCallback(OnGraphicsDeviceEvent);
+            
+            // Check if the graphics device is already initialized (we may have missed the init event)
+            ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+            if (currentRenderer != ::kUnityGfxRendererNull && gRenderer == Renderer::Unknown)
+            {
+                LottieLogInfo(nullptr, "[Lottie] Graphics device already initialized, triggering init event");
+                OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
+            }
+        }
+
         LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully");
 #else
         (void)unityInterfaces;
@@ -1886,6 +2021,14 @@ extern "C"
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
     {
         LottieLogInfo(nullptr, "[Lottie] Plugin unloading...");
+
+        // Unregister graphics device event callback
+        if (sUnityGraphics != nullptr)
+        {
+            sUnityGraphics->UnregisterDeviceEventCallback(OnGraphicsDeviceEvent);
+            sUnityGraphics = nullptr;
+        }
+
         gDevice = nullptr;
         gRenderer = Renderer::Unknown;
 #if defined(_WIN32)
