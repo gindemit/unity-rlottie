@@ -49,8 +49,10 @@
 #endif
 #include "IUnityLog.h"
 
-// Forward declaration of graphics device event callback
-static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
+// Forward declaration of graphics device event callback (must be extern "C" to match definition)
+extern "C" {
+    static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
+}
 
 static IUnityGraphics* sUnityGraphics = nullptr;
 static IUnityProfiler* sProfiler = nullptr;
