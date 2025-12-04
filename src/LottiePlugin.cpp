@@ -2145,6 +2145,27 @@ extern "C"
 #endif
     }
 
+    // iOS static library registration helpers
+    // On iOS with IL2CPP, static libraries must be explicitly registered via UnityRegisterRenderingPluginV5
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    typedef void (UNITY_INTERFACE_API *UnityPluginLoadFunc)(IUnityInterfaces* unityInterfaces);
+    typedef void (UNITY_INTERFACE_API *UnityPluginUnloadFunc)(void);
+
+    extern "C" UnityPluginLoadFunc UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_get_plugin_load_func()
+    {
+        printf("[Lottie] lottie_get_plugin_load_func called, returning UnityPluginLoad=%p\n", (void*)&UnityPluginLoad);
+        fflush(stdout);
+        return &UnityPluginLoad;
+    }
+
+    extern "C" UnityPluginUnloadFunc UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_get_plugin_unload_func()
+    {
+        printf("[Lottie] lottie_get_plugin_unload_func called, returning UnityPluginUnload=%p\n", (void*)&UnityPluginUnload);
+        fflush(stdout);
+        return &UnityPluginUnload;
+    }
+#endif
+
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
     {
         LottieLogInfo(nullptr,
