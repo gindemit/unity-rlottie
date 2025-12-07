@@ -1,10 +1,10 @@
 #include "LottiePlugin.h"
+#include "LottieLogger.h"
 #include "vdebug.h"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -16,11 +16,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-#if defined(__ANDROID__)
-#    include <android/log.h>
-#    define LOTTIE_ANDROID_LOG_TAG "LottiePlugin"
-#endif
 
 // --- Platform GPU headers FIRST ---
 #if defined(_WIN32)
@@ -56,7 +51,6 @@ extern "C" {
 
 static IUnityGraphics* sUnityGraphics = nullptr;
 static IUnityProfiler* sProfiler = nullptr;
-static IUnityLog* sLog = nullptr;
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
@@ -84,69 +78,6 @@ static inline void ProfEnd(const UnityProfilerMarkerDesc* d)
         sProfiler->EndSample(d);
     }
 }
-
-// Global log level (default: Info – verbose logging)
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
-
-static inline void LottieLogInfo(lottie_animation_wrapper* animation, const char* format, ...)
-{
-    LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_INFO)
-    {
-        char buffer[512];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-#if defined(__ANDROID__)
-        __android_log_print(ANDROID_LOG_INFO, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
-#endif
-        if (sLog)
-        {
-            UNITY_LOG(sLog, buffer);
-        }
-    }
-}
-
-static inline void LottieLogWarning(lottie_animation_wrapper* animation, const char* format, ...)
-{
-    LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_WARNING)
-    {
-        char buffer[512];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-#if defined(__ANDROID__)
-        __android_log_print(ANDROID_LOG_WARN, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
-#endif
-        if (sLog)
-        {
-            UNITY_LOG_WARNING(sLog, buffer);
-        }
-    }
-}
-
-static inline void LottieLogError(lottie_animation_wrapper* animation, const char* format, ...)
-{
-    LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_ERROR)
-    {
-        char buffer[512];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-#if defined(__ANDROID__)
-        __android_log_print(ANDROID_LOG_ERROR, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
-#endif
-        if (sLog)
-        {
-            UNITY_LOG_ERROR(sLog, buffer);
-        }
-    }
-}
 #else
 struct IUnityInterfaces;
 struct UnityProfilerMarkerDesc;
@@ -157,42 +88,6 @@ static inline void ProfEnd(const UnityProfilerMarkerDesc*) {}
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
-
-// WebGL logging - output to browser console via printf
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
-
-static inline void LottieLogInfo(lottie_animation_wrapper*, const char* format, ...)
-{
-    if (sGlobalLogLevel.load() < LOTTIE_LOG_INFO) return;
-    va_list args;
-    va_start(args, format);
-    printf("[Lottie INFO] ");
-    vprintf(format, args);
-    printf("\n");
-    va_end(args);
-}
-
-static inline void LottieLogWarning(lottie_animation_wrapper*, const char* format, ...)
-{
-    if (sGlobalLogLevel.load() < LOTTIE_LOG_WARNING) return;
-    va_list args;
-    va_start(args, format);
-    printf("[Lottie WARNING] ");
-    vprintf(format, args);
-    printf("\n");
-    va_end(args);
-}
-
-static inline void LottieLogError(lottie_animation_wrapper*, const char* format, ...)
-{
-    if (sGlobalLogLevel.load() < LOTTIE_LOG_ERROR) return;
-    va_list args;
-    va_start(args, format);
-    printf("[Lottie ERROR] ");
-    vprintf(format, args);
-    printf("\n");
-    va_end(args);
-}
 #endif
 
 #if defined(__APPLE__)
@@ -1359,7 +1254,7 @@ namespace
         animation_wrapper->width = width;
         animation_wrapper->height = height;
         animation_wrapper->animation = std::move(animation);
-        animation_wrapper->logLevel = sGlobalLogLevel.load();
+        animation_wrapper->logLevel = LottieGetGlobalLogLevel();
         LottieLogInfo(animation_wrapper, "[Lottie] Created animation wrapper: width=%lld, height=%lld, fps=%.2f, frames=%lld, duration=%.2fs",
                      (long long)animation_wrapper->width, (long long)animation_wrapper->height,
                      animation_wrapper->frameRate, (long long)animation_wrapper->totalFrame,
@@ -1680,14 +1575,14 @@ extern "C"
         else
         {
             // Set global log level if no specific animation wrapper
-            sGlobalLogLevel.store(log_level);
+            LottieSetGlobalLogLevel(log_level);
         }
         return 0;
     }
 
     EXPORT_API int32_t lottie_set_global_log_level(LottieLogLevel log_level)
     {
-        sGlobalLogLevel.store(log_level);
+        LottieSetGlobalLogLevel(log_level);
         LottieLogInfo(nullptr, "[Lottie] Global log level changed to %d", (int)log_level);
         return 0;
     }
@@ -1980,12 +1875,12 @@ extern "C"
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
     {
 #if !defined(__EMSCRIPTEN__)
-        // Early logging before sLog is set (uses printf on iOS)
+        // Early logging before Unity's logger is set (uses printf on iOS)
 #if defined(__APPLE__)
         printf("[Lottie] UnityPluginLoad called (unityInterfaces=%p)\n", (void*)unityInterfaces);
         fflush(stdout);
 #endif
-        sLog = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityLog>() : nullptr;
+        LottieLoggerSetUnityLog(unityInterfaces != nullptr ? unityInterfaces->Get<IUnityLog>() : nullptr);
         LottieLogInfo(nullptr, "[Lottie] Plugin loading...");
         sProfiler = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityProfiler>() : nullptr;
         if (sProfiler != nullptr && sProfiler->IsAvailable())
@@ -2141,7 +2036,7 @@ extern "C"
         sMetalV1 = nullptr;
 #    endif
         LottieLogInfo(nullptr, "[Lottie] Plugin unloaded successfully");
-        sLog = nullptr;
+        LottieLoggerSetUnityLog(nullptr);
 #endif
     }
 

@@ -62,6 +62,7 @@ include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/
 message("Lottie root directory: ${RLOTTIE_ROOT}")
 
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
+    ../../src/LottieLogger.cpp
     ../../src/LottiePlugin.cpp)
 
 if (RLOTTIE_OSX OR RLOTTIE_IOS)
