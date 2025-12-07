@@ -55,14 +55,14 @@ EXPORT_API UnityRenderingEvent lottie_get_render_event_func(void)
 typedef void (UNITY_INTERFACE_API *UnityPluginLoadFunc)(IUnityInterfaces* unityInterfaces);
 typedef void (UNITY_INTERFACE_API *UnityPluginUnloadFunc)(void);
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoadFunc lottie_get_plugin_load_func()
+UNITY_INTERFACE_EXPORT UnityPluginLoadFunc UNITY_INTERFACE_API lottie_get_plugin_load_func()
 {
     printf("[Lottie] lottie_get_plugin_load_func called, returning UnityPluginLoad=%p\n", (void*)&UnityPluginLoad);
     fflush(stdout);
     return &UnityPluginLoad;
 }
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnloadFunc lottie_get_plugin_unload_func()
+UNITY_INTERFACE_EXPORT UnityPluginUnloadFunc UNITY_INTERFACE_API lottie_get_plugin_unload_func()
 {
     printf("[Lottie] lottie_get_plugin_unload_func called, returning UnityPluginUnload=%p\n", (void*)&UnityPluginUnload);
     fflush(stdout);
@@ -70,7 +70,7 @@ UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnloadFunc lottie_get_plug
 }
 #endif
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API void UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
+UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
 {
     LottieLogInfo(nullptr,
         "[Lottie] UnitySetGraphicsDevice: eventType=%d, deviceType=%d, device=%p",
@@ -189,27 +189,27 @@ UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API void UnitySetGraphicsDevice(void* dev
     }
 }
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API void UnityRenderEvent(int eventID)
+UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API UnityRenderEvent(int eventID)
 {
     OnRenderEvent(eventID);
 }
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API void lottie_unity_plugin_load(IUnityInterfaces* ifaces)
+UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API lottie_unity_plugin_load(IUnityInterfaces* ifaces)
 {
     UnityPluginLoad(ifaces);
 }
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API void lottie_unity_plugin_unload()
+UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API lottie_unity_plugin_unload()
 {
     UnityPluginUnload();
 }
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API void lottie_unity_set_graphics_device(void* device, int deviceType, int eventType)
+UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API lottie_unity_set_graphics_device(void* device, int deviceType, int eventType)
 {
     UnitySetGraphicsDevice(device, deviceType, eventType);
 }
 
-UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API void lottie_unity_render_event(int eventID)
+UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API lottie_unity_render_event(int eventID)
 {
     UnityRenderEvent(eventID);
 }
