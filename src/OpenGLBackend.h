@@ -1,0 +1,29 @@
+#ifndef OPENGL_BACKEND_H
+#define OPENGL_BACKEND_H
+
+// OpenGL backend is used on Windows, Android, and Linux (but not WebGL/Emscripten or Apple Metal platforms)
+#if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
+
+#include "LottiePlugin.h"
+#include "RendererCommon.h"
+
+// Forward declarations
+struct InstanceState;
+
+// OpenGL extension detection
+void DetectGLExtensions();
+bool HasBGRAExtension();
+bool IsOpenGLES();
+void ResetGLExtensionState();
+
+// OpenGL texture operations
+bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
+void UploadOpenGL(InstanceState* state, const UploadContext& ctx);
+void ResetTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state);
+
+// OpenGL error checking helper
+void CheckGLError(lottie_animation_wrapper* animation, const char* operation);
+
+#endif // !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
+
+#endif // OPENGL_BACKEND_H
