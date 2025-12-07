@@ -4,16 +4,15 @@
 #if !defined(__EMSCRIPTEN__)
 
 #include "LottiePlugin.h"
+#include "IUnityInterface.h"
 
 // Forward declarations
-struct IUnityInterfaces;
 struct IUnityGraphics;
 struct IUnityProfiler;
 struct UnityProfilerMarkerDesc;
 
-// Unity plugin lifecycle
-void UnityPluginLoad(IUnityInterfaces* unityInterfaces);
-void UnityPluginUnload();
+// Unity plugin lifecycle - declarations are already in IUnityInterface.h
+// We just provide the implementation in UnityIntegration.cpp
 
 // Graphics device event callback
 void OnGraphicsDeviceEvent(int eventType);

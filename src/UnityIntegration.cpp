@@ -1,5 +1,13 @@
 #if !defined(__EMSCRIPTEN__)
 
+// Platform headers must come first for Unity D3D12 headers
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <d3d12.h>
+#include <dxgi1_4.h>
+#endif
+
 #include "UnityIntegration.h"
 #include "RendererCommon.h"
 #include "InstanceRegistry.h"
