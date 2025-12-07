@@ -62,8 +62,25 @@ include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/
 message("Lottie root directory: ${RLOTTIE_ROOT}")
 
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
+    ../../src/D3D11Backend_win.cpp
+    ../../src/D3D12Backend_win.cpp
+    ../../src/InstanceRegistry.cpp
     ../../src/LottieLogger.cpp
-    ../../src/LottiePlugin.cpp)
+    ../../src/LottiePluginApi.cpp
+    ../../src/OpenGLBackend.cpp
+    ../../src/PixelFormatUtils.cpp
+    ../../src/PixelFormatUtils_webgl.cpp
+    ../../src/RendererCommon.cpp
+    ../../src/TextureBackend.cpp
+    ../../src/UnityExports.cpp
+    ../../src/UnityIntegration.cpp
+    ../../src/UploadPipeline.cpp
+    ../../src/UploadQueue.cpp
+    ../../src/VulkanBackend.cpp)
+
+if (RLOTTIE_OSX OR RLOTTIE_IOS)
+    list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES ../../src/MetalBackend_apple.mm)
+endif()
 
 if (RLOTTIE_OSX OR RLOTTIE_IOS)
     set_source_files_properties(${RLOTTIE_PLUGIN_LIBRARY_SOURCES} PROPERTIES LANGUAGE OBJCXX)
