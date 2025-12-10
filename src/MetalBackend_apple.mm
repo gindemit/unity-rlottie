@@ -47,22 +47,12 @@ void InitializeMetalFromUnity(IUnityInterfaces* unityInterfaces)
         LottieLogInfo(nullptr, "[Lottie] IUnityGraphicsMetalV1: %s", sMetalV1 != nullptr ? "available" : "NOT available");
     }
 
-    // Try to get Metal device immediately
-    if (sMetalV2 != nullptr)
-    {
-        gMetalDevice = sMetalV2->MetalDevice();
-        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV2");
-    }
-    else if (sMetalV1 != nullptr)
-    {
-        gMetalDevice = sMetalV1->MetalDevice();
-        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV1");
-    }
-
-    if (gMetalDevice == nil)
-    {
-        LottieLogError(nullptr, "[Lottie] Failed to acquire Metal device during initialization");
-    }
+    // NOTE: Do NOT try to get the Metal device here during UnityPluginLoad.
+    // Unity's internal Metal device (metal::g_Device) is not yet initialized at this point,
+    // and calling MetalDevice() will trigger an assertion failure.
+    // The device will be acquired lazily via TryAcquireMetalDevice() when
+    // OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize) is fired.
+    LottieLogInfo(nullptr, "[Lottie] Metal interfaces cached, device will be acquired on graphics init");
 }
 
 void ShutdownMetal()
