@@ -18,6 +18,20 @@ namespace
     IUnityGraphicsMetalV1* sMetalV1 = nullptr;
 }
 
+// End Unity's current command encoder to ensure safe texture access
+// This must be called before modifying textures to avoid GPU read/write conflicts
+static void EndUnityCommandEncoder()
+{
+    if (sMetalV2 != nullptr)
+    {
+        sMetalV2->EndCurrentCommandEncoder();
+    }
+    else if (sMetalV1 != nullptr)
+    {
+        sMetalV1->EndCurrentCommandEncoder();
+    }
+}
+
 void SetMetalDevice(void* device)
 {
     gMetalDevice = (__bridge id<MTLDevice>)device;
@@ -154,6 +168,12 @@ void UploadMetal(InstanceState* state, const UploadContext& ctx)
 
     LottieLogInfo(nullptr, "[Lottie] UploadMetal: Uploading to texture, size=%ux%u, stride=%u",
                  ctx.width, ctx.height, ctx.stride);
+
+    // CRITICAL: End Unity's current command encoder before modifying the texture.
+    // On iOS devices (unlike macOS editor), the GPU aggressively reads from textures
+    // while we might be writing to them, causing visual corruption (blinking/flickering).
+    // By ending the encoder, we ensure any pending GPU reads complete before we write.
+    EndUnityCommandEncoder();
 
     id<MTLTexture> metalTex = (__bridge id<MTLTexture>)state->metal.metalTex;
     MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
