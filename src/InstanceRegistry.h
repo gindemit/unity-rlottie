@@ -22,6 +22,7 @@ struct InstanceState
 {
     std::mutex uploadMutex;
     UploadContext uploadCtx{};
+    std::vector<uint8_t> stagingBuffer;  // CPU-side copy of pixel data to decouple rlottie render thread from GPU upload
     std::atomic<uint64_t> uploadVersion{0};
     std::atomic<uint64_t> requestedVersion{0};
     uint64_t uploadedVersion = 0;

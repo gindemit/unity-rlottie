@@ -3,6 +3,7 @@
 #include "TextureBackend.h"
 #include "RendererCommon.h"
 #include "LottieLogger.h"
+#include <cstring>
 
 #if !defined(__EMSCRIPTEN__)
 
@@ -75,19 +76,31 @@ void PublishUpload(lottie_animation_wrapper* animation, const lottie_render_data
         return;
     }
 
-    UploadContext ctx;
-    ctx.data = reinterpret_cast<const uint8_t*>(render_data->buffer);
-    ctx.width = render_data->width;
-    ctx.height = render_data->height;
-    ctx.stride = render_data->bytesPerLine;
+    // Calculate buffer size
+    size_t bufferSize = static_cast<size_t>(render_data->bytesPerLine) * render_data->height;
+    const uint8_t* srcData = reinterpret_cast<const uint8_t*>(render_data->buffer);
 
     {
         std::lock_guard<std::mutex> lock(state->uploadMutex);
-        state->uploadCtx = ctx;
+        
+        // Resize staging buffer if needed and copy the pixel data
+        // This creates an owned copy so rlottie can start rendering the next frame
+        // without corrupting the data we're about to upload to the GPU
+        if (state->stagingBuffer.size() != bufferSize)
+        {
+            state->stagingBuffer.resize(bufferSize);
+        }
+        std::memcpy(state->stagingBuffer.data(), srcData, bufferSize);
+        
+        // Update upload context to point to our staging buffer copy
+        state->uploadCtx.data = state->stagingBuffer.data();
+        state->uploadCtx.width = render_data->width;
+        state->uploadCtx.height = render_data->height;
+        state->uploadCtx.stride = render_data->bytesPerLine;
     }
 
     state->uploadVersion.fetch_add(1, std::memory_order_release);
-    LottieLogInfo(animation, "[Lottie] PublishUpload: upload published, version incremented");
+    LottieLogInfo(animation, "[Lottie] PublishUpload: data copied to staging buffer, version incremented");
 }
 
 #endif // !defined(__EMSCRIPTEN__)
