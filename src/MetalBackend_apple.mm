@@ -1,6 +1,7 @@
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
 
 #include <TargetConditionals.h>
+#import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 
 #include "MetalBackend_apple.h"
@@ -99,7 +100,13 @@ void ResetTextureMetal(lottie_animation_wrapper* animation, InstanceState* state
         return;
     }
 
-    state->metal.metalTex = nil;
+    if (state->metal.metalTex != nullptr)
+    {
+        // Release the retained texture using CFBridgingRelease
+        // This transfers ownership back to ARC which will then release it
+        CFBridgingRelease(state->metal.metalTex);
+        state->metal.metalTex = nullptr;
+    }
 }
 
 bool EnsureTextureMetal(lottie_animation_wrapper* animation, InstanceState* state, int width, int height)
@@ -136,8 +143,10 @@ bool EnsureTextureMetal(lottie_animation_wrapper* animation, InstanceState* stat
         return false;
     }
 
-    state->metal.metalTex = (__bridge void*)texture;
-    state->nativeTex = (__bridge void*)texture;
+    // Use __bridge_retained to transfer ownership to the void* storage
+    // The texture is now retained and must be released with CFBridgingRelease
+    state->metal.metalTex = (__bridge_retained void*)texture;
+    state->nativeTex = state->metal.metalTex;
     state->texW = width;
     state->texH = height;
     LottieLogInfo(animation, "[Lottie] Metal texture created successfully (size=%dx%d)", width, height);
