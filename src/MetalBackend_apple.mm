@@ -148,9 +148,13 @@ bool EnsureTextureMetal(lottie_animation_wrapper* animation, InstanceState* stat
                                                           height:height
                                                        mipmapped:NO];
     descriptor.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-    // Use shared storage mode for CPU-writable textures on iOS
-    // This is the default on macOS but explicit is better
-#if TARGET_OS_IOS || TARGET_OS_TV
+    // Use shared storage mode for CPU-writable textures
+    // This allows both CPU and GPU to access the texture without explicit synchronization
+    // and is required for the blit copy approach to work correctly on all Apple platforms
+#if TARGET_OS_OSX
+    descriptor.storageMode = MTLStorageModeManaged;
+#else
+    // iOS/tvOS: Shared is the only option for CPU-writable textures
     descriptor.storageMode = MTLStorageModeShared;
 #endif
 
@@ -219,6 +223,13 @@ void UploadMetal(InstanceState* state, const UploadContext& ctx)
                            destinationSlice:0
                            destinationLevel:0
                           destinationOrigin:MTLOriginMake(0, 0, 0)];
+                
+#if TARGET_OS_OSX
+                // On macOS with managed storage mode, synchronize the texture
+                // to ensure GPU sees the updated data
+                [blitEncoder synchronizeTexture:metalTex slice:0 level:0];
+#endif
+                
                 [blitEncoder endEncoding];
                 
                 LottieLogInfo(nullptr, "[Lottie] UploadMetal: Blit copy queued successfully");
