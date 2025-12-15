@@ -18,34 +18,6 @@ namespace
     IUnityGraphicsMetalV1* sMetalV1 = nullptr;
 }
 
-// Get Unity's current command buffer for synchronized GPU operations
-static id<MTLCommandBuffer> GetUnityCommandBuffer()
-{
-    if (sMetalV2 != nullptr)
-    {
-        return sMetalV2->CurrentCommandBuffer();
-    }
-    else if (sMetalV1 != nullptr)
-    {
-        return sMetalV1->CurrentCommandBuffer();
-    }
-    return nil;
-}
-
-// End Unity's current command encoder to ensure safe texture access
-// This must be called before creating our own encoder
-static void EndUnityCommandEncoder()
-{
-    if (sMetalV2 != nullptr)
-    {
-        sMetalV2->EndCurrentCommandEncoder();
-    }
-    else if (sMetalV1 != nullptr)
-    {
-        sMetalV1->EndCurrentCommandEncoder();
-    }
-}
-
 void SetMetalDevice(void* device)
 {
     gMetalDevice = (__bridge id<MTLDevice>)device;
@@ -189,73 +161,21 @@ void UploadMetal(InstanceState* state, const UploadContext& ctx)
 
     id<MTLTexture> metalTex = (__bridge id<MTLTexture>)state->metal.metalTex;
     
-    // End Unity's current command encoder before we create our blit encoder
-    EndUnityCommandEncoder();
-    
-    // Get Unity's current command buffer for synchronized GPU operations
-    id<MTLCommandBuffer> commandBuffer = GetUnityCommandBuffer();
-    
-    if (commandBuffer != nil)
-    {
-        // Use a blit command encoder to copy data from a staging buffer to the texture.
-        // This ensures the copy is synchronized with Unity's rendering pipeline.
-        
-        // Calculate buffer size
-        NSUInteger bufferSize = ctx.stride * ctx.height;
-        
-        // Create a temporary staging buffer with shared storage
-        id<MTLBuffer> stagingBuffer = [gMetalDevice newBufferWithBytes:ctx.data
-                                                                length:bufferSize
-                                                               options:MTLResourceStorageModeShared];
-        
-        if (stagingBuffer != nil)
-        {
-            // Create blit encoder and copy from buffer to texture
-            id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
-            if (blitEncoder != nil)
-            {
-                [blitEncoder copyFromBuffer:stagingBuffer
-                               sourceOffset:0
-                          sourceBytesPerRow:ctx.stride
-                        sourceBytesPerImage:bufferSize
-                                 sourceSize:MTLSizeMake(ctx.width, ctx.height, 1)
-                                  toTexture:metalTex
-                           destinationSlice:0
-                           destinationLevel:0
-                          destinationOrigin:MTLOriginMake(0, 0, 0)];
-                
-#if TARGET_OS_OSX
-                // On macOS with managed storage mode, synchronize the texture
-                // to ensure GPU sees the updated data
-                [blitEncoder synchronizeTexture:metalTex slice:0 level:0];
-#endif
-                
-                [blitEncoder endEncoding];
-                
-                LottieLogInfo(nullptr, "[Lottie] UploadMetal: Blit copy queued successfully");
-            }
-            else
-            {
-                LottieLogWarning(nullptr, "[Lottie] UploadMetal: Failed to create blit encoder, falling back to replaceRegion");
-                MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
-                [metalTex replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
-            }
-            // stagingBuffer will be released by ARC after the command buffer completes
-        }
-        else
-        {
-            LottieLogWarning(nullptr, "[Lottie] UploadMetal: Failed to create staging buffer, falling back to replaceRegion");
-            MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
-            [metalTex replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
-        }
-    }
-    else
-    {
-        // Fallback: no command buffer available, use direct replaceRegion
-        LottieLogWarning(nullptr, "[Lottie] UploadMetal: No command buffer available, using direct replaceRegion");
-        MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
-        [metalTex replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
-    }
+    // Use replaceRegion for texture upload.
+    // This is the simplest and most direct method for updating texture data.
+    // 
+    // On iOS with MTLStorageModeShared: The CPU and GPU share the same memory,
+    // so replaceRegion efficiently updates the texture without extra copies.
+    //
+    // On macOS with MTLStorageModeManaged: replaceRegion handles the 
+    // CPU-to-GPU synchronization internally.
+    //
+    // Note: We previously used blit command encoders with Unity's command buffer,
+    // but this caused "A command encoder is already encoding to this command buffer"
+    // crashes in Unity 6 due to stricter command buffer management.
+    // Using replaceRegion avoids these issues entirely.
+    MTLRegion region = MTLRegionMake2D(0, 0, ctx.width, ctx.height);
+    [metalTex replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
 
     LottieLogInfo(nullptr, "[Lottie] UploadMetal: Upload completed successfully");
 }
