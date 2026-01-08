@@ -62,10 +62,43 @@ include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/
 message("Lottie root directory: ${RLOTTIE_ROOT}")
 
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
-    ../../src/LottiePlugin.cpp)
+    ../../src/LottieLogger.cpp
+    ../../src/LottiePluginApi.cpp
+    ../../src/RendererCommon.cpp
+    ../../src/InstanceRegistry.cpp
+    ../../src/UploadQueue.cpp
+    ../../src/UploadPipeline.cpp
+    ../../src/PixelFormatUtils.cpp
+    ../../src/TextureBackend.cpp
+    ../../src/VulkanBackend.cpp
+    ../../src/UnityIntegration.cpp
+    ../../src/UnityExports.cpp)
+
+# Platform-specific backend sources
+if (WIN32)
+    list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES
+        ../../src/D3D12Backend_win.cpp
+        ../../src/D3D11Backend_win.cpp
+        ../../src/OpenGLBackend.cpp)
+elseif(RLOTTIE_OSX OR RLOTTIE_IOS)
+    list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES
+        ../../src/MetalBackend_apple.mm)
+elseif(ANDROID)
+    list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES
+        ../../src/OpenGLBackend.cpp)
+elseif(RLOTTIE_LINUX)
+    list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES
+        ../../src/OpenGLBackend.cpp)
+endif()
 
 if (RLOTTIE_OSX OR RLOTTIE_IOS)
-    set_source_files_properties(${RLOTTIE_PLUGIN_LIBRARY_SOURCES} PROPERTIES LANGUAGE OBJCXX)
+    # Set Objective-C++ for files that need Metal
+    set_source_files_properties(
+        ../../src/MetalBackend_apple.mm
+        ../../src/UnityIntegration.cpp
+        ../../src/UnityExports.cpp
+        ../../src/LottiePluginApi.cpp
+        PROPERTIES LANGUAGE OBJCXX)
 endif()
 
 message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")

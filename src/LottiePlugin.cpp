@@ -1,10 +1,10 @@
 #include "LottiePlugin.h"
+#include "LottieLogger.h"
 #include "vdebug.h"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -16,11 +16,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-#if defined(__ANDROID__)
-#    include <android/log.h>
-#    define LOTTIE_ANDROID_LOG_TAG "LottiePlugin"
-#endif
 
 // --- Platform GPU headers FIRST ---
 #if defined(_WIN32)
@@ -49,9 +44,13 @@
 #endif
 #include "IUnityLog.h"
 
+// Forward declaration of graphics device event callback (must be extern "C" to match definition)
+extern "C" {
+    static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType);
+}
 
+static IUnityGraphics* sUnityGraphics = nullptr;
 static IUnityProfiler* sProfiler = nullptr;
-static IUnityLog* sLog = nullptr;
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
@@ -79,69 +78,6 @@ static inline void ProfEnd(const UnityProfilerMarkerDesc* d)
         sProfiler->EndSample(d);
     }
 }
-
-// Global log level (default: Info – verbose logging)
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
-
-static inline void LottieLogInfo(lottie_animation_wrapper* animation, const char* format, ...)
-{
-    LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_INFO)
-    {
-        char buffer[512];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-#if defined(__ANDROID__)
-        __android_log_print(ANDROID_LOG_INFO, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
-#endif
-        if (sLog)
-        {
-            UNITY_LOG(sLog, buffer);
-        }
-    }
-}
-
-static inline void LottieLogWarning(lottie_animation_wrapper* animation, const char* format, ...)
-{
-    LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_WARNING)
-    {
-        char buffer[512];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-#if defined(__ANDROID__)
-        __android_log_print(ANDROID_LOG_WARN, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
-#endif
-        if (sLog)
-        {
-            UNITY_LOG_WARNING(sLog, buffer);
-        }
-    }
-}
-
-static inline void LottieLogError(lottie_animation_wrapper* animation, const char* format, ...)
-{
-    LottieLogLevel level = animation ? animation->logLevel : sGlobalLogLevel.load();
-    if (level >= LOTTIE_LOG_ERROR)
-    {
-        char buffer[512];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-#if defined(__ANDROID__)
-        __android_log_print(ANDROID_LOG_ERROR, LOTTIE_ANDROID_LOG_TAG, "%s", buffer);
-#endif
-        if (sLog)
-        {
-            UNITY_LOG_ERROR(sLog, buffer);
-        }
-    }
-}
 #else
 struct IUnityInterfaces;
 struct UnityProfilerMarkerDesc;
@@ -152,42 +88,6 @@ static inline void ProfEnd(const UnityProfilerMarkerDesc*) {}
 static const UnityProfilerMarkerDesc* sMkGetResult = nullptr;
 static const UnityProfilerMarkerDesc* sMkPublish = nullptr;
 static const UnityProfilerMarkerDesc* sMkUpload = nullptr;
-
-// WebGL logging - output to browser console via printf
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
-
-static inline void LottieLogInfo(lottie_animation_wrapper*, const char* format, ...)
-{
-    if (sGlobalLogLevel.load() < LOTTIE_LOG_INFO) return;
-    va_list args;
-    va_start(args, format);
-    printf("[Lottie INFO] ");
-    vprintf(format, args);
-    printf("\n");
-    va_end(args);
-}
-
-static inline void LottieLogWarning(lottie_animation_wrapper*, const char* format, ...)
-{
-    if (sGlobalLogLevel.load() < LOTTIE_LOG_WARNING) return;
-    va_list args;
-    va_start(args, format);
-    printf("[Lottie WARNING] ");
-    vprintf(format, args);
-    printf("\n");
-    va_end(args);
-}
-
-static inline void LottieLogError(lottie_animation_wrapper*, const char* format, ...)
-{
-    if (sGlobalLogLevel.load() < LOTTIE_LOG_ERROR) return;
-    va_list args;
-    va_start(args, format);
-    printf("[Lottie ERROR] ");
-    vprintf(format, args);
-    printf("\n");
-    va_end(args);
-}
 #endif
 
 #if defined(__APPLE__)
@@ -717,9 +617,25 @@ namespace
             case Renderer::Metal:
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
             {
+                // Try to acquire Metal device if not yet available
                 if (gMetalDevice == nil)
                 {
-                    LottieLogError(animation, "[Lottie] Metal device is nil");
+                    LottieLogInfo(animation, "[Lottie] Metal device is nil, attempting lazy acquisition");
+                    if (sMetalV2 != nullptr)
+                    {
+                        gMetalDevice = sMetalV2->MetalDevice();
+                        LottieLogInfo(animation, "[Lottie] Got Metal device from IUnityGraphicsMetalV2 (lazy)");
+                    }
+                    else if (sMetalV1 != nullptr)
+                    {
+                        gMetalDevice = sMetalV1->MetalDevice();
+                        LottieLogInfo(animation, "[Lottie] Got Metal device from IUnityGraphicsMetalV1 (lazy)");
+                    }
+                }
+
+                if (gMetalDevice == nil)
+                {
+                    LottieLogError(animation, "[Lottie] Metal device is nil, cannot create texture");
                     return false;
                 }
 
@@ -1338,7 +1254,7 @@ namespace
         animation_wrapper->width = width;
         animation_wrapper->height = height;
         animation_wrapper->animation = std::move(animation);
-        animation_wrapper->logLevel = sGlobalLogLevel.load();
+        animation_wrapper->logLevel = LottieGetGlobalLogLevel();
         LottieLogInfo(animation_wrapper, "[Lottie] Created animation wrapper: width=%lld, height=%lld, fps=%.2f, frames=%lld, duration=%.2fs",
                      (long long)animation_wrapper->width, (long long)animation_wrapper->height,
                      animation_wrapper->frameRate, (long long)animation_wrapper->totalFrame,
@@ -1659,14 +1575,14 @@ extern "C"
         else
         {
             // Set global log level if no specific animation wrapper
-            sGlobalLogLevel.store(log_level);
+            LottieSetGlobalLogLevel(log_level);
         }
         return 0;
     }
 
     EXPORT_API int32_t lottie_set_global_log_level(LottieLogLevel log_level)
     {
-        sGlobalLogLevel.store(log_level);
+        LottieSetGlobalLogLevel(log_level);
         LottieLogInfo(nullptr, "[Lottie] Global log level changed to %d", (int)log_level);
         return 0;
     }
@@ -1674,13 +1590,53 @@ extern "C"
 #if !defined(__EMSCRIPTEN__)
     EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
     {
+        // Early printf logging for iOS debugging
+#if defined(__APPLE__)
+        printf("[Lottie] lottie_create_texture called: width=%d, height=%d, renderer=%d, sUnityGraphics=%p\n",
+               width, height, (int)gRenderer, (void*)sUnityGraphics);
+        fflush(stdout);
+#endif
+        
         LottieLogInfo(animation,
-            "[Lottie] Creating texture: width=%d, height=%d (renderer=%d)",
-            width, height, (int)gRenderer);
+            "[Lottie] Creating texture: width=%d, height=%d (renderer=%d, sUnityGraphics=%p)",
+            width, height, (int)gRenderer, (void*)sUnityGraphics);
+
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        printf("[Lottie] Metal state: gMetalDevice=%p, sMetalV2=%p, sMetalV1=%p\n",
+               (__bridge void*)gMetalDevice, (void*)sMetalV2, (void*)sMetalV1);
+        fflush(stdout);
+        
+        LottieLogInfo(animation,
+            "[Lottie] Metal state: gMetalDevice=%p, sMetalV2=%p, sMetalV1=%p",
+            (__bridge void*)gMetalDevice, (void*)sMetalV2, (void*)sMetalV1);
+#endif
 
         InstanceState* state = GetState(animation);
 
-        // If Unity hasn't initialized the graphics device yet, bail out clearly.
+        // If Unity hasn't initialized the graphics device yet, try to initialize it now.
+        // This can happen if the plugin missed the kUnityGfxDeviceEventInitialize event.
+        if (gRenderer == Renderer::Unknown && sUnityGraphics != nullptr)
+        {
+            LottieLogInfo(animation, "[Lottie] Attempting lazy graphics device initialization");
+            ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+            LottieLogInfo(animation, "[Lottie] sUnityGraphics->GetRenderer() = %d", (int)currentRenderer);
+            if (currentRenderer != ::kUnityGfxRendererNull)
+            {
+                // Trigger initialization
+                OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
+                LottieLogInfo(animation, "[Lottie] Lazy initialization completed, renderer=%d", (int)gRenderer);
+            }
+            else
+            {
+                LottieLogWarning(animation, "[Lottie] sUnityGraphics->GetRenderer() returned kUnityGfxRendererNull");
+            }
+        }
+        else if (gRenderer == Renderer::Unknown)
+        {
+            LottieLogWarning(animation, "[Lottie] gRenderer is Unknown and sUnityGraphics is null");
+        }
+
+        // If still unknown after lazy init attempt, bail out
         if (gRenderer == Renderer::Unknown)
         {
             LottieLogWarning(animation,
@@ -1830,10 +1786,101 @@ extern "C"
         return OnRenderEvent;
     }
 
+    // Graphics device event callback - called by Unity when graphics device state changes
+    static void UNITY_INTERFACE_API OnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
+    {
+        if (eventType == kUnityGfxDeviceEventInitialize)
+        {
+            LottieLogInfo(nullptr, "[Lottie] OnGraphicsDeviceEvent: Initialize");
+            
+            // Get renderer type from IUnityGraphics
+            if (sUnityGraphics != nullptr)
+            {
+                // Use the global scope UnityGfxRenderer from IUnityGraphics.h
+                ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+                gRenderer = ToRenderer(static_cast<int>(currentRenderer));
+                LottieLogInfo(nullptr, "[Lottie] Graphics device type determined: %d", static_cast<int>(gRenderer));
+                
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+                if (gRenderer == Renderer::Metal)
+                {
+                    // Get Metal device from Unity's Metal interface
+                    if (sMetalV2 != nullptr)
+                    {
+                        gMetalDevice = sMetalV2->MetalDevice();
+                        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV2");
+                    }
+                    else if (sMetalV1 != nullptr)
+                    {
+                        gMetalDevice = sMetalV1->MetalDevice();
+                        LottieLogInfo(nullptr, "[Lottie] Got Metal device from IUnityGraphicsMetalV1");
+                    }
+                    
+                    if (gMetalDevice == nil)
+                    {
+                        LottieLogError(nullptr, "[Lottie] Failed to acquire Metal device");
+                    }
+                }
+#endif
+#if defined(_WIN32)
+                // For D3D devices, we need to wait for UnitySetGraphicsDevice which provides the device pointer
+                // The callback here just sets the renderer type
+#endif
+#if defined(__ANDROID__) || defined(_WIN32)
+                if (gRenderer == Renderer::OpenGL)
+                {
+                    DetectGLExtensions();
+                }
+#endif
+            }
+        }
+        else if (eventType == kUnityGfxDeviceEventShutdown)
+        {
+            LottieLogInfo(nullptr, "[Lottie] OnGraphicsDeviceEvent: Shutdown");
+            gDevice = nullptr;
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+            gMetalDevice = nil;
+#endif
+#if defined(_WIN32)
+            gD3D12Queue = nullptr;
+            gD3D12Device = nullptr;
+            ReleaseOwnedD3D12CommandList();
+            if (gD3DContext)
+            {
+                gD3DContext->Release();
+                gD3DContext = nullptr;
+            }
+            gD3DDevice = nullptr;
+#endif
+            gRenderer = Renderer::Unknown;
+#if defined(__ANDROID__) || defined(_WIN32)
+            gHasBGRAExt = false;
+            gIsOpenGLES = false;
+#endif
+            {
+                std::lock_guard<std::mutex> instanceLock(gInstancesMutex);
+                for (auto& entry : gInstances)
+                {
+                    ResetTextureState(entry.first, entry.second.get());
+                }
+            }
+            {
+                std::lock_guard<std::mutex> queueLock(gPendingUploadsMutex);
+                std::queue<lottie_animation_wrapper*> empty;
+                std::swap(gPendingUploads, empty);
+            }
+        }
+    }
+
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
     {
 #if !defined(__EMSCRIPTEN__)
-        sLog = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityLog>() : nullptr;
+        // Early logging before Unity's logger is set (uses printf on iOS)
+#if defined(__APPLE__)
+        printf("[Lottie] UnityPluginLoad called (unityInterfaces=%p)\n", (void*)unityInterfaces);
+        fflush(stdout);
+#endif
+        LottieLoggerSetUnityLog(unityInterfaces != nullptr ? unityInterfaces->Get<IUnityLog>() : nullptr);
         LottieLogInfo(nullptr, "[Lottie] Plugin loading...");
         sProfiler = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityProfiler>() : nullptr;
         if (sProfiler != nullptr && sProfiler->IsAvailable())
@@ -1871,13 +1918,61 @@ extern "C"
         if (unityInterfaces != nullptr)
         {
             sMetalV2 = unityInterfaces->Get<IUnityGraphicsMetalV2>();
+            LottieLogInfo(nullptr, "[Lottie] IUnityGraphicsMetalV2: %s", sMetalV2 != nullptr ? "available" : "NOT available");
             if (sMetalV2 == nullptr)
             {
                 sMetalV1 = unityInterfaces->Get<IUnityGraphicsMetalV1>();
+                LottieLogInfo(nullptr, "[Lottie] IUnityGraphicsMetalV1: %s", sMetalV1 != nullptr ? "available" : "NOT available");
+            }
+            
+            // Try to get Metal device immediately if Metal interface is available
+            if (sMetalV2 != nullptr)
+            {
+                id<MTLDevice> device = sMetalV2->MetalDevice();
+                LottieLogInfo(nullptr, "[Lottie] MetalV2->MetalDevice(): %s", device != nil ? "valid" : "nil");
+            }
+            else if (sMetalV1 != nullptr)
+            {
+                id<MTLDevice> device = sMetalV1->MetalDevice();
+                LottieLogInfo(nullptr, "[Lottie] MetalV1->MetalDevice(): %s", device != nil ? "valid" : "nil");
             }
         }
+        else
+        {
+            LottieLogWarning(nullptr, "[Lottie] unityInterfaces is null, cannot get Metal interface");
+        }
 #endif
-        LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully");
+
+        // Get the IUnityGraphics interface and register for device event callbacks
+        sUnityGraphics = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityGraphics>() : nullptr;
+        LottieLogInfo(nullptr, "[Lottie] IUnityGraphics: %s", sUnityGraphics != nullptr ? "available" : "NOT available");
+        
+        if (sUnityGraphics != nullptr)
+        {
+            sUnityGraphics->RegisterDeviceEventCallback(OnGraphicsDeviceEvent);
+            LottieLogInfo(nullptr, "[Lottie] Registered graphics device event callback");
+            
+            // Check if the graphics device is already initialized (we may have missed the init event)
+            ::UnityGfxRenderer currentRenderer = sUnityGraphics->GetRenderer();
+            LottieLogInfo(nullptr, "[Lottie] Current renderer from sUnityGraphics->GetRenderer(): %d", (int)currentRenderer);
+            
+            if (currentRenderer != ::kUnityGfxRendererNull && gRenderer == Renderer::Unknown)
+            {
+                LottieLogInfo(nullptr, "[Lottie] Graphics device already initialized (renderer=%d), triggering init event", (int)currentRenderer);
+                OnGraphicsDeviceEvent(kUnityGfxDeviceEventInitialize);
+                LottieLogInfo(nullptr, "[Lottie] After init event: gRenderer=%d", (int)gRenderer);
+            }
+            else if (currentRenderer == ::kUnityGfxRendererNull)
+            {
+                LottieLogInfo(nullptr, "[Lottie] Graphics device not yet initialized (renderer is null)");
+            }
+        }
+        else
+        {
+            LottieLogWarning(nullptr, "[Lottie] Failed to get IUnityGraphics interface");
+        }
+
+        LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully (gRenderer=%d)", (int)gRenderer);
 #else
         (void)unityInterfaces;
 #endif
@@ -1886,6 +1981,14 @@ extern "C"
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
     {
         LottieLogInfo(nullptr, "[Lottie] Plugin unloading...");
+
+        // Unregister graphics device event callback
+        if (sUnityGraphics != nullptr)
+        {
+            sUnityGraphics->UnregisterDeviceEventCallback(OnGraphicsDeviceEvent);
+            sUnityGraphics = nullptr;
+        }
+
         gDevice = nullptr;
         gRenderer = Renderer::Unknown;
 #if defined(_WIN32)
@@ -1933,9 +2036,30 @@ extern "C"
         sMetalV1 = nullptr;
 #    endif
         LottieLogInfo(nullptr, "[Lottie] Plugin unloaded successfully");
-        sLog = nullptr;
+        LottieLoggerSetUnityLog(nullptr);
 #endif
     }
+
+    // iOS static library registration helpers
+    // On iOS with IL2CPP, static libraries must be explicitly registered via UnityRegisterRenderingPluginV5
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    typedef void (UNITY_INTERFACE_API *UnityPluginLoadFunc)(IUnityInterfaces* unityInterfaces);
+    typedef void (UNITY_INTERFACE_API *UnityPluginUnloadFunc)(void);
+
+    extern "C" UnityPluginLoadFunc UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_get_plugin_load_func()
+    {
+        printf("[Lottie] lottie_get_plugin_load_func called, returning UnityPluginLoad=%p\n", (void*)&UnityPluginLoad);
+        fflush(stdout);
+        return &UnityPluginLoad;
+    }
+
+    extern "C" UnityPluginUnloadFunc UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API lottie_get_plugin_unload_func()
+    {
+        printf("[Lottie] lottie_get_plugin_unload_func called, returning UnityPluginUnload=%p\n", (void*)&UnityPluginUnload);
+        fflush(stdout);
+        return &UnityPluginUnload;
+    }
+#endif
 
     extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
     {
