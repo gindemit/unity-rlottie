@@ -3,6 +3,10 @@
 ![Unity version](https://img.shields.io/badge/unity-2019.4%2B-green.svg)
 ![License](https://img.shields.io/github/license/gindemit/unity-rlottie.svg)
 
+> 🧪 **EXPERIMENTAL RELEASE AVAILABLE!**  
+> We need your help testing [v0.5.0-experimental.1](https://github.com/gindemit/unity-rlottie/releases/tag/0.5.0-experimental.1) which introduces native rendering features and WebGL support!  
+> This release moves texture updates to the native plugin layer for better performance. Please test and report any issues you encounter.
+
 Welcome to the **Unity Lottie Animation** plugin! This Unity library enables you to play Lottie animations as Texture2D in your Unity projects. It's a powerful and easy-to-use solution that leverages Samsung's [rlottie](https://github.com/Samsung/rlottie) library to bring smooth Lottie animations to your games and applications.
 
 Lottie loads and renders animations and vectors exported in the bodymovin JSON format. Bodymovin JSON can be created and exported from After Effects with bodymovin, Sketch with Lottie Sketch Export, and from Haiku.
