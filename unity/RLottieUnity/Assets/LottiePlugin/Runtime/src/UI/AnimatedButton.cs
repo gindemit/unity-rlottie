@@ -108,7 +108,7 @@ namespace LottiePlugin.UI
                 {
                     _lottieAnimation = LottieAnimation.LoadFromJsonData(
                         _animationJson.text,
-                        _resourcesPath,
+                        _resourcesPath ?? string.Empty,
                         _textureWidth,
                         _textureHeight,
                         CreateOptions());

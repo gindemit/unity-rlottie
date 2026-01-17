@@ -106,7 +106,7 @@ namespace LottiePlugin.UI
             int lastFrame = (int)_lottieAnimation.TotalFramesCount - 1;
             _lottieAnimation.DrawOneFrame(_stopOnLastFrame ? lastFrame : 0);
         }
-        public void LoadFromAnimationJsonData(string jsonData, uint width, uint height, string resourcesPath = "")
+        public void LoadFromAnimationJson(string jsonData, uint width, uint height, string resourcesPath = "")
         {
             if (string.IsNullOrWhiteSpace(jsonData))
             {
@@ -181,7 +181,7 @@ namespace LottiePlugin.UI
                 {
                     _lottieAnimation = LottieAnimation.LoadFromJsonData(
                         _animationJson.text,
-                        _resourcesPath,
+                        _resourcesPath ?? string.Empty,
                         _textureWidth,
                         _textureHeight,
                         CreateOptions());
