@@ -1,4 +1,3 @@
-// Correct include guard
 #ifndef _LOTTIE_PLUGIN_H_
 #define _LOTTIE_PLUGIN_H_
 
