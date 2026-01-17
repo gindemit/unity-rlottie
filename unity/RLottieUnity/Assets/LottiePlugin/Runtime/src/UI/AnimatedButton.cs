@@ -25,6 +25,8 @@ namespace LottiePlugin.UI
         internal RawImage RawImage => _rawImage;
 
         [SerializeField] private TextAsset _animationJson;
+        [SerializeField] private string _resourcesPath;
+        [SerializeField] private string _jsonFilePath;
         [SerializeField] private float _animationSpeed = 1f;
         [SerializeField] private uint _textureWidth;
         [SerializeField] private uint _textureHeight;
@@ -52,7 +54,7 @@ namespace LottiePlugin.UI
         protected override void Start()
         {
             base.Start();
-            if (_animationJson == null)
+            if (_animationJson == null && string.IsNullOrEmpty(_jsonFilePath))
             {
                 return;
             }
@@ -92,7 +94,7 @@ namespace LottiePlugin.UI
         }
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
         {
-            if (_animationJson == null)
+            if (_animationJson == null && string.IsNullOrEmpty(_jsonFilePath))
             {
                 return null;
             }
@@ -102,12 +104,22 @@ namespace LottiePlugin.UI
             }
             if (_lottieAnimation == null)
             {
-                _lottieAnimation = LottieAnimation.LoadFromJsonData(
-                _animationJson.text,
-                string.Empty,
-                _textureWidth,
-                _textureHeight,
-                CreateOptions());
+                if (_animationJson != null)
+                {
+                    _lottieAnimation = LottieAnimation.LoadFromJsonData(
+                        _animationJson.text,
+                        _resourcesPath,
+                        _textureWidth,
+                        _textureHeight,
+                        CreateOptions());
+                }
+                else if (!string.IsNullOrEmpty(_jsonFilePath))
+                {
+                    _lottieAnimation = LottieAnimation.LoadFromJsonFile(
+                        _jsonFilePath,
+                        _textureWidth,
+                        _textureHeight);
+                }
                 SetTextureToTheTargetRawImage();
             }
             return _lottieAnimation;
