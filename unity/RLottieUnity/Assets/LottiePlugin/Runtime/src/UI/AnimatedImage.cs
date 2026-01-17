@@ -153,7 +153,8 @@ namespace LottiePlugin.UI
             _lottieAnimation = LottieAnimation.LoadFromJsonFile(
                 filePath,
                 width,
-                height);
+                height,
+                CreateOptions());
             _rawImage.texture = _lottieAnimation.Texture;
             _lottieAnimation.Started += OnAnimationStarted;
             _lottieAnimation.Paused += OnAnimationPaused;
@@ -190,7 +191,8 @@ namespace LottiePlugin.UI
                     _lottieAnimation = LottieAnimation.LoadFromJsonFile(
                         _jsonFilePath,
                         _textureWidth,
-                        _textureHeight);
+                        _textureHeight,
+                        CreateOptions());
                 }
                 _rawImage.texture = _lottieAnimation.Texture;
                 _lottieAnimation.Started += OnAnimationStarted;

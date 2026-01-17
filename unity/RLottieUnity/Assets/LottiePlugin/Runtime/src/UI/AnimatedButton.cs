@@ -118,7 +118,8 @@ namespace LottiePlugin.UI
                     _lottieAnimation = LottieAnimation.LoadFromJsonFile(
                         _jsonFilePath,
                         _textureWidth,
-                        _textureHeight);
+                        _textureHeight,
+                        CreateOptions());
                 }
                 SetTextureToTheTargetRawImage();
             }
