@@ -1,6 +1,6 @@
 # Unity Lottie Animation Plugin
 ![GitHub release](https://img.shields.io/github/release/gindemit/unity-rlottie.svg)
-![Unity version](https://img.shields.io/badge/unity-2019.4%2B-green.svg)
+![Unity version](https://img.shields.io/badge/unity-2022.3+-green.svg)
 ![License](https://img.shields.io/github/license/gindemit/unity-rlottie.svg)
 
 Welcome to the **Unity Lottie Animation** plugin! This Unity library enables you to play Lottie animations as Texture2D in your Unity projects. It's a powerful and easy-to-use solution that leverages Samsung's [rlottie](https://github.com/Samsung/rlottie) library to bring smooth Lottie animations to your games and applications.
