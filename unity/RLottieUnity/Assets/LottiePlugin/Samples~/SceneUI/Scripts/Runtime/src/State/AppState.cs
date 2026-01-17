@@ -1,4 +1,3 @@
-using LottiePlugin.Support;
 using UnityEngine;
 
 namespace LottiePlugin.Sample.SceneUI.State
@@ -10,11 +9,7 @@ namespace LottiePlugin.Sample.SceneUI.State
 
         private void Start()
         {
-            FilesHelper.CopyAnimationsJsonsFromStreamingAssetsToPersistentData(
-                _lottieAnimations.Animations);
-            _mainMenu.Init(
-                FilesHelper.GetPersistentAnimationsPaths(_lottieAnimations.Animations),
-                _lottieAnimations.Animations);
+            _mainMenu.Init(_lottieAnimations.Animations);
         }
         private void OnDestroy()
         {
