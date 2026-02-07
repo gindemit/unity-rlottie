@@ -1,4 +1,4 @@
-# CMakeList.txt : CMake project for LottiePlugin, include source and define
+# CMakeList.txt : CMake project for LottiePlugin
 cmake_minimum_required (VERSION 3.16)
 
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
