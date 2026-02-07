@@ -137,6 +137,10 @@ namespace LottiePlugin.UI
         {
             if (_lottieAnimation != null)
             {
+                if (_rawImage != null)
+                {
+                    _rawImage.texture = null;
+                }
                 _lottieAnimation.Dispose();
                 _lottieAnimation = null;
             }

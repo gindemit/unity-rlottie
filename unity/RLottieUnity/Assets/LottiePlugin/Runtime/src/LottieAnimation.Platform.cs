@@ -19,6 +19,18 @@ namespace LottiePlugin
             return Texture;
         }
 
+        private static void ConfigureRuntimeTexture(UnityEngine.Object textureObject)
+        {
+            if (textureObject == null)
+            {
+                return;
+            }
+
+            // Prevent Unity editor reload serialization from treating runtime render targets
+            // as scene data (Unity 6 logs image-size warnings for external runtime textures).
+            textureObject.hideFlags = HideFlags.HideAndDontSave;
+        }
+
         private void PlatformDisposeAsyncDraw()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
@@ -173,21 +185,25 @@ namespace LottiePlugin
                 if (_useShaderConversion)
                 {
                     _sourceTexture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, 0, false);
+                    ConfigureRuntimeTexture(_sourceTexture);
                     _pixelData = _sourceTexture.GetRawTextureData<byte>();
                     _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
                     _convertedRT = new RenderTexture((int)width, (int)height, 0, RenderTextureFormat.ARGB32);
+                    ConfigureRuntimeTexture(_convertedRT);
                     _convertedRT.Create();
                     Texture = null;
                 }
                 else
                 {
                     Texture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, 0, false);
+                    ConfigureRuntimeTexture(Texture);
                     _pixelData = Texture.GetRawTextureData<byte>();
                     _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
                 }
 #else
                 TextureFormat format = TextureFormat.BGRA32;
                 Texture = new Texture2D((int)width, (int)height, format, 0, false);
+                ConfigureRuntimeTexture(Texture);
                 _pixelData = Texture.GetRawTextureData<byte>();
                 _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
 #endif
@@ -206,6 +222,7 @@ namespace LottiePlugin
                     throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
                 }
                 Texture = Texture2D.CreateExternalTexture((int)width, (int)height, TextureFormat.BGRA32, false, false, _nativeTexturePtr);
+                ConfigureRuntimeTexture(Texture);
             }
 #endif
         }

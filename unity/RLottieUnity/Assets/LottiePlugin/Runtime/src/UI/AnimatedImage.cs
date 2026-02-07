@@ -205,6 +205,10 @@ namespace LottiePlugin.UI
         {
             if (_lottieAnimation != null)
             {
+                if (_rawImage != null)
+                {
+                    _rawImage.texture = null;
+                }
                 _lottieAnimation.Started -= OnAnimationStarted;
                 _lottieAnimation.Paused -= OnAnimationPaused;
                 _lottieAnimation.Stopped -= OnAnimationStopped;
