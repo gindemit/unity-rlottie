@@ -217,6 +217,7 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
         return false;
     }
 
+    const bool useSrgb = state->preferSRGBSampling;
     D3D12_RESOURCE_DESC texDesc{};
     texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     texDesc.Alignment = 0;
@@ -224,7 +225,7 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
     texDesc.Height = static_cast<UINT>(height);
     texDesc.DepthOrArraySize = 1;
     texDesc.MipLevels = 1;
-    texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    texDesc.Format = useSrgb ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_B8G8R8A8_UNORM;
     texDesc.SampleDesc.Count = 1;
     texDesc.SampleDesc.Quality = 0;
     texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -327,7 +328,10 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
     state->nativeTex = texture;
     state->texW = width;
     state->texH = height;
-    LottieLogInfo(animation, "[Lottie] D3D12 texture created successfully");
+    LottieLogInfo(
+        animation,
+        "[Lottie] D3D12 texture created successfully (format=%s)",
+        useSrgb ? "B8G8R8A8_UNORM_SRGB" : "B8G8R8A8_UNORM");
     return true;
 }
 

@@ -30,6 +30,7 @@ struct InstanceState
     int texW = 0;
     int texH = 0;
     void* nativeTex = nullptr;
+    bool preferSRGBSampling = false;
 
     // Platform-specific texture data
     struct D3D12Data

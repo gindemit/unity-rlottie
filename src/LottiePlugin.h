@@ -105,7 +105,11 @@ extern "C" {
     // on all compilers (MSVC/Clang/GCC/ObjC++).
     typedef void (UNITY_INTERFACE_API *UnityRenderingEvent)(int eventID);
 
-    EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height);
+    EXPORT_API void* lottie_create_texture(
+        lottie_animation_wrapper* animation,
+        int width,
+        int height,
+        bool prefer_srgb_sampling);
     EXPORT_API void  lottie_destroy_texture(lottie_animation_wrapper* animation, void* tex);
     EXPORT_API void* lottie_get_native_texture_ptr(lottie_animation_wrapper* animation);
     EXPORT_API void  lottie_update_texture(lottie_animation_wrapper* animation);
