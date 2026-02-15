@@ -343,7 +343,11 @@ extern "C"
     }
 
 #if !defined(__EMSCRIPTEN__)
-    EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
+    EXPORT_API void* lottie_create_texture(
+        lottie_animation_wrapper* animation,
+        int width,
+        int height,
+        bool prefer_srgb_sampling)
     {
         // Early printf logging for iOS debugging
 #if defined(__APPLE__)
@@ -353,8 +357,12 @@ extern "C"
 #endif
 
         LottieLogInfo(animation,
-            "[Lottie] Creating texture: width=%d, height=%d (renderer=%d, sUnityGraphics=%p)",
-            width, height, (int)GetCurrentRenderer(), (void*)GetUnityGraphics());
+            "[Lottie] Creating texture: width=%d, height=%d, prefer_srgb_sampling=%s (renderer=%d, sUnityGraphics=%p)",
+            width,
+            height,
+            prefer_srgb_sampling ? "true" : "false",
+            (int)GetCurrentRenderer(),
+            (void*)GetUnityGraphics());
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
         printf("[Lottie] Metal state: gMetalDevice=%p\n", GetMetalDevice());
@@ -364,6 +372,10 @@ extern "C"
 #endif
 
         InstanceState* state = GetState(animation);
+        if (state != nullptr)
+        {
+            state->preferSRGBSampling = prefer_srgb_sampling;
+        }
 
         // If Unity hasn't initialized the graphics device yet, try to initialize it now.
         // This can happen if the plugin missed the kUnityGfxDeviceEventInitialize event.
