@@ -88,7 +88,11 @@ namespace LottiePlugin
 
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_create_texture")]
-        internal static extern IntPtr LottieCreateTexture(IntPtr animationWrapper, int width, int height);
+        internal static extern IntPtr LottieCreateTexture(
+            IntPtr animationWrapper,
+            int width,
+            int height,
+            bool preferSrgbSampling);
 
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_destroy_texture")]
         internal static extern void LottieDestroyTexture(IntPtr animationWrapper, IntPtr texturePtr);
