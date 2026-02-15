@@ -87,7 +87,7 @@ namespace LottiePlugin
 #endif
 
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
-        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_create_texture")]
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_create_texture_with_color_space")]
         internal static extern IntPtr LottieCreateTexture(
             IntPtr animationWrapper,
             int width,
