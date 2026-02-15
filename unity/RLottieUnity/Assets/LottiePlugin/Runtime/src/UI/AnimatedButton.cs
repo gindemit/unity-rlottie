@@ -24,16 +24,16 @@ namespace LottiePlugin.UI
 
         internal RawImage RawImage => _rawImage;
 
-        [SerializeField] private TextAsset _animationJson;
-        [SerializeField] private string _resourcesPath;
-        [SerializeField] private string _jsonFilePath;
+        [SerializeField] private TextAsset _animationJson = null;
+        [SerializeField] private string _resourcesPath = string.Empty;
+        [SerializeField] private string _jsonFilePath = string.Empty;
         [SerializeField] private float _animationSpeed = 1f;
-        [SerializeField] private uint _textureWidth;
-        [SerializeField] private uint _textureHeight;
+        [SerializeField] private uint _textureWidth = 0;
+        [SerializeField] private uint _textureHeight = 0;
         [FormerlySerializedAs("_graphic")] 
-        [SerializeField] private RawImage _rawImage;
+        [SerializeField] private RawImage _rawImage = null;
         [SerializeField] private bool _ignoreInputWhileAnimating = true;
-        [SerializeField] private State[] _states;
+        [SerializeField] private State[] _states = null;
         [SerializeField] private ButtonClickedEvent _onClick = new ButtonClickedEvent();
         [SerializeField] private int _targetFps = 30;
         [SerializeField] private int _resolutionDivider = 1;

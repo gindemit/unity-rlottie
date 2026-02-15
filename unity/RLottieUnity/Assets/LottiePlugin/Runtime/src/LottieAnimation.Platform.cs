@@ -221,7 +221,19 @@ namespace LottiePlugin
                 {
                     throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
                 }
-                Texture = Texture2D.CreateExternalTexture((int)width, (int)height, TextureFormat.BGRA32, false, false, _nativeTexturePtr);
+                // Our D3D native textures are created as non-sRGB BGRA (UNORM).
+                // Mark the external texture as linear on D3D to avoid Unity creating an sRGB SRV
+                // against a non-sRGB resource (DXGI format mismatch 91 vs 87).
+                bool linearExternalTexture =
+                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D11 ||
+                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
+                Texture = Texture2D.CreateExternalTexture(
+                    (int)width,
+                    (int)height,
+                    TextureFormat.BGRA32,
+                    false,
+                    linearExternalTexture,
+                    _nativeTexturePtr);
                 ConfigureRuntimeTexture(Texture);
             }
 #endif
