@@ -26,13 +26,13 @@ namespace LottiePlugin.UI
         internal bool Loop => _loop;
         internal bool StopOnLastFrame => _stopOnLastFrame;
 
-        [SerializeField] private TextAsset _animationJson;
-        [SerializeField] private string _resourcesPath;
-        [SerializeField] private string _jsonFilePath;
-        [SerializeField] private RawImage _rawImage;
+        [SerializeField] private TextAsset _animationJson = null;
+        [SerializeField] private string _resourcesPath = string.Empty;
+        [SerializeField] private string _jsonFilePath = string.Empty;
+        [SerializeField] private RawImage _rawImage = null;
         [SerializeField] private float _animationSpeed = 1f;
-        [SerializeField] private uint _textureWidth;
-        [SerializeField] private uint _textureHeight;
+        [SerializeField] private uint _textureWidth = 0;
+        [SerializeField] private uint _textureHeight = 0;
         [SerializeField] private bool _playOnAwake = true;
         [SerializeField] private bool _loop = true;
         [SerializeField] private bool _stopOnLastFrame = true;
