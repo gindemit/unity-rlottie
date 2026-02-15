@@ -31,6 +31,12 @@ namespace LottiePlugin
             textureObject.hideFlags = HideFlags.HideAndDontSave;
         }
 
+        private static bool IsDirect3DDevice(UnityEngine.Rendering.GraphicsDeviceType deviceType)
+        {
+            return deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D11 ||
+                   deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
+        }
+
         private void PlatformDisposeAsyncDraw()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
@@ -216,17 +222,22 @@ namespace LottiePlugin
                 _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
                 _ownsPixelData = true;
                 _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-                _nativeTexturePtr = NativeBridge.LottieCreateTexture(_animationWrapperIntPtr, (int)width, (int)height);
+                bool isDirect3D = IsDirect3DDevice(deviceType);
+                bool preferSrgbSampling = isDirect3D && QualitySettings.activeColorSpace == ColorSpace.Linear;
+                _nativeTexturePtr = NativeBridge.LottieCreateTexture(
+                    _animationWrapperIntPtr,
+                    (int)width,
+                    (int)height,
+                    preferSrgbSampling);
                 if (_nativeTexturePtr == IntPtr.Zero)
                 {
                     throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
                 }
-                // Our D3D native textures are created as non-sRGB BGRA (UNORM).
-                // Mark the external texture as linear on D3D to avoid Unity creating an sRGB SRV
-                // against a non-sRGB resource (DXGI format mismatch 91 vs 87).
-                bool linearExternalTexture =
-                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D11 ||
-                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
+
+                // In Linear projects we request sRGB native textures on D3D and expose them as
+                // non-linear external textures so Unity applies sRGB sampling correctly.
+                // In Gamma projects we keep the previous linear external texture path.
+                bool linearExternalTexture = isDirect3D && !preferSrgbSampling;
                 Texture = Texture2D.CreateExternalTexture(
                     (int)width,
                     (int)height,
