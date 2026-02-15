@@ -343,7 +343,7 @@ extern "C"
     }
 
 #if !defined(__EMSCRIPTEN__)
-    EXPORT_API void* lottie_create_texture(
+    EXPORT_API void* lottie_create_texture_with_color_space(
         lottie_animation_wrapper* animation,
         int width,
         int height,
@@ -457,6 +457,12 @@ extern "C"
             state ? state->texH : 0);
 
         return state != nullptr ? state->nativeTex : nullptr;
+    }
+
+    EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height)
+    {
+        // Backward compatible entry point for older managed clients.
+        return lottie_create_texture_with_color_space(animation, width, height, false);
     }
 
     EXPORT_API void lottie_destroy_texture(lottie_animation_wrapper* animation, void* /*tex*/)
