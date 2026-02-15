@@ -103,7 +103,7 @@ MonoBehaviour:
   m_MinSize: {x: 400, y: 56}
   m_MaxSize: {x: 32384, y: 8096}
   vertical: 0
-  controlID: 52
+  controlID: 32
   draggingID: 0
 --- !u!114 &5
 MonoBehaviour:
@@ -124,8 +124,8 @@ MonoBehaviour:
     y: 0
     width: 929
     height: 1277
-  m_MinSize: {x: 275, y: 50}
-  m_MaxSize: {x: 4000, y: 4000}
+  m_MinSize: {x: 276, y: 76}
+  m_MaxSize: {x: 4001, y: 4026}
   m_ActualView: {fileID: 13}
   m_Panes:
   - {fileID: 13}
@@ -250,8 +250,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "UnityEditor.MainToolbarWindow\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1886
-    y: 51
+    x: 0
+    y: 0
     width: 3226
     height: 36
   m_SerializedDataModeController:
@@ -518,9 +518,9 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 1886
-    y: 767
-    width: 991
-    height: 583
+    y: 87
+    width: 864
+    height: 1251
   m_SerializedDataModeController:
     m_DataMode: 0
     m_PreferredDataMode: 0
@@ -535,12 +535,12 @@ MonoBehaviour:
     m_OverlaysVisible: 1
     m_DynamicPanelBehavior: 0
   m_Spl:
-    ID: 578
+    ID: 110
     splitterInitialOffset: 0
     currentActiveSplitter: -1
     realSizes:
-    - 385
-    - 128
+    - 886
+    - 295
     relativeSizes:
     - 0.75
     - 0.25
@@ -550,7 +550,7 @@ MonoBehaviour:
     maxSizes:
     - 0
     - 0
-    lastTotalSize: 513
+    lastTotalSize: 1181
     splitSize: 6
     xOffset: 0
     m_Version: 1
@@ -558,11 +558,11 @@ MonoBehaviour:
     oldMinSizes: 
     oldMaxSizes: 
     oldSplitSize: 0
-  m_TestTypeToolbarIndex: 0
+  m_TestTypeToolbarIndex: 1
   m_TestListGUIs:
-  - m_Window: {fileID: 0}
+  - m_Window: {fileID: 11}
     runProgress:
-      RunGuid: 
+      RunGuid: 3643ee73-10b7-4bfc-9652-35b8a082b446
       ExecutionSettings:
         m_TargetPlatform: 0
         m_HasTargetPlatform: 0
@@ -572,9 +572,15 @@ MonoBehaviour:
           groupNames: []
           categoryNames: []
           assemblyNames: []
-        filters: []
+        filters:
+        - testMode: 2
+          testNames:
+          - LottiePlugin
+          groupNames: []
+          categoryNames: []
+          assemblyNames: []
         runSynchronously: 0
-        playerHeartbeatTimeout: 0
+        playerHeartbeatTimeout: 600
         orderedTestNames: []
         ignoreTests: []
         featureFlags:
@@ -583,18 +589,34 @@ MonoBehaviour:
           strictDomainReload: 0
           disableNestedEnumeratorBugfix: 0
         randomOrderSeed: 0
-      HasFinished: 0
-      Progress: 0
-      CurrentStepName: 
+      HasFinished: 1
+      Progress: 0.9999999
+      CurrentStepName: Unlock Reload Assemblies
       CurrentStageName: 
-    m_NewResultList: []
+    m_NewResultList:
+    - id: 1000
+      uniqueId: '[LottiePlugin][suite]'
+      name: LottiePlugin
+      fullName: LottiePlugin
+      resultStatus: 0
+      duration: 0
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 1
+      categories: []
+      parentId: 
+      parentUniqueId: 
     m_ResultText: 
     m_ResultStacktrace: 
     m_TestListState:
       scrollPos: {x: 0, y: 0}
       m_SelectedIDs: 
       m_LastClickedID: 0
-      m_ExpandedIDs: 
+      m_ExpandedIDs: c4279781ffffff7f
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -619,11 +641,12 @@ MonoBehaviour:
       NotRunHidden: 0
       m_SearchString: 
       selectedCategories: []
-      availableCategories: []
+      availableCategories:
+      - Uncategorized
     m_SelectedOption: 0
-  - m_Window: {fileID: 0}
+  - m_Window: {fileID: 11}
     runProgress:
-      RunGuid: 
+      RunGuid: 3643ee73-10b7-4bfc-9652-35b8a082b446
       ExecutionSettings:
         m_TargetPlatform: 0
         m_HasTargetPlatform: 0
@@ -633,9 +656,15 @@ MonoBehaviour:
           groupNames: []
           categoryNames: []
           assemblyNames: []
-        filters: []
+        filters:
+        - testMode: 2
+          testNames:
+          - LottiePlugin
+          groupNames: []
+          categoryNames: []
+          assemblyNames: []
         runSynchronously: 0
-        playerHeartbeatTimeout: 0
+        playerHeartbeatTimeout: 600
         orderedTestNames: []
         ignoreTests: []
         featureFlags:
@@ -644,18 +673,318 @@ MonoBehaviour:
           strictDomainReload: 0
           disableNestedEnumeratorBugfix: 0
         randomOrderSeed: 0
-      HasFinished: 0
-      Progress: 0
-      CurrentStepName: 
+      HasFinished: 1
+      Progress: 0.9999999
+      CurrentStepName: Unlock Reload Assemblies
       CurrentStageName: 
-    m_NewResultList: []
-    m_ResultText: 
+    m_NewResultList:
+    - id: 1000
+      uniqueId: '[LottiePlugin][suite]'
+      name: LottiePlugin
+      fullName: LottiePlugin
+      resultStatus: 1
+      duration: 0.3362941
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 1
+      categories: []
+      parentId: 
+      parentUniqueId: 
+    - id: 1009
+      uniqueId: '[LottiePlugin.Tests.Runtime.dll][suite]'
+      name: LottiePlugin.Tests.Runtime.dll
+      fullName: C:/Work/git/gindemit/unity-rlottie/unity-rlottie-6000.3.7f1-hdrp/unity/RLottieUnity/Library/ScriptAssemblies/LottiePlugin.Tests.Runtime.dll
+      resultStatus: 1
+      duration: 0.3362941
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 1
+      categories: []
+      parentId: 1000
+      parentUniqueId: '[LottiePlugin][suite]'
+    - id: 1010
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/[LottiePlugin][suite]'
+      name: LottiePlugin
+      fullName: LottiePlugin
+      resultStatus: 1
+      duration: 0.3362941
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 1
+      categories: []
+      parentId: 1009
+      parentUniqueId: '[LottiePlugin.Tests.Runtime.dll][suite]'
+    - id: 1011
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/[Tests][suite]'
+      name: Tests
+      fullName: LottiePlugin.Tests
+      resultStatus: 1
+      duration: 0.3362941
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 1
+      categories: []
+      parentId: 1010
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/[LottiePlugin][suite]'
+    - id: 1012
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime][suite]'
+      name: Runtime
+      fullName: LottiePlugin.Tests.Runtime
+      resultStatus: 1
+      duration: 0.3362941
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 1
+      categories: []
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/[Tests][suite]'
+    - id: 1001
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+      name: AnimatedImageTests
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests
+      resultStatus: 1
+      duration: 0.3362941
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 1
+      categories: []
+      parentId: 1012
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime][suite]'
+    - id: 1012
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/AnimatedImageTests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckAwakeFunctionality]'
+      name: CheckAwakeFunctionality
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckAwakeFunctionality
+      resultStatus: 1
+      duration: 0.0407011
+      messages: 
+      output: 
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 0
+      categories:
+      - Uncategorized
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+    - id: 1018
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/AnimatedImageTests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckDisposeFunctionality]'
+      name: CheckDisposeFunctionality
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckDisposeFunctionality
+      resultStatus: 1
+      duration: 0.0535762
+      messages: 
+      output: '[Lottie] Loading animation from data, resource_path=''(empty)''
+
+        [Lottie]
+        Created animation wrapper: width=1820, height=275, fps=30.00, frames=104,
+        duration=3.43s
+
+        [Lottie] Successfully loaded animation from data
+
+        [Lottie]
+        Allocating render data
+
+        [Lottie] Render data allocated successfully
+
+        [Lottie]
+        Disposing render data
+
+        [Lottie] Animation wrapper disposed successfully
+
+'
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 0
+      categories:
+      - Uncategorized
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+    - id: 1015
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/AnimatedImageTests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckPlayFunctionality]'
+      name: CheckPlayFunctionality
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckPlayFunctionality
+      resultStatus: 1
+      duration: 0.0634946
+      messages: 
+      output: '[Lottie] Loading animation from data, resource_path=''(empty)''
+
+        [Lottie]
+        Created animation wrapper: width=1820, height=275, fps=30.00, frames=104,
+        duration=3.43s
+
+        [Lottie] Successfully loaded animation from data
+
+        [Lottie]
+        Allocating render data
+
+        [Lottie] Render data allocated successfully
+
+'
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 0
+      categories:
+      - Uncategorized
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+    - id: 1014
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/AnimatedImageTests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckStartFunctionalityWithJsonAnimation]'
+      name: CheckStartFunctionalityWithJsonAnimation
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckStartFunctionalityWithJsonAnimation
+      resultStatus: 1
+      duration: 0.058331
+      messages: 
+      output: '[Lottie] Disposing render data
+
+        [Lottie] Animation wrapper
+        disposed successfully
+
+        [Lottie] Loading animation from data, resource_path=''(empty)''
+
+        [Lottie]
+        Created animation wrapper: width=1820, height=275, fps=30.00, frames=104,
+        duration=3.43s
+
+        [Lottie] Successfully loaded animation from data
+
+        [Lottie]
+        Allocating render data
+
+        [Lottie] Render data allocated successfully
+
+'
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 0
+      categories:
+      - Uncategorized
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+    - id: 1013
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/AnimatedImageTests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckStartFunctionalityWithNoJsonAnimation]'
+      name: CheckStartFunctionalityWithNoJsonAnimation
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckStartFunctionalityWithNoJsonAnimation
+      resultStatus: 1
+      duration: 0.0123985
+      messages: 
+      output: '[Lottie] Disposing render data
+
+        [Lottie] Animation wrapper
+        disposed successfully
+
+'
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 0
+      categories:
+      - Uncategorized
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+    - id: 1016
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/AnimatedImageTests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckStopFunctionality]'
+      name: CheckStopFunctionality
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckStopFunctionality
+      resultStatus: 1
+      duration: 0.0557163
+      messages: 
+      output: '[Lottie] Loading animation from data, resource_path=''(empty)''
+
+        [Lottie]
+        Created animation wrapper: width=1820, height=275, fps=30.00, frames=104,
+        duration=3.43s
+
+        [Lottie] Successfully loaded animation from data
+
+        [Lottie]
+        Allocating render data
+
+        [Lottie] Render data allocated successfully
+
+'
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 0
+      categories:
+      - Uncategorized
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+    - id: 1017
+      uniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/AnimatedImageTests/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckTextureDimensions]'
+      name: CheckTextureDimensions
+      fullName: LottiePlugin.Tests.Runtime.AnimatedImageTests.CheckTextureDimensions
+      resultStatus: 1
+      duration: 0.0520764
+      messages: 
+      output: '[Lottie] Disposing render data
+
+        [Lottie] Animation wrapper
+        disposed successfully
+
+        [Lottie] Loading animation from data, resource_path=''(empty)''
+
+        [Lottie]
+        Created animation wrapper: width=1820, height=275, fps=30.00, frames=104,
+        duration=3.43s
+
+        [Lottie] Successfully loaded animation from data
+
+        [Lottie]
+        Allocating render data
+
+        [Lottie] Render data allocated successfully
+
+'
+      stacktrace: 
+      notRunnable: 0
+      ignoredOrSkipped: 0
+      description: 
+      isSuite: 0
+      categories:
+      - Uncategorized
+      parentId: 1011
+      parentUniqueId: 'LottiePlugin.Tests.Runtime.dll/LottiePlugin/Tests/Runtime/[LottiePlugin.Tests.Runtime][LottiePlugin.Tests.Runtime.AnimatedImageTests][suite]'
+    m_ResultText: LottiePlugin (7 tests) (0.336s)
     m_ResultStacktrace: 
     m_TestListState:
       scrollPos: {x: 0, y: 0}
-      m_SelectedIDs: 
-      m_LastClickedID: 0
-      m_ExpandedIDs: 
+      m_SelectedIDs: 00c3d946
+      m_LastClickedID: 1188676352
+      m_ExpandedIDs: c427978147b7069e00c3d946ffffff7f
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -680,11 +1009,12 @@ MonoBehaviour:
       NotRunHidden: 0
       m_SearchString: 
       selectedCategories: []
-      availableCategories: []
+      availableCategories:
+      - Uncategorized
     m_SelectedOption: 0
   - m_Window: {fileID: 0}
     runProgress:
-      RunGuid: 
+      RunGuid: 3643ee73-10b7-4bfc-9652-35b8a082b446
       ExecutionSettings:
         m_TargetPlatform: 0
         m_HasTargetPlatform: 0
@@ -694,9 +1024,15 @@ MonoBehaviour:
           groupNames: []
           categoryNames: []
           assemblyNames: []
-        filters: []
+        filters:
+        - testMode: 2
+          testNames:
+          - LottiePlugin
+          groupNames: []
+          categoryNames: []
+          assemblyNames: []
         runSynchronously: 0
-        playerHeartbeatTimeout: 0
+        playerHeartbeatTimeout: 600
         orderedTestNames: []
         ignoreTests: []
         featureFlags:
@@ -705,9 +1041,9 @@ MonoBehaviour:
           strictDomainReload: 0
           disableNestedEnumeratorBugfix: 0
         randomOrderSeed: 0
-      HasFinished: 0
-      Progress: 0
-      CurrentStepName: 
+      HasFinished: 1
+      Progress: 0.9999999
+      CurrentStepName: Unlock Reload Assemblies
       CurrentStageName: 
     m_NewResultList: []
     m_ResultText: 
@@ -764,8 +1100,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Project\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 3508
-    y: 87
+    x: 1623
+    y: 24
     width: 673
     height: 1251
   m_SerializedDataModeController:
@@ -791,8 +1127,7 @@ MonoBehaviour:
     m_ShowAllHits: 0
     m_SkipHidden: 0
     m_SearchArea: 1
-    m_Folders:
-    - Assets/Scenes
+    m_Folders: []
     m_Globs: []
     m_ProductIds: 
     m_AnyWithAssetOrigin: 0
@@ -803,7 +1138,7 @@ MonoBehaviour:
   m_StartGridSize: 16
   m_LastFolders: []
   m_LastFoldersGridSize: -1
-  m_LastProjectPath: C:\Work\git\gindemit\unity-rlottie\unity-rlottie-6000.3.7f1\unity\RLottieUnity
+  m_LastProjectPath: C:\Work\git\gindemit\unity-rlottie\unity-rlottie-6000.3.7f1-hdrp\unity\RLottieUnity
   m_LockTracker:
     m_IsLocked: 0
   m_LastLocalAssetsSearchArea: 1
@@ -814,8 +1149,9 @@ MonoBehaviour:
       m_Data: 0
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 34300
-    - m_Data: 34302
+    - m_Data: 49722
+    - m_Data: 49724
+    - m_Data: 49726
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -848,8 +1184,9 @@ MonoBehaviour:
       m_Data: 0
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 34300
-    - m_Data: 34302
+    - m_Data: 49722
+    - m_Data: 49724
+    - m_Data: 49726
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -930,8 +1267,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Inspector\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 4183
-    y: 87
+    x: 2298
+    y: 24
     width: 928
     height: 1251
   m_SerializedDataModeController:
@@ -981,8 +1318,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Hierarchy\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 2751
-    y: 87
+    x: 866
+    y: 24
     width: 755
     height: 1251
   m_SerializedDataModeController:
@@ -1005,7 +1342,7 @@ MonoBehaviour:
       m_LastClickedID:
         m_Data: 0
       m_ExpandedIDs:
-      - m_Data: -1340
+      - m_Data: -1298
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -1155,8 +1492,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Console\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1886
-    y: 87
+    x: 0
+    y: 24
     width: 864
     height: 1251
   m_SerializedDataModeController:
