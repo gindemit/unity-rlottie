@@ -27,6 +27,7 @@ $arguments = @(
 
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -PassThru -NoNewWindow
 $process.WaitForExit()
+$process.Refresh()
 if ($process.ExitCode -ne 0) {
     Get-Content -LiteralPath $LogFile -Tail 200 -ErrorAction SilentlyContinue
     throw "Unity player tests failed with exit code $($process.ExitCode). See $LogFile"
