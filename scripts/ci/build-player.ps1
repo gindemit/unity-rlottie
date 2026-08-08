@@ -41,12 +41,11 @@ $arguments = @(
     '-logFile', $LogFile
 )
 
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -PassThru -NoNewWindow
-$process.WaitForExit()
-$process.Refresh()
-if ($process.ExitCode -ne 0) {
+$process = Start-Process -FilePath $Unity -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+$unityExitCode = $process.ExitCode
+if ($unityExitCode -ne 0) {
     Get-Content -LiteralPath $LogFile -Tail 200 -ErrorAction SilentlyContinue
-    throw "Unity build failed with exit code $($process.ExitCode). See $LogFile"
+    throw "Unity build failed with exit code $unityExitCode. See $LogFile"
 }
 
 if (-not (Test-Path -LiteralPath $OutputPath)) {
