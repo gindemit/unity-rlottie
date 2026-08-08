@@ -1,0 +1,174 @@
+name: Unity platform test matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_physical_firebase_device:
+        description: Use one Firebase physical device instead of the ARM virtual device
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+    branches:
+      - codex/remove-texture.apply-and-move-updates-to-native
+      - 'unity/**'
+  push:
+    branches:
+      - codex/remove-texture.apply-and-move-updates-to-native
+      - 'unity/**'
+
+concurrency:
+  group: unity-platform-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unity_tests:
+    name: Unity EditMode and PlayMode tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore Unity Library cache
+        uses: actions/cache@v4
+        with:
+          path: unity/RLottieUnity/Library
+          key: unity-library-${{ runner.os }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
+          restore-keys: unity-library-${{ runner.os }}-
+
+      - name: Run Unity tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity/RLottieUnity
+          testMode: all
+          artifactsPath: test-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity tests (${{ github.ref_name }})
+
+      - name: Upload Unity test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-test-results-${{ github.run_id }}
+          path: test-results
+          if-no-files-found: warn
+
+  build_players:
+    name: Build ${{ matrix.name }} player
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows64
+            target_platform: StandaloneWindows64
+            ci_target: Windows64
+            output: artifacts/windows/RLottieSmoke.exe
+            artifact: rlottie-windows-${{ github.run_id }}
+          - name: Android
+            target_platform: Android
+            ci_target: Android
+            output: artifacts/android/RLottieSmoke.apk
+            artifact: rlottie-android-${{ github.run_id }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore Unity Library cache
+        uses: actions/cache@v4
+        with:
+          path: unity/RLottieUnity/Library
+          key: unity-library-${{ matrix.name }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
+          restore-keys: unity-library-${{ matrix.name }}-
+
+      - name: Build player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity/RLottieUnity
+          targetPlatform: ${{ matrix.target_platform }}
+          buildMethod: RLottie.CI.BuildMatrix.Build
+          customParameters: >-
+            -ciTarget ${{ matrix.ci_target }}
+            -ciPipeline Auto
+            -ciOutputPath ${{ github.workspace }}/${{ matrix.output }}
+
+      - name: Upload player
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.output }}
+          if-no-files-found: error
+
+  firebase_test_lab:
+    name: Firebase Test Lab Android
+    needs: build_players
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: rlottie-android-${{ github.run_id }}
+          path: artifacts/android
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Install gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Select Firebase device
+        id: device
+        shell: bash
+        env:
+          USE_PHYSICAL: ${{ inputs.run_physical_firebase_device || 'false' }}
+        run: |
+          set -euo pipefail
+          if [[ "$USE_PHYSICAL" == "true" ]]; then
+            MODEL="$(gcloud firebase test android models list \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --filter='form=PHYSICAL' \
+              --format='value(modelId)' \
+              --limit=1)"
+            test -n "$MODEL"
+          else
+            MODEL="MediumPhone.arm"
+          fi
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+
+      - name: Run Firebase Robo smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud firebase test android run \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --type=robo \
+            --app=artifacts/android/RLottieSmoke.apk \
+            --device="model=${{ steps.device.outputs.model }},locale=en,orientation=portrait" \
+            --timeout=5m \
+            --client-details="matrixLabel=RLottie-${{ github.ref_name }}-${{ github.run_number }}"
