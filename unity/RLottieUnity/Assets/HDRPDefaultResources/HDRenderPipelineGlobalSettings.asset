@@ -179,7 +179,6 @@ MonoBehaviour:
       - rid: 1224225182703157266
       - rid: 1224225182703157267
       - rid: 1224225182703157268
-      - rid: 1224225182703157269
       - rid: 1224225182703157270
       - rid: 1224225182703157271
       - rid: 1224225182703157272
@@ -336,6 +335,7 @@ MonoBehaviour:
         m_PreIntegratedFGD_MarschnerPS: {fileID: 4800000, guid: 31f36caf0a5e7f848a1b5328b6ad3eb8, type: 3}
         m_PreIntegratedFiberScatteringCS: {fileID: 7200000, guid: 4a087c9d074552c48aeb85184d56312e, type: 3}
         m_VolumetricMaterialCS: {fileID: 7200000, guid: 26f18c9cb0bccbf4481f8c84579affb1, type: 3}
+        m_ClearVolumetricMaterialCS: {fileID: 7200000, guid: a34e917ab17a38d419e6dd712988ac15, type: 3}
         m_EyeMaterialCS: {fileID: 7200000, guid: 76f78ba05cea1ed449c1ef613ab90597, type: 3}
         m_FilterAreaLightCookiesPS: {fileID: 4800000, guid: c243aac96dda5fa40bed693ed5ba02c4, type: 3}
         m_BuildProbabilityTablesCS: {fileID: 7200000, guid: b9f26cf340afe9145a699753531b2a4c, type: 3}
@@ -745,11 +745,6 @@ MonoBehaviour:
         m_EmissiveCylinderMesh: {fileID: 2534964839176971238, guid: accb6d90f0d50fe4ca0f68159b4323de, type: 3}
         m_EmissiveQuadMesh: {fileID: 4300000, guid: 1d5a8595286f94f4bb54171d49f473c3, type: 3}
         m_SphereMesh: {fileID: 4300000, guid: 9e0af751bc36ea146940ba245193e28c, type: 3}
-    - rid: 1224225182703157269
-      type: {class: RenderGraphSettings, ns: UnityEngine.Rendering.HighDefinition, asm: Unity.RenderPipelines.HighDefinition.Runtime}
-      data:
-        m_Version: 0
-        m_DynamicRenderPassCulling: 0
     - rid: 1224225182703157270
       type: {class: HDRenderPipelineEditorAssets, ns: UnityEngine.Rendering.HighDefinition, asm: Unity.RenderPipelines.HighDefinition.Runtime}
       data:
@@ -826,6 +821,11 @@ MonoBehaviour:
       type: {class: RenderingDebuggerRuntimeResources, ns: UnityEngine.Rendering, asm: Unity.RenderPipelines.Core.Runtime}
       data:
         m_version: 0
+        m_PanelSettings: {fileID: 11400000, guid: fa69697be3070b04a893666f5947f18c, type: 2}
+        m_StyleSheets:
+        - {fileID: 7433441132597879392, guid: 0ff99fd36f66f1a41bcc1d3c90e0922a, type: 3}
+        - {fileID: 7433441132597879392, guid: 3a8aa4d508da46d4dace18b280f064aa, type: 3}
+        m_VisualTreeAsset: {fileID: 9197481963319205126, guid: b647ceb1e15264943b9b439971e71110, type: 3}
     - rid: 1224225182703157279
       type: {class: ShaderStrippingSetting, ns: UnityEngine.Rendering, asm: Unity.RenderPipelines.Core.Runtime}
       data:
