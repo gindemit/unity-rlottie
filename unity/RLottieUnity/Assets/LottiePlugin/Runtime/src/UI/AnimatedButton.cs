@@ -54,6 +54,12 @@ namespace LottiePlugin.UI
         protected override void Start()
         {
             base.Start();
+#if UNITY_EDITOR
+            if (UnityEditor.BuildPipeline.isBuildingPlayer)
+            {
+                return;
+            }
+#endif
             if (_animationJson == null && string.IsNullOrEmpty(_jsonFilePath))
             {
                 return;
