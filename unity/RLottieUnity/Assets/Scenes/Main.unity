@@ -636,7 +636,7 @@ MonoBehaviour:
   _stopOnLastFrame: 0
   _targetFps: 30
   _resolutionDivider: 1
-  _pauseIfCulled: 1
+  _pauseIfCulled: 0
   _logLevel: 2
 --- !u!1 &820913632
 GameObject:
