@@ -5,7 +5,7 @@ param(
     [string] $WorkspaceRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
     [string[]] $TargetBranches,
     [switch] $StashDirty,
-    [switch] $Push,
+    [switch] $NoPush,
     [switch] $SkipFetch
 )
 
@@ -69,6 +69,12 @@ $sourceCommit = (Invoke-Git -Repository $sourceRepositoryPath -Arguments @('rev-
 $sourceStatus = @(Invoke-Git -Repository $sourceRepositoryPath -Arguments @('status', '--short', '--untracked-files=all'))
 if ($sourceStatus.Count -gt 0) {
     Write-Warning "The source worktree is dirty. Sync uses committed HEAD $sourceCommit only."
+}
+
+if (-not $NoPush -and $PSCmdlet.ShouldProcess($SourceBranch, 'push committed source branch to origin')) {
+    Invoke-Git -Repository $sourceRepositoryPath -Arguments @(
+        'push', 'origin', "HEAD:$SourceBranch"
+    ) | Write-Output
 }
 
 $targetRepositories = Get-ChildItem -LiteralPath $workspaceRootPath -Directory |
@@ -168,6 +174,11 @@ foreach ($target in $targetRepositories) {
         if ($pendingCount -eq 0) {
             Write-Output '  Already contains the committed source branch.'
             $unchanged++
+            if (-not $NoPush -and $PSCmdlet.ShouldProcess($target.Branch, 'push to origin')) {
+                Invoke-Git -Repository $target.Directory -Arguments @(
+                    'push', 'origin', "HEAD:$($target.Branch)"
+                ) | Write-Output
+            }
             continue
         }
 
@@ -209,7 +220,7 @@ foreach ($target in $targetRepositories) {
         Invoke-Git -Repository $target.Directory -Arguments @('commit', '--no-edit') | Write-Output
 
         $updated++
-        if ($Push -and $PSCmdlet.ShouldProcess($target.Branch, 'push to origin')) {
+        if (-not $NoPush -and $PSCmdlet.ShouldProcess($target.Branch, 'push to origin')) {
             Invoke-Git -Repository $target.Directory -Arguments @(
                 'push', 'origin', "HEAD:$($target.Branch)"
             ) | Write-Output
