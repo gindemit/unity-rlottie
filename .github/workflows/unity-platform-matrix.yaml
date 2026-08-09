@@ -40,6 +40,36 @@ jobs:
           key: unity-library-${{ runner.os }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
           restore-keys: unity-library-${{ runner.os }}-
 
+      - name: Prepare Unity test image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --tag rlottie-unity-tests:local -f - . <<'DOCKERFILE'
+          FROM unityci/editor:ubuntu-2022.3.62f3-linux-il2cpp-3
+          RUN apt-get update \
+              && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential cmake libgl-dev \
+              && rm -rf /var/lib/apt/lists/*
+          DOCKERFILE
+
+      - name: Build and verify Linux native plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /bin/bash \
+            --volume "${GITHUB_WORKSPACE}:/github/workspace" \
+            --workdir /github/workspace \
+            rlottie-unity-tests:local -lc '
+              cmake -S projects/CMake -B build/linux \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DRLOTTIE_LINUX=ON
+              cmake --build build/linux --config Release --parallel
+              install -m 755 \
+                "$(find build/linux -type f -name libLottiePlugin.so -print -quit)" \
+                unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+              ldd unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so | tee /tmp/ldd.txt
+              ! grep -q "not found" /tmp/ldd.txt
+            '
+
       - name: Run Unity tests
         uses: game-ci/unity-test-runner@v4
         env:
@@ -47,6 +77,7 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
+          customImage: rlottie-unity-tests:local
           projectPath: unity/RLottieUnity
           testMode: all
           artifactsPath: test-results
@@ -105,7 +136,7 @@ jobs:
           customParameters: >-
             -ciTarget ${{ matrix.ci_target }}
             -ciPipeline Auto
-            -ciOutputPath ${{ github.workspace }}/${{ matrix.output }}
+            -ciOutputPath /github/workspace/${{ matrix.output }}
 
       - name: Upload player
         uses: actions/upload-artifact@v4
@@ -150,16 +181,26 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$USE_PHYSICAL" == "true" ]]; then
-            MODEL="$(gcloud firebase test android models list \
+            DEVICE_JSON="$(gcloud firebase test android list-device-capacities \
               --project="${{ vars.GCP_PROJECT_ID }}" \
-              --filter='form=PHYSICAL' \
-              --format='value(modelId)' \
+              --filter='capacity=High' \
+              --format=json \
               --limit=1)"
-            test -n "$MODEL"
+            MODEL="$(jq -r '.[0].model // empty' <<< "$DEVICE_JSON")"
+            VERSION="$(jq -r '.[0].version // empty' <<< "$DEVICE_JSON")"
           else
-            MODEL="MediumPhone.arm"
+            DEVICE_JSON="$(gcloud firebase test android models list \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --filter='id=MediumPhone.arm' \
+              --format=json \
+              --limit=1)"
+            MODEL="$(jq -r '.[0].id // empty' <<< "$DEVICE_JSON")"
+            VERSION="$(jq -r '.[0].supportedVersionIds[0] // empty' <<< "$DEVICE_JSON")"
           fi
+          test -n "$MODEL"
+          test -n "$VERSION"
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Run Firebase Robo smoke test
         shell: bash
@@ -169,6 +210,6 @@ jobs:
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --type=robo \
             --app=artifacts/android/RLottieSmoke.apk \
-            --device="model=${{ steps.device.outputs.model }},locale=en,orientation=portrait" \
+            --device="model=${{ steps.device.outputs.model }},version=${{ steps.device.outputs.version }},locale=en,orientation=portrait" \
             --timeout=5m \
             --client-details="matrixLabel=RLottie-${{ github.ref_name }}-${{ github.run_number }}"
