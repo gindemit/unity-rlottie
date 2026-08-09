@@ -181,16 +181,24 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$USE_PHYSICAL" == "true" ]]; then
-            MODEL="$(gcloud firebase test android models list \
+            DEVICE_JSON="$(gcloud firebase test android models list \
               --project="${{ vars.GCP_PROJECT_ID }}" \
               --filter='form=PHYSICAL' \
-              --format='value(id)' \
+              --format=json \
               --limit=1)"
-            test -n "$MODEL"
           else
-            MODEL="MediumPhone.arm"
+            DEVICE_JSON="$(gcloud firebase test android models list \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --filter='id=MediumPhone.arm' \
+              --format=json \
+              --limit=1)"
           fi
+          MODEL="$(jq -r '.[0].id // empty' <<< "$DEVICE_JSON")"
+          VERSION="$(jq -r '.[0].supportedVersionIds[0] // empty' <<< "$DEVICE_JSON")"
+          test -n "$MODEL"
+          test -n "$VERSION"
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Run Firebase Robo smoke test
         shell: bash
@@ -200,6 +208,6 @@ jobs:
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --type=robo \
             --app=artifacts/android/RLottieSmoke.apk \
-            --device="model=${{ steps.device.outputs.model }},locale=en,orientation=portrait" \
+            --device="model=${{ steps.device.outputs.model }},version=${{ steps.device.outputs.version }},locale=en,orientation=portrait" \
             --timeout=5m \
             --client-details="matrixLabel=RLottie-${{ github.ref_name }}-${{ github.run_number }}"
