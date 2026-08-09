@@ -184,6 +184,12 @@ namespace LottiePlugin
 #else
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             _usesCPURendering = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
+#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+            // Unity's Linux OpenGL editor does not guarantee a current context on
+            // the scripting thread. Render into Unity-owned CPU texture memory,
+            // as the Vulkan path does, and upload it with Texture2D.Apply().
+            _usesCPURendering = true;
+#endif
 #endif
             if (_usesCPURendering)
             {
