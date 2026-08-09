@@ -18,7 +18,8 @@ $branchOwnedPaths = @(
     'unity/RLottieUnity/Packages/manifest.json',
     'unity/RLottieUnity/Packages/packages-lock.json',
     'unity/RLottieUnity/ProjectSettings/ProjectVersion.txt',
-    'unity/RLottieUnity/ProjectSettings/SceneTemplateSettings.json'
+    'unity/RLottieUnity/ProjectSettings/SceneTemplateSettings.json',
+    'unity/RLottieUnity/UserSettings/EditorUserSettings.asset'
 )
 
 function Invoke-Git {
