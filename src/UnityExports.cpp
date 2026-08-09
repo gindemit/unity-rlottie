@@ -70,7 +70,7 @@ UNITY_INTERFACE_EXPORT UnityPluginUnloadFunc UNITY_INTERFACE_API lottie_get_plug
 }
 #endif
 
-UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
+EXPORT_API void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int deviceType, int eventType)
 {
     LottieLogInfo(nullptr,
         "[Lottie] UnitySetGraphicsDevice: eventType=%d, deviceType=%d, device=%p",
@@ -189,7 +189,7 @@ UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* dev
     }
 }
 
-UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API UnityRenderEvent(int eventID)
+EXPORT_API void UNITY_INTERFACE_API UnityRenderEvent(int eventID)
 {
     OnRenderEvent(eventID);
 }
