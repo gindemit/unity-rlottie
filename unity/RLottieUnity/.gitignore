@@ -10,6 +10,11 @@
 /[Ll]ogs/
 /[Mm]emoryCaptures/
 /.utmp/
+/out/
+/[Uu]ser[Ss]ettings/
+/[Aa]ssets/InitTestScene*.unity
+/[Aa]ssets/InitTestScene*.unity.meta
+/[Pp]roject[Ss]ettings/boot.config
 
 # Never ignore Asset meta data
 !/[Aa]ssets/**/*.meta
