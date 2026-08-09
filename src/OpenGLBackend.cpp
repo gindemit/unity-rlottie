@@ -125,7 +125,7 @@ bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* sta
     // Clear any existing OpenGL errors
     while (glGetError() != GL_NO_ERROR) {}
 
-    // If we used deferred creation on Windows, nativeTex might be the dummy 0x1.
+    // Deferred OpenGL creation starts with a dummy pointer until the render event.
     if (state->gl.glTex == 0 &&
         state->nativeTex == reinterpret_cast<void*>(static_cast<uintptr_t>(kDeferredGLTexDummy)))
     {
