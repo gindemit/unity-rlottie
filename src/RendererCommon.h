@@ -16,7 +16,7 @@ enum class Renderer
     Vulkan,
 };
 
-// Constant for deferred OpenGL texture creation on Windows
+// Constant for deferred OpenGL texture creation on Unity's render thread
 constexpr uintptr_t kDeferredGLTexDummy = 0x1;
 
 // Convert Unity device type to Renderer enum
