@@ -40,20 +40,6 @@ jobs:
           key: unity-library-${{ runner.os }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
           restore-keys: unity-library-${{ runner.os }}-
 
-      - name: Build Linux native plugin
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --yes libgl-dev
-          cmake -S projects/CMake -B build/linux \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DRLOTTIE_LINUX=ON
-          cmake --build build/linux --config Release --parallel
-          install -m 755 \
-            "$(find build/linux -type f -name libLottiePlugin.so -print -quit)" \
-            unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
-
       - name: Prepare Unity test image
         shell: bash
         run: |
@@ -61,13 +47,28 @@ jobs:
           docker build --tag rlottie-unity-tests:local -f - . <<'DOCKERFILE'
           FROM unityci/editor:ubuntu-2022.3.62f3-linux-il2cpp-3
           RUN apt-get update \
-              && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends libgl1 libopengl0 \
+              && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential cmake libgl-dev \
               && rm -rf /var/lib/apt/lists/*
           DOCKERFILE
+
+      - name: Build and verify Linux native plugin
+        shell: bash
+        run: |
+          set -euo pipefail
           docker run --rm --entrypoint /bin/bash \
-            --volume "${GITHUB_WORKSPACE}:/github/workspace:ro" \
-            rlottie-unity-tests:local -lc \
-            'ldd /github/workspace/unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so | tee /tmp/ldd.txt; ! grep -q "not found" /tmp/ldd.txt'
+            --volume "${GITHUB_WORKSPACE}:/github/workspace" \
+            --workdir /github/workspace \
+            rlottie-unity-tests:local -lc '
+              cmake -S projects/CMake -B build/linux \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DRLOTTIE_LINUX=ON
+              cmake --build build/linux --config Release --parallel
+              install -m 755 \
+                "$(find build/linux -type f -name libLottiePlugin.so -print -quit)" \
+                unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+              ldd unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so | tee /tmp/ldd.txt
+              ! grep -q "not found" /tmp/ldd.txt
+            '
 
       - name: Run Unity tests
         uses: game-ci/unity-test-runner@v4
