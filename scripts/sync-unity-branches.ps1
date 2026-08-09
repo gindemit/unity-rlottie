@@ -4,8 +4,8 @@ param(
     [string] $SourceRepository = (Split-Path -Parent $PSScriptRoot),
     [string] $WorkspaceRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
     [string[]] $TargetBranches,
-    [switch] $StashDirty,
-    [switch] $Push,
+    [switch] $NoStashDirty,
+    [switch] $NoPush,
     [switch] $SkipFetch
 )
 
@@ -71,6 +71,12 @@ if ($sourceStatus.Count -gt 0) {
     Write-Warning "The source worktree is dirty. Sync uses committed HEAD $sourceCommit only."
 }
 
+if (-not $NoPush -and $PSCmdlet.ShouldProcess($SourceBranch, 'push committed source branch to origin')) {
+    Invoke-Git -Repository $sourceRepositoryPath -Arguments @(
+        'push', 'origin', "HEAD:$SourceBranch"
+    ) | Write-Output
+}
+
 $targetRepositories = Get-ChildItem -LiteralPath $workspaceRootPath -Directory |
     Where-Object { $_.Name -match '^unity-rlottie-(.+)$' } |
     ForEach-Object {
@@ -106,8 +112,8 @@ foreach ($target in $targetRepositories) {
 
         $status = @(Invoke-Git -Repository $target.Directory -Arguments @('status', '--short', '--untracked-files=all'))
         if ($status.Count -gt 0) {
-            if (-not $StashDirty) {
-                throw "Worktree is dirty. Commit it, clean it, or rerun with -StashDirty."
+            if ($NoStashDirty) {
+                throw "Worktree is dirty and -NoStashDirty was requested."
             }
 
             $stashMessage = "pre-sync $($target.Branch) $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
@@ -168,6 +174,11 @@ foreach ($target in $targetRepositories) {
         if ($pendingCount -eq 0) {
             Write-Output '  Already contains the committed source branch.'
             $unchanged++
+            if (-not $NoPush -and $PSCmdlet.ShouldProcess($target.Branch, 'push to origin')) {
+                Invoke-Git -Repository $target.Directory -Arguments @(
+                    'push', 'origin', "HEAD:$($target.Branch)"
+                ) | Write-Output
+            }
             continue
         }
 
@@ -209,7 +220,7 @@ foreach ($target in $targetRepositories) {
         Invoke-Git -Repository $target.Directory -Arguments @('commit', '--no-edit') | Write-Output
 
         $updated++
-        if ($Push -and $PSCmdlet.ShouldProcess($target.Branch, 'push to origin')) {
+        if (-not $NoPush -and $PSCmdlet.ShouldProcess($target.Branch, 'push to origin')) {
             Invoke-Git -Repository $target.Directory -Arguments @(
                 'push', 'origin', "HEAD:$($target.Branch)"
             ) | Write-Output
