@@ -54,6 +54,21 @@ jobs:
             "$(find build/linux -type f -name libLottiePlugin.so -print -quit)" \
             unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
 
+      - name: Prepare Unity test image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --tag rlottie-unity-tests:local -f - . <<'DOCKERFILE'
+          FROM unityci/editor:ubuntu-2022.3.62f3-linux-il2cpp-3
+          RUN apt-get update \
+              && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends libgl1 libopengl0 \
+              && rm -rf /var/lib/apt/lists/*
+          DOCKERFILE
+          docker run --rm --entrypoint /bin/bash \
+            --volume "${GITHUB_WORKSPACE}:/github/workspace:ro" \
+            rlottie-unity-tests:local -lc \
+            'ldd /github/workspace/unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so | tee /tmp/ldd.txt; ! grep -q "not found" /tmp/ldd.txt'
+
       - name: Run Unity tests
         uses: game-ci/unity-test-runner@v4
         env:
@@ -61,6 +76,7 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
+          customImage: rlottie-unity-tests:local
           projectPath: unity/RLottieUnity
           testMode: all
           artifactsPath: test-results
@@ -167,7 +183,7 @@ jobs:
             MODEL="$(gcloud firebase test android models list \
               --project="${{ vars.GCP_PROJECT_ID }}" \
               --filter='form=PHYSICAL' \
-              --format='value(modelId)' \
+              --format='value(id)' \
               --limit=1)"
             test -n "$MODEL"
           else
