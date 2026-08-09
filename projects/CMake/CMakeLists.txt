@@ -302,12 +302,12 @@ endif()
 if (ANDROID)
   add_custom_command(
       TARGET LottiePlugin POST_BUILD
-      COMMAND "${ANDROID_TOOLCHAIN_PREFIX}strip" -g -S -d --strip-debug --verbose
+      COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug
               "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:LottiePlugin>"
       COMMENT "Strip debug symbols done on final binary.")
   add_custom_command(
-        TARGET LottiePlugin POST_BUILD
-        COMMAND "${ANDROID_TOOLCHAIN_PREFIX}strip" -g -S -d --strip-debug --verbose
-                "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
-        COMMENT "Strip debug symbols done on final binary.")
+      TARGET LottiePlugin POST_BUILD
+      COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug
+              "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
+      COMMENT "Strip debug symbols done on final binary.")
 endif()
