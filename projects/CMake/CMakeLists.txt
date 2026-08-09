@@ -1,4 +1,4 @@
-# CMakeList.txt : CMake project for LottiePlugin, include source and define
+# CMakeList.txt : CMake project for LottiePlugin
 cmake_minimum_required (VERSION 3.16)
 
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
@@ -204,7 +204,9 @@ elseif(ANDROID)
     endif()
     target_link_libraries(LottiePlugin ${GLES_LIBRARY} ${ANDROID_LOG} ${ANDROID_LIB})
 elseif(RLOTTIE_LINUX)
-    set(OpenGL_GL_PREFERENCE GLVND)
+    # Unity's Linux CI editor image provides the legacy libGL loader, but not
+    # the separate GLVND libOpenGL loader used by newer Linux distributions.
+    set(OpenGL_GL_PREFERENCE LEGACY)
     find_package(OpenGL REQUIRED)
     target_link_libraries(LottiePlugin OpenGL::GL)
 endif()

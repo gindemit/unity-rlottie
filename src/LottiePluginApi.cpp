@@ -409,10 +409,10 @@ extern "C"
             return nullptr;
         }
 
-        // SPECIAL CASE: OpenGL on Windows – we MUST avoid GL calls from this thread.
+        // OpenGL resource creation must happen on Unity's render thread. This API
+        // can run on a scripting/test thread without a current GL context on Linux.
         if (GetCurrentRenderer() == Renderer::OpenGL)
         {
-#if defined(_WIN32)
             // Defer actual GL texture creation to the render thread (OnRenderEvent).
             state->texW = width;
             state->texH = height;
@@ -420,25 +420,10 @@ extern "C"
             state->nativeTex = reinterpret_cast<void*>(static_cast<uintptr_t>(kDeferredGLTexDummy));
 
             LottieLogInfo(animation,
-                "[Lottie] OpenGL (Windows): deferring texture creation; dummy nativeTex=%p",
+                "[Lottie] OpenGL: deferring texture creation; dummy nativeTex=%p",
                 state->nativeTex);
 
             return state->nativeTex;
-#else
-            // Non-Windows OpenGL (e.g. Linux): create immediately as before.
-            if (!EnsureTextureForRenderer(animation, state, width, height))
-            {
-                LottieLogError(animation,
-                    "[Lottie] OpenGL non-Windows: EnsureTexture failed in lottie_create_texture");
-                return nullptr;
-            }
-
-            LottieLogInfo(animation,
-                "[Lottie] OpenGL non-Windows: Texture created immediately, nativeTex=%p",
-                state ? state->nativeTex : nullptr);
-
-            return state != nullptr ? state->nativeTex : nullptr;
-#endif
         }
 
         // D3D11, D3D12, Metal, Vulkan: create immediately.
