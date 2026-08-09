@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       run_physical_firebase_device:
-        description: Use one Firebase physical device instead of the ARM virtual device
+        description: Run latest Android pipelines on Firebase physical devices and Windows pipelines on hosted runners
         required: false
         default: false
         type: boolean
@@ -15,7 +15,6 @@ on:
   push:
     branches:
       - codex/remove-texture.apply-and-move-updates-to-native
-      - 'unity/**'
 
 concurrency:
   group: unity-platform-matrix-${{ github.ref }}
@@ -148,7 +147,7 @@ jobs:
   firebase_test_lab:
     name: Firebase Test Lab Android
     needs: build_players
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && !(github.event_name == 'workflow_dispatch' && inputs.run_physical_firebase_device)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -213,3 +212,185 @@ jobs:
             --device="model=${{ steps.device.outputs.model }},version=${{ steps.device.outputs.version }},locale=en,orientation=portrait" \
             --timeout=5m \
             --client-details="matrixLabel=RLottie-${{ github.ref_name }}-${{ github.run_number }}"
+
+  build_render_pipeline_players:
+    name: Build device gate - ${{ matrix.pipeline }} ${{ matrix.platform }}
+    if: github.event_name == 'workflow_dispatch' && inputs.run_physical_firebase_device
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - pipeline: BuiltIn
+            platform: Windows64
+            ref: unity/6000.5.3f1
+            target_platform: StandaloneWindows64
+            output: artifacts/device-gate/windows-built-in/RLottieSmoke.exe
+            artifact_path: artifacts/device-gate/windows-built-in
+            artifact: rlottie-device-windows-built-in-${{ github.run_id }}
+          - pipeline: URP
+            platform: Windows64
+            ref: unity/6000.5.3f1-urp
+            target_platform: StandaloneWindows64
+            output: artifacts/device-gate/windows-urp/RLottieSmoke.exe
+            artifact_path: artifacts/device-gate/windows-urp
+            artifact: rlottie-device-windows-urp-${{ github.run_id }}
+          - pipeline: HDRP
+            platform: Windows64
+            ref: unity/6000.5.3f1-hdrp
+            target_platform: StandaloneWindows64
+            output: artifacts/device-gate/windows-hdrp/RLottieSmoke.exe
+            artifact_path: artifacts/device-gate/windows-hdrp
+            artifact: rlottie-device-windows-hdrp-${{ github.run_id }}
+          - pipeline: BuiltIn
+            platform: Android
+            ref: unity/6000.5.3f1
+            target_platform: Android
+            output: artifacts/device-gate/android-built-in/RLottieSmoke.apk
+            artifact_path: artifacts/device-gate/android-built-in/RLottieSmoke.apk
+            artifact: rlottie-device-android-built-in-${{ github.run_id }}
+          - pipeline: URP
+            platform: Android
+            ref: unity/6000.5.3f1-urp
+            target_platform: Android
+            output: artifacts/device-gate/android-urp/RLottieSmoke.apk
+            artifact_path: artifacts/device-gate/android-urp/RLottieSmoke.apk
+            artifact: rlottie-device-android-urp-${{ github.run_id }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          submodules: recursive
+
+      - name: Restore Unity Library cache
+        uses: actions/cache@v4
+        with:
+          path: unity/RLottieUnity/Library
+          key: unity-device-gate-${{ matrix.pipeline }}-${{ matrix.platform }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
+          restore-keys: unity-device-gate-${{ matrix.pipeline }}-${{ matrix.platform }}-
+
+      - name: Build player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity/RLottieUnity
+          targetPlatform: ${{ matrix.target_platform }}
+          buildMethod: RLottie.CI.BuildMatrix.Build
+          customParameters: >-
+            -ciTarget ${{ matrix.platform }}
+            -ciPipeline ${{ matrix.pipeline }}
+            -ciOutputPath /github/workspace/${{ matrix.output }}
+
+      - name: Upload player
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+
+  windows_render_pipeline_smoke:
+    name: Windows rendered player - ${{ matrix.pipeline }}
+    needs: build_render_pipeline_players
+    if: github.event_name == 'workflow_dispatch' && inputs.run_physical_firebase_device
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pipeline: BuiltIn
+            artifact: rlottie-device-windows-built-in-${{ github.run_id }}
+          - pipeline: URP
+            artifact: rlottie-device-windows-urp-${{ github.run_id }}
+          - pipeline: HDRP
+            artifact: rlottie-device-windows-hdrp-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/windows/${{ matrix.pipeline }}
+
+      - name: Run rendered-player smoke test
+        shell: pwsh
+        run: >-
+          ./scripts/ci/run-windows-player-smoke.ps1
+          -Player artifacts/windows/${{ matrix.pipeline }}/RLottieSmoke.exe
+          -LogFile artifacts/windows/${{ matrix.pipeline }}/Player.log
+
+      - name: Upload player log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rlottie-windows-${{ matrix.pipeline }}-device-log-${{ github.run_id }}
+          path: artifacts/windows/${{ matrix.pipeline }}/Player.log
+          if-no-files-found: warn
+
+  firebase_render_pipeline_devices:
+    name: Android physical device - ${{ matrix.pipeline }}
+    needs: build_render_pipeline_players
+    if: github.event_name == 'workflow_dispatch' && inputs.run_physical_firebase_device
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - pipeline: BuiltIn
+            artifact: rlottie-device-android-built-in-${{ github.run_id }}
+          - pipeline: URP
+            artifact: rlottie-device-android-urp-${{ github.run_id }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/android/${{ matrix.pipeline }}
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Install gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Select physical Firebase device
+        id: device
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEVICE_JSON="$(gcloud firebase test android list-device-capacities \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --filter='capacity=High' \
+            --format=json \
+            --limit=1)"
+          MODEL="$(jq -r '.[0].model // empty' <<< "$DEVICE_JSON")"
+          VERSION="$(jq -r '.[0].version // empty' <<< "$DEVICE_JSON")"
+          test -n "$MODEL"
+          test -n "$VERSION"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run Firebase Robo smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud firebase test android run \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --type=robo \
+            --app="artifacts/android/${{ matrix.pipeline }}/RLottieSmoke.apk" \
+            --device="model=${{ steps.device.outputs.model }},version=${{ steps.device.outputs.version }},locale=en,orientation=portrait" \
+            --timeout=5m \
+            --client-details="matrixLabel=RLottie-${{ matrix.pipeline }}-${{ github.run_number }}"
