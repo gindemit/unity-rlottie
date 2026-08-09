@@ -153,7 +153,7 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEventInternal(UnityGfxDeviceEven
     }
 }
 
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
+extern "C" EXPORT_API void UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
 {
     // Early logging before Unity's logger is set (uses printf on iOS)
 #if defined(__APPLE__)
@@ -232,7 +232,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnit
     LottieLogInfo(nullptr, "[Lottie] Plugin loaded successfully (gRenderer=%d)", (int)GetCurrentRenderer());
 }
 
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
+extern "C" EXPORT_API void UNITY_INTERFACE_API UnityPluginUnload()
 {
     LottieLogInfo(nullptr, "[Lottie] Plugin unloading...");
 
