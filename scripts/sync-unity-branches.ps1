@@ -175,29 +175,38 @@ foreach ($target in $targetRepositories) {
             continue
         }
 
-        $mergeOutput = & git -C $target.Directory merge --no-edit $sourceTrackingRef 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            $unmergedPaths = @(& git -C $target.Directory diff --name-only --diff-filter=U)
-            $unexpectedConflicts = @($unmergedPaths | Where-Object { -not (Test-BranchOwnedPath -Path $_) })
+        $mergeOutput = & git -C $target.Directory merge --no-commit --no-ff $sourceTrackingRef 2>&1
+        $mergeExitCode = $LASTEXITCODE
+        $unmergedPaths = @(& git -C $target.Directory diff --name-only --diff-filter=U)
+        $unexpectedConflicts = @($unmergedPaths | Where-Object { -not (Test-BranchOwnedPath -Path $_) })
 
-            if ($unmergedPaths.Count -eq 0 -or $unexpectedConflicts.Count -gt 0) {
-                if (Test-Path -LiteralPath (Join-Path $target.Directory '.git/MERGE_HEAD')) {
-                    & git -C $target.Directory merge --abort | Out-Null
-                }
-                $details = if ($unexpectedConflicts) { $unexpectedConflicts -join ', ' } else { $mergeOutput -join "`n" }
-                throw "Merge has conflicts outside branch-owned metadata: $details"
+        if ($mergeExitCode -ne 0 -and ($unmergedPaths.Count -eq 0 -or $unexpectedConflicts.Count -gt 0)) {
+            if (Test-Path -LiteralPath (Join-Path $target.Directory '.git/MERGE_HEAD')) {
+                & git -C $target.Directory merge --abort | Out-Null
             }
+            $details = if ($unexpectedConflicts) { $unexpectedConflicts -join ', ' } else { $mergeOutput -join "`n" }
+            throw "Merge has conflicts outside branch-owned metadata: $details"
+        }
 
-            foreach ($path in $unmergedPaths) {
-                Invoke-Git -Repository $target.Directory -Arguments @('checkout', '--ours', '--', $path) | Out-Null
+        # Restore every branch-owned path from the target's pre-merge HEAD. This
+        # also protects cleanly merged files and removes source-only files that
+        # do not exist in an older Unity branch.
+        foreach ($path in $branchOwnedPaths) {
+            & git -C $target.Directory cat-file -e "HEAD:$path" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                Invoke-Git -Repository $target.Directory -Arguments @('checkout', 'HEAD', '--', $path) | Out-Null
                 Invoke-Git -Repository $target.Directory -Arguments @('add', '--', $path) | Out-Null
-                Write-Output "  Preserved branch-owned file: $path"
             }
-            Invoke-Git -Repository $target.Directory -Arguments @('commit', '--no-edit') | Write-Output
+            else {
+                & git -C $target.Directory rm --force --ignore-unmatch -- $path | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to remove source-only branch-owned file: $path"
+                }
+            }
         }
-        else {
-            $mergeOutput | Write-Output
-        }
+
+        Write-Output '  Preserved branch-owned package and Unity-version metadata.'
+        Invoke-Git -Repository $target.Directory -Arguments @('commit', '--no-edit') | Write-Output
 
         $updated++
         if ($Push -and $PSCmdlet.ShouldProcess($target.Branch, 'push to origin')) {
