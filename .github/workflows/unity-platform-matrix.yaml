@@ -40,6 +40,20 @@ jobs:
           key: unity-library-${{ runner.os }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
           restore-keys: unity-library-${{ runner.os }}-
 
+      - name: Build Linux native plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes libgl-dev
+          cmake -S projects/CMake -B build/linux \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRLOTTIE_LINUX=ON
+          cmake --build build/linux --config Release --parallel
+          install -m 755 \
+            "$(find build/linux -type f -name libLottiePlugin.so -print -quit)" \
+            unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+
       - name: Run Unity tests
         uses: game-ci/unity-test-runner@v4
         env:
@@ -105,7 +119,7 @@ jobs:
           customParameters: >-
             -ciTarget ${{ matrix.ci_target }}
             -ciPipeline Auto
-            -ciOutputPath ${{ github.workspace }}/${{ matrix.output }}
+            -ciOutputPath /github/workspace/${{ matrix.output }}
 
       - name: Upload player
         uses: actions/upload-artifact@v4
