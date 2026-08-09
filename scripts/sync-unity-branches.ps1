@@ -18,7 +18,8 @@ $branchOwnedPaths = @(
     'unity/RLottieUnity/Packages/manifest.json',
     'unity/RLottieUnity/Packages/packages-lock.json',
     'unity/RLottieUnity/ProjectSettings/ProjectVersion.txt',
-    'unity/RLottieUnity/ProjectSettings/SceneTemplateSettings.json'
+    'unity/RLottieUnity/ProjectSettings/SceneTemplateSettings.json',
+    'unity/RLottieUnity/UserSettings/EditorUserSettings.asset'
 )
 
 function Invoke-Git {
@@ -206,7 +207,7 @@ foreach ($target in $targetRepositories) {
             & git -C $target.Directory cat-file -e "HEAD:$path" 2>$null
             if ($LASTEXITCODE -eq 0) {
                 Invoke-Git -Repository $target.Directory -Arguments @('checkout', 'HEAD', '--', $path) | Out-Null
-                Invoke-Git -Repository $target.Directory -Arguments @('add', '--', $path) | Out-Null
+                Invoke-Git -Repository $target.Directory -Arguments @('add', '--force', '--', $path) | Out-Null
             }
             else {
                 & git -C $target.Directory rm --force --ignore-unmatch -- $path | Out-Null
