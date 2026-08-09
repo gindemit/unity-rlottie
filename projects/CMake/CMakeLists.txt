@@ -181,6 +181,20 @@ endif()
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
 
+# rlottie is built as a static library here, but its private ELF version-script
+# linker item is propagated to consumers by CMake. That script only permits
+# lottie_* and rlottie::* symbols, which hides UnityPluginLoad/Unload from the
+# final Android and Linux plugin even though they have default visibility.
+# Keep rlottie's normal link dependencies while dropping that archive-only
+# export restriction from LottiePlugin's link interface.
+if (NOT APPLE AND NOT WIN32)
+    get_target_property(RLOTTIE_INTERFACE_LINK_LIBRARIES rlottie INTERFACE_LINK_LIBRARIES)
+    if (RLOTTIE_INTERFACE_LINK_LIBRARIES)
+        list(FILTER RLOTTIE_INTERFACE_LINK_LIBRARIES EXCLUDE REGEX "--version-script=")
+        set_property(TARGET rlottie PROPERTY INTERFACE_LINK_LIBRARIES "${RLOTTIE_INTERFACE_LINK_LIBRARIES}")
+    endif()
+endif()
+
 if (ipo_supported)
     set_property(TARGET rlottie PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     set_property(TARGET LottiePlugin PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
@@ -288,12 +302,12 @@ endif()
 if (ANDROID)
   add_custom_command(
       TARGET LottiePlugin POST_BUILD
-      COMMAND "${ANDROID_TOOLCHAIN_PREFIX}strip" -g -S -d --strip-debug --verbose
+      COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug
               "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:LottiePlugin>"
       COMMENT "Strip debug symbols done on final binary.")
   add_custom_command(
-        TARGET LottiePlugin POST_BUILD
-        COMMAND "${ANDROID_TOOLCHAIN_PREFIX}strip" -g -S -d --strip-debug --verbose
-                "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
-        COMMENT "Strip debug symbols done on final binary.")
+      TARGET LottiePlugin POST_BUILD
+      COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug
+              "${CMAKE_CURRENT_SOURCE_DIR}/../../out/$<CONFIG>/Plugins/$<PLATFORM_ID>/${RLOTTIE_PLUGIN_TARGET_ARCHITECTURE}/$<TARGET_FILE_NAME:rlottie>"
+      COMMENT "Strip debug symbols done on final binary.")
 endif()
