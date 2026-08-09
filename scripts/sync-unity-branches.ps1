@@ -4,7 +4,7 @@ param(
     [string] $SourceRepository = (Split-Path -Parent $PSScriptRoot),
     [string] $WorkspaceRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
     [string[]] $TargetBranches,
-    [switch] $StashDirty,
+    [switch] $NoStashDirty,
     [switch] $NoPush,
     [switch] $SkipFetch
 )
@@ -112,8 +112,8 @@ foreach ($target in $targetRepositories) {
 
         $status = @(Invoke-Git -Repository $target.Directory -Arguments @('status', '--short', '--untracked-files=all'))
         if ($status.Count -gt 0) {
-            if (-not $StashDirty) {
-                throw "Worktree is dirty. Commit it, clean it, or rerun with -StashDirty."
+            if ($NoStashDirty) {
+                throw "Worktree is dirty and -NoStashDirty was requested."
             }
 
             $stashMessage = "pre-sync $($target.Branch) $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
