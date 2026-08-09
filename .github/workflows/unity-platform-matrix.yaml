@@ -181,20 +181,22 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$USE_PHYSICAL" == "true" ]]; then
-            DEVICE_JSON="$(gcloud firebase test android models list \
+            DEVICE_JSON="$(gcloud firebase test android list-device-capacities \
               --project="${{ vars.GCP_PROJECT_ID }}" \
-              --filter='form=PHYSICAL' \
+              --filter='capacity=High' \
               --format=json \
               --limit=1)"
+            MODEL="$(jq -r '.[0].model // empty' <<< "$DEVICE_JSON")"
+            VERSION="$(jq -r '.[0].version // empty' <<< "$DEVICE_JSON")"
           else
             DEVICE_JSON="$(gcloud firebase test android models list \
               --project="${{ vars.GCP_PROJECT_ID }}" \
               --filter='id=MediumPhone.arm' \
               --format=json \
               --limit=1)"
+            MODEL="$(jq -r '.[0].id // empty' <<< "$DEVICE_JSON")"
+            VERSION="$(jq -r '.[0].supportedVersionIds[0] // empty' <<< "$DEVICE_JSON")"
           fi
-          MODEL="$(jq -r '.[0].id // empty' <<< "$DEVICE_JSON")"
-          VERSION="$(jq -r '.[0].supportedVersionIds[0] // empty' <<< "$DEVICE_JSON")"
           test -n "$MODEL"
           test -n "$VERSION"
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
