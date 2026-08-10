@@ -17,7 +17,6 @@ on:
       - 'dependency/**'
       - 'projects/**'
       - 'src/**'
-
 jobs:
   build_windows:
     runs-on: windows-latest
