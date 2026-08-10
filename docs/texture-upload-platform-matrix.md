@@ -6,8 +6,8 @@ This document describes the implementation inspected on 2026-08-10 at commit
 `4dc22680668674a935d1902aeb0484362dff50b3` (`4dc2268`, "Rebuild Android
 plugins with Unity exports"). At that snapshot:
 
-- `origin/codex/remove-texture.apply-and-move-updates-to-native` and
-  `origin/main` resolve to the same commit;
+- the feature branch analyzed at the time and `origin/main` resolved to the
+  same commit;
 - therefore `main` contains every committed change reachable from that feature
   branch at this snapshot; and
 - this is a point-in-time statement. The branches can diverge after either one

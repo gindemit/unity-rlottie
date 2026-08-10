@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
-    [string] $SourceBranch = 'codex/remove-texture.apply-and-move-updates-to-native',
+    [string] $SourceBranch = 'dev',
     [string] $SourceRepository = (Split-Path -Parent $PSScriptRoot),
     [string] $WorkspaceRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
     [string[]] $TargetBranches,
