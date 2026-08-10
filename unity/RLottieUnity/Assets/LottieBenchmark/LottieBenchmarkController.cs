@@ -17,6 +17,7 @@ using Debug = UnityEngine.Debug;
 /// </summary>
 public sealed class LottieBenchmarkController : MonoBehaviour
 {
+    private const string AndroidArgumentsExtra = "lottieBenchmarkArguments";
     private const double SixtyFpsBudgetMs = 1000.0 / 60.0;
     private const int MaxVisiblePreviews = 12;
 
@@ -65,7 +66,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
 
     private void Start()
     {
-        string[] arguments = Environment.GetCommandLineArgs();
+        string[] arguments = GetBenchmarkArguments();
         if (!HasArgument(arguments, "-lottieBenchmarkMatrix"))
         {
             return;
@@ -84,6 +85,35 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             Application.targetFrameRate = -1;
         }
         StartCoroutine(StartAutomaticMatrixNextFrame());
+    }
+
+    private static string[] GetBenchmarkArguments()
+    {
+        string[] arguments = Environment.GetCommandLineArgs();
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (AndroidJavaObject intent = activity.Call<AndroidJavaObject>("getIntent"))
+            {
+                string extra = intent.Call<string>("getStringExtra", AndroidArgumentsExtra);
+                if (!string.IsNullOrEmpty(extra))
+                {
+                    string[] extraArguments = extra.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    var combined = new string[arguments.Length + extraArguments.Length];
+                    Array.Copy(arguments, combined, arguments.Length);
+                    Array.Copy(extraArguments, 0, combined, arguments.Length, extraArguments.Length);
+                    return combined;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning("Could not read Android benchmark arguments: " + exception.Message);
+        }
+#endif
+        return arguments;
     }
 
     private void Update()
