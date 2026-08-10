@@ -121,6 +121,10 @@ Check out the 'Scene UI' Sample in Unity Package manager.
 
 https://github.com/gindemit/unity-rlottie/assets/5675979/3301d00e-fc9e-49c0-bc7f-7408f1f72ce4
 
+## Documentation
+
+* [Texture upload paths and Vulkan native-upload analysis](docs/texture-upload-platform-matrix.md)
+
 ## Support
 
 If you encounter any issues or have questions, please [create an issue](https://github.com/gindemit/unity-rlottie/issues/new) on GitHub.
