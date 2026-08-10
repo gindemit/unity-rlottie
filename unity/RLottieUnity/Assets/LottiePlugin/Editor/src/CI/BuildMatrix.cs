@@ -20,6 +20,8 @@ namespace RLottie.CI
                 string outputPath = GetArgument("-ciOutputPath", GetDefaultOutput(targetName));
                 string expectedPipeline = GetArgument("-ciPipeline", "Auto");
                 string requestedGraphicsApi = GetArgument("-ciGraphicsApi", "Auto");
+                bool connectProfiler = GetBooleanArgument("-ciAutoconnectProfiler", false);
+                bool developmentBuild = GetBooleanArgument("-ciDevelopment", false) || connectProfiler;
 
                 ValidateRenderPipeline(expectedPipeline);
                 EnsureSceneExists();
@@ -34,15 +36,26 @@ namespace RLottie.CI
                 graphicsApiState = ConfigureGraphicsApi(target, requestedGraphicsApi);
                 EnsureOutputDirectory(outputPath, target);
 
+                BuildOptions buildOptions = BuildOptions.StrictMode;
+                if (developmentBuild)
+                {
+                    buildOptions |= BuildOptions.Development;
+                }
+                if (connectProfiler)
+                {
+                    buildOptions |= BuildOptions.ConnectWithProfiler;
+                }
+
                 BuildPlayerOptions options = new BuildPlayerOptions
                 {
                     scenes = new[] { SmokeScene },
                     locationPathName = outputPath,
                     target = target,
-                    options = BuildOptions.StrictMode
+                    options = buildOptions
                 };
 
-                Debug.Log("RLottie CI build: target=" + target + ", output=" + outputPath);
+                Debug.Log("RLottie CI build: target=" + target + ", output=" + outputPath +
+                    ", development=" + developmentBuild + ", autoconnectProfiler=" + connectProfiler);
                 BuildReport report = BuildPipeline.BuildPlayer(options);
                 BuildSummary summary = report.summary;
                 Debug.Log("RLottie CI result: " + summary.result + ", errors=" + summary.totalErrors +
@@ -79,6 +92,8 @@ namespace RLottie.CI
                     return BuildTarget.StandaloneLinux64;
                 case "webgl":
                     return BuildTarget.WebGL;
+                case "ios":
+                    return BuildTarget.iOS;
                 default:
                     throw new ArgumentException("Unsupported -ciTarget value: " + targetName);
             }
@@ -96,6 +111,8 @@ namespace RLottie.CI
                     return Path.Combine(root, "linux", "RLottieSmoke.x86_64");
                 case "webgl":
                     return Path.Combine(root, "webgl");
+                case "ios":
+                    return Path.Combine(root, "ios");
                 default:
                     return Path.Combine(root, "windows", "RLottieSmoke.exe");
             }
@@ -103,7 +120,9 @@ namespace RLottie.CI
 
         private static void EnsureOutputDirectory(string outputPath, BuildTarget target)
         {
-            string directory = target == BuildTarget.WebGL ? outputPath : Path.GetDirectoryName(outputPath);
+            string directory = target == BuildTarget.WebGL || target == BuildTarget.iOS
+                ? outputPath
+                : Path.GetDirectoryName(outputPath);
             if (string.IsNullOrEmpty(directory))
             {
                 throw new InvalidOperationException("Invalid output path: " + outputPath);
@@ -232,6 +251,16 @@ namespace RLottie.CI
                 }
             }
             return fallback;
+        }
+
+        private static bool GetBooleanArgument(string name, bool fallback)
+        {
+            string value = GetArgument(name, fallback ? "true" : "false");
+            if (bool.TryParse(value, out bool parsed))
+            {
+                return parsed;
+            }
+            throw new ArgumentException("Invalid boolean value for " + name + ": " + value);
         }
     }
 }
