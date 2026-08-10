@@ -122,6 +122,9 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             logicalSafeArea.yMin + margin,
             panelWidth,
             logicalSafeArea.height - margin * 2f);
+        float sidePreviewX = panelArea.xMax + margin;
+        float sidePreviewWidth = logicalSafeArea.xMax - sidePreviewX - margin;
+        bool hasSidePreview = sidePreviewWidth >= 100f;
 
         GUILayout.BeginArea(panelArea, _panelStyle);
         _controlScroll = GUILayout.BeginScrollView(_controlScroll);
@@ -200,6 +203,22 @@ public sealed class LottieBenchmarkController : MonoBehaviour
                 _instances.Count, _widthText, _heightText, _liveBatchMs), _smallStyle);
         }
 
+        if (_showPreviews && _instances.Count > 0 && !hasSidePreview)
+        {
+            GUILayout.Space(8f);
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            float previewSize = Mathf.Min(280f, panelArea.width - 16f);
+            Rect inlinePreview = GUILayoutUtility.GetRect(
+                previewSize,
+                previewSize,
+                GUILayout.Width(previewSize),
+                GUILayout.Height(previewSize));
+            DrawPreviews(inlinePreview);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+        }
+
         GUILayout.Space(10f);
         GUILayout.BeginHorizontal();
         GUILayout.Label("Results", _headingStyle);
@@ -237,13 +256,12 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         GUILayout.EndScrollView();
         GUILayout.EndArea();
 
-        if (_showPreviews && _instances.Count > 0)
+        if (_showPreviews && _instances.Count > 0 && hasSidePreview)
         {
-            float previewX = panelArea.xMax + margin;
             DrawPreviews(new Rect(
-                previewX,
+                sidePreviewX,
                 panelArea.y,
-                logicalSafeArea.xMax - previewX - margin,
+                sidePreviewWidth,
                 panelArea.height));
         }
 
@@ -287,7 +305,10 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             Texture texture = _instances[i].OutputTexture;
             if (texture != null)
             {
-                GUI.DrawTexture(rect, texture, ScaleMode.ScaleToFit, true);
+                // Match the UI RawImages in Main.unity, which present rlottie
+                // output with a Y scale of -1.
+                Rect textureRect = FitTextureInside(rect, texture);
+                GUI.DrawTextureWithTexCoords(textureRect, texture, new Rect(0f, 1f, 1f, -1f), true);
             }
         }
 
@@ -296,6 +317,20 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             GUI.Label(new Rect(area.x + 8f, area.yMax - 25f, area.width - 16f, 20f),
                 string.Format(CultureInfo.InvariantCulture, "Showing {0} of {1}; all {1} are rendered.", visible, _instances.Count), _smallStyle);
         }
+    }
+
+    private static Rect FitTextureInside(Rect area, Texture texture)
+    {
+        float textureAspect = texture.width / (float)Mathf.Max(1, texture.height);
+        float areaAspect = area.width / Mathf.Max(1f, area.height);
+        if (textureAspect > areaAspect)
+        {
+            float height = area.width / textureAspect;
+            return new Rect(area.x, area.y + (area.height - height) * 0.5f, area.width, height);
+        }
+
+        float width = area.height * textureAspect;
+        return new Rect(area.x + (area.width - width) * 0.5f, area.y, width, area.height);
     }
 
     private static void LabeledTextField(string label, ref string value, float labelWidth)
