@@ -9,6 +9,7 @@ param(
     [string] $LogFile,
     [Parameter(Mandatory = $true)]
     [string] $Screenshot,
+    [string] $ResultFile,
     [int] $RunSeconds = 20,
     [switch] $RequireNativeVulkanUpload,
     [switch] $SkipInstall
@@ -18,8 +19,10 @@ $ErrorActionPreference = 'Stop'
 $Apk = (Resolve-Path -LiteralPath $Apk).Path
 $LogFile = [IO.Path]::GetFullPath($LogFile)
 $Screenshot = [IO.Path]::GetFullPath($Screenshot)
+$ResultFile = if ($ResultFile) { [IO.Path]::GetFullPath($ResultFile) } else { "$LogFile.smoke.json" }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Screenshot) | Out-Null
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ResultFile) | Out-Null
 
 $adbPrefix = @()
 if ($Serial) {
@@ -57,8 +60,21 @@ Invoke-Adb -Arguments @('logcat', '-c')
 Invoke-Adb -Arguments @('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
 Invoke-Adb -Arguments @('shell', 'wm', 'dismiss-keyguard')
 Invoke-Adb -Arguments @('shell', 'am', 'force-stop', $Package)
+$remoteResult = "/sdcard/Android/data/$Package/files/lottie-smoke-result.json"
+& $Adb @adbPrefix shell rm -f $remoteResult | Out-Null
 Invoke-Adb -Arguments @('shell', 'monkey', '-p', $Package, '-c', 'android.intent.category.LAUNCHER', '1') | Out-Host
-Start-Sleep -Seconds $RunSeconds
+
+$deadline = [DateTime]::UtcNow.AddSeconds($RunSeconds)
+do {
+    Start-Sleep -Milliseconds 500
+    & $Adb @adbPrefix shell test -f $remoteResult
+    $resultReady = $LASTEXITCODE -eq 0
+} while (-not $resultReady -and [DateTime]::UtcNow -lt $deadline)
+
+if (-not $resultReady) {
+    throw "Android smoke result was not produced within $RunSeconds seconds: $remoteResult"
+}
+Invoke-Adb -Arguments @('pull', $remoteResult, $ResultFile) | Out-Host
 
 $pidValue = (& $Adb @adbPrefix shell pidof $Package 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $pidValue) {
@@ -72,25 +88,19 @@ Invoke-Adb -Arguments @('shell', 'screencap', '-p', $remoteScreenshot)
 Invoke-Adb -Arguments @('pull', $remoteScreenshot, $Screenshot) | Out-Host
 Invoke-Adb -Arguments @('shell', 'rm', $remoteScreenshot)
 
-if ($log -notmatch '\[Lottie\] Successfully loaded animation') {
-    throw 'The Android player did not load a Lottie animation.'
-}
-if ($log -notmatch '\[Lottie\] Render data allocated successfully') {
-    throw 'The Android player did not allocate native render data.'
-}
-if ($log -match 'FATAL EXCEPTION|DllNotFoundException|EntryPointNotFoundException|\bCrash!!!|Failed to allocate render data') {
-    throw 'The Android device log contains a native-plugin or rendering failure.'
+$result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
+$failedChecks = @($result.checks | Where-Object { -not $_.passed })
+if (-not $result.passed -or $failedChecks.Count -gt 0) {
+    $details = $failedChecks | ForEach-Object { "$($_.name): $($_.details)" }
+    throw "Android rendered-player smoke test failed:`n$($details -join "`n")"
 }
 if ($RequireNativeVulkanUpload) {
-    if ($log -notmatch '\[LottiePlugin\] Vulkan native upload enabled') {
-        throw 'The Android player did not enable the Vulkan native-upload path.'
-    }
-    if ($log -match '\[LottiePlugin\] Vulkan native upload unavailable; using Texture2D\.Apply fallback') {
-        throw 'The Android player fell back to Texture2D.Apply instead of using Vulkan native upload.'
+    if ($result.graphicsApi -ne 'Vulkan' -or $result.animatedImageUploadBackend -ne 'NativeVulkan') {
+        throw "The Android player did not use native Vulkan upload for AnimatedImage: graphicsApi=$($result.graphicsApi), backend=$($result.animatedImageUploadBackend)"
     }
 }
 if ((Get-Item -LiteralPath $Screenshot).Length -lt 1024) {
     throw "Android screenshot is unexpectedly small: $Screenshot"
 }
 
-Write-Output "Android rendered-player smoke test passed. Log: $LogFile; screenshot: $Screenshot"
+Write-Output "Android rendered-player smoke test passed. Result: $ResultFile; log: $LogFile; screenshot: $Screenshot"
