@@ -198,28 +198,30 @@ jobs:
             -force-vulkan \
             -screen-width 1280 \
             -screen-height 720 \
+            -lottieSmokeResult "${PWD}/artifacts/linux/smoke-result.json" \
+            -lottieSmokeQuit \
             -logFile "${PWD}/artifacts/linux/player.log"
           player_status=$?
           set -e
-          if [[ ${player_status} -ne 0 && ${player_status} -ne 124 ]]; then
+          if [[ ${player_status} -ne 0 ]]; then
             cat artifacts/linux/player.log
+            test ! -f artifacts/linux/smoke-result.json || cat artifacts/linux/smoke-result.json
             exit ${player_status}
           fi
-          grep -F "Successfully loaded animation" artifacts/linux/player.log
-          grep -F "Render data allocated successfully" artifacts/linux/player.log
-          ! grep -E "FATAL|Crash!!!|DllNotFoundException|EntryPointNotFoundException|Failed to allocate render data" artifacts/linux/player.log
-          if grep -Fq "[Lottie] Graphics device type: Vulkan" artifacts/linux/player.log; then
-            grep -F "[LottiePlugin] Vulkan native upload enabled" artifacts/linux/player.log
-          else
-            echo "Hosted runner exposed no Unity-compatible Vulkan GPU; native Vulkan execution was not exercised."
-          fi
+          jq --exit-status '
+            .passed == true and
+            ([.checks[] | select(.passed != true)] | length == 0) and
+            (.graphicsApi != "Vulkan" or .animatedImageUploadBackend == "NativeVulkan")
+          ' artifacts/linux/smoke-result.json
 
       - name: Upload Linux Vulkan smoke log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rlottie-linux-vulkan-smoke-${{ github.run_id }}
-          path: artifacts/linux/player.log
+          path: |
+            artifacts/linux/player.log
+            artifacts/linux/smoke-result.json
           if-no-files-found: warn
 
   firebase_test_lab:
@@ -408,12 +410,14 @@ jobs:
           -Player artifacts/windows/${{ matrix.pipeline }}/RLottieSmoke.exe
           -LogFile artifacts/windows/${{ matrix.pipeline }}/Player.log
 
-      - name: Upload player log
+      - name: Upload player smoke artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rlottie-windows-${{ matrix.pipeline }}-device-log-${{ github.run_id }}
-          path: artifacts/windows/${{ matrix.pipeline }}/Player.log
+          path: |
+            artifacts/windows/${{ matrix.pipeline }}/Player.log
+            artifacts/windows/${{ matrix.pipeline }}/Player.log.smoke.json
           if-no-files-found: warn
 
   firebase_render_pipeline_devices:
