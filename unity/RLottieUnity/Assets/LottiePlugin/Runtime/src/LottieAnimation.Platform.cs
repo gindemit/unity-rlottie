@@ -223,8 +223,8 @@ namespace LottiePlugin
 #else
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
-            _usesUnityOwnedNativeTexture = isVulkan && TryEnableNativeVulkanUpload();
-            _usesCPURendering = isVulkan && !_usesUnityOwnedNativeTexture;
+            _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload();
+            _usesCPURendering = _useManagedTextureUpload || (isVulkan && !_usesUnityOwnedNativeTexture);
 #if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
             // Unity's Linux OpenGL editor does not guarantee a current context on
             // the scripting thread. Keep Apply for OpenGL, while Vulkan uses the

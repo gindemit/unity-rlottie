@@ -42,7 +42,6 @@ namespace LottiePlugin.UI
 
         private int _currentStateIndex;
         private LottieAnimation _lottieAnimation;
-        private Coroutine _initialFrameRetryCoroutine;
         private Coroutine _updateAnimationCoroutine;
         private WaitForEndOfFrame _waitForEndOfFrame;
 
@@ -66,7 +65,7 @@ namespace LottiePlugin.UI
                 return;
             }
             CreateIfNeededAndReturnLottieAnimation();
-            DrawInitialState();
+            _lottieAnimation.DrawOneFrame(_states[0].FrameNumber);
         }
         protected override void OnDestroy()
         {
@@ -77,7 +76,6 @@ namespace LottiePlugin.UI
         protected override void OnDisable()
         {
             base.OnDisable();
-            CancelInitialFrameRetry();
             if (_updateAnimationCoroutine != null)
             {
                 StopCoroutine(_updateAnimationCoroutine);
@@ -87,7 +85,7 @@ namespace LottiePlugin.UI
         public void ResetState()
         {
             _currentStateIndex = 0;
-            DrawInitialState();
+            _lottieAnimation?.DrawOneFrame(_states[0].FrameNumber);
         }
 
         public void OnPointerClick(PointerEventData eventData)
@@ -162,7 +160,6 @@ namespace LottiePlugin.UI
             {
                 return;
             }
-            CancelInitialFrameRetry();
             _onClick.Invoke(_currentStateIndex, _states[_currentStateIndex]);
             if (_updateAnimationCoroutine != null)
             {
@@ -175,54 +172,6 @@ namespace LottiePlugin.UI
             }
             _updateAnimationCoroutine = StartCoroutine(AnimateToNextState());
         }
-
-        private void DrawInitialState()
-        {
-            if (_lottieAnimation == null)
-            {
-                return;
-            }
-
-            CancelInitialFrameRetry();
-            int frameNumber = _states[0].FrameNumber;
-            _lottieAnimation.DrawOneFrame(frameNumber);
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-            // The first native Vulkan upload can run before Unity's render-thread
-            // pump is ready. Retry once after a completed frame; animated content
-            // already gets this recovery naturally from its continuous update loop.
-            if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan &&
-                isActiveAndEnabled)
-            {
-                _initialFrameRetryCoroutine = StartCoroutine(RetryInitialFrameAfterVulkanReady(frameNumber));
-            }
-#endif
-        }
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-        private IEnumerator RetryInitialFrameAfterVulkanReady(int frameNumber)
-        {
-            yield return _waitForEndOfFrame;
-            _initialFrameRetryCoroutine = null;
-
-            if (_lottieAnimation != null && _updateAnimationCoroutine == null && _currentStateIndex == 0)
-            {
-                _lottieAnimation.DrawOneFrame(frameNumber);
-            }
-        }
-#endif
-
-        private void CancelInitialFrameRetry()
-        {
-            if (_initialFrameRetryCoroutine == null)
-            {
-                return;
-            }
-
-            StopCoroutine(_initialFrameRetryCoroutine);
-            _initialFrameRetryCoroutine = null;
-        }
-
         private IEnumerator AnimateToNextState()
         {
             State nextState = _states[_currentStateIndex];
@@ -255,6 +204,11 @@ namespace LottiePlugin.UI
                 ResolutionDivider = Mathf.Max(1, _resolutionDivider),
                 PauseIfCulled = _pauseIfCulled,
                 LogLevel = _logLevel,
+                UseManagedTextureUpload =
+                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan ||
+                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore ||
+                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES2 ||
+                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3,
                 VisibilityEvaluator = () =>
                 {
                     if (_rawImage == null)
