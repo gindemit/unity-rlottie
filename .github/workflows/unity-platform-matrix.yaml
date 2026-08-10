@@ -171,6 +171,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p out
           cmake -S projects/CMake -B out/ci-linux-vulkan -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DRLOTTIE_LINUX=ON | tee out/linux-vulkan-configure.log
