@@ -63,11 +63,6 @@ public sealed class LottieBenchmarkController : MonoBehaviour
     private GUIStyle _smallStyle;
     private GUIStyle _panelStyle;
 
-    private void Awake()
-    {
-        LottieAnimation.SetGlobalLogLevel(LottieLogLevel.None);
-    }
-
     private void Start()
     {
         string[] arguments = Environment.GetCommandLineArgs();
@@ -75,6 +70,8 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         {
             return;
         }
+
+        LottieAnimation.SetGlobalLogLevel(LottieLogLevel.None);
 
         _instanceCountText = GetArgument(arguments, "-lottieBenchmarkInstances", _instanceCountText);
         _warmupFramesText = GetArgument(arguments, "-lottieBenchmarkWarmup", _warmupFramesText);
