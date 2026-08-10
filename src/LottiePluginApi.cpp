@@ -8,6 +8,7 @@
 #include "UploadPipeline.h"
 #include "TextureBackend.h"
 #include "UnityIntegration.h"
+#include "VulkanBackend.h"
 #endif
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
@@ -472,6 +473,25 @@ extern "C"
         }
 
         EnqueueUpload(animation);
+    }
+
+    EXPORT_API int32_t lottie_supports_native_vulkan_upload(void)
+    {
+        return IsNativeVulkanUploadSupported() ? 1 : 0;
+    }
+
+    EXPORT_API int32_t lottie_register_unity_vulkan_texture(
+        lottie_animation_wrapper* animation,
+        void* native_texture,
+        int width,
+        int height)
+    {
+        return RegisterUnityTextureVulkan(animation, native_texture, width, height) ? 1 : 0;
+    }
+
+    EXPORT_API int32_t lottie_is_vulkan_upload_available(lottie_animation_wrapper* animation)
+    {
+        return IsVulkanUploadAvailable(animation) ? 1 : 0;
     }
 #endif // !defined(__EMSCRIPTEN__)
 }
