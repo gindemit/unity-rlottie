@@ -18,6 +18,7 @@ namespace LottiePlugin.UI
 
         public Transform Transform { get; private set; }
         public RawImage RawImage { get => _rawImage; internal set { _rawImage = value; } }
+        public LottieAnimation Animation => _lottieAnimation;
         internal TextAsset AnimationJson => _animationJson;
         internal uint TextureWidth => _textureWidth;
         internal uint TextureHeight => _textureHeight;
@@ -68,11 +69,13 @@ namespace LottiePlugin.UI
                 _rawImage = GetComponent<RawImage>();
             }
             CreateIfNeededAndReturnLottieAnimation();
-            _lottieAnimation.DrawOneFrame(0);
             if (_playOnAwake && Application.isPlaying)
             {
                 Play();
             }
+            // Play() advances immediately. Render frame zero last so the first
+            // presented texture is deterministic while playback remains active.
+            _lottieAnimation.DrawOneFrame(0);
         }
         private void OnDestroy()
         {
