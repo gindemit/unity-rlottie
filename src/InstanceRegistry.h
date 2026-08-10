@@ -21,6 +21,7 @@ struct D3D12_PLACED_SUBRESOURCE_FOOTPRINT;
 struct InstanceState
 {
     std::mutex uploadMutex;
+    std::mutex lifetimeMutex;
     UploadContext uploadCtx{};
     std::vector<uint8_t> stagingBuffer;  // CPU-side copy of pixel data to decouple rlottie render thread from GPU upload
     std::atomic<uint64_t> uploadVersion{0};
@@ -68,10 +69,24 @@ struct InstanceState
         void* metalTex = nullptr; // id<MTLTexture> stored as void* to avoid ObjC in header
 #endif
     } metal;
+
+    struct VulkanData
+    {
+        void* backend = nullptr;
+        bool unityOwnedTexture = false;
+        std::atomic<bool> uploadAvailable{false};
+    } vulkan;
 };
 
 // Get the instance state for an animation, optionally creating it if it doesn't exist
 InstanceState* GetState(lottie_animation_wrapper* animation, bool create = true);
+
+// Acquire an instance and its upload lock atomically with respect to removal.
+// The returned lock keeps the state alive until the render-thread upload ends.
+bool LockStateForUpload(
+    lottie_animation_wrapper* animation,
+    InstanceState*& state,
+    std::unique_lock<std::mutex>& lifetimeLock);
 
 // Reset texture state for an instance (releases GPU resources)
 void ResetTextureState(lottie_animation_wrapper* animation, InstanceState* state);
