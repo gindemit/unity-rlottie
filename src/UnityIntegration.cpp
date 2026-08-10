@@ -18,6 +18,7 @@
 #include "IUnityProfiler.h"
 #include "IUnityGraphics.h"
 #include "IUnityLog.h"
+#include "VulkanBackend.h"
 
 #if defined(_WIN32)
 #include "D3D12Backend_win.h"
@@ -106,6 +107,11 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEventInternal(UnityGfxDeviceEven
             SetCurrentRenderer(ToRenderer(static_cast<int>(currentRenderer)));
             LottieLogInfo(nullptr, "[Lottie] Graphics device type determined: %d", static_cast<int>(GetCurrentRenderer()));
 
+            if (GetCurrentRenderer() == Renderer::Vulkan)
+            {
+                ConfigureVulkanUploadEvent();
+            }
+
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
             if (GetCurrentRenderer() == Renderer::Metal)
             {
@@ -150,6 +156,7 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEventInternal(UnityGfxDeviceEven
 
         ClearAllInstances();
         ClearUploadQueue();
+        ShutdownVulkan();
     }
 }
 
@@ -163,6 +170,7 @@ extern "C" EXPORT_API void UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces*
     LottieLoggerSetUnityLog(unityInterfaces != nullptr ? unityInterfaces->Get<IUnityLog>() : nullptr);
     LottieLogInfo(nullptr, "[Lottie] Plugin loading...");
     sProfiler = unityInterfaces != nullptr ? unityInterfaces->Get<IUnityProfiler>() : nullptr;
+    InitializeVulkanFromUnity(unityInterfaces);
     if (sProfiler != nullptr && sProfiler->IsAvailable())
     {
         sProfiler->CreateMarker(&sMkGetResult, "Lottie/GetFutureResult", kUnityProfilerCategoryScripts, kUnityProfilerMarkerFlagDefault, 0);
@@ -259,6 +267,7 @@ extern "C" EXPORT_API void UNITY_INTERFACE_API UnityPluginUnload()
 
     ClearAllInstances();
     ClearUploadQueue();
+    ShutdownVulkan();
 
     sProfiler = nullptr;
     sMkGetResult = nullptr;
