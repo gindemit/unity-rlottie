@@ -106,13 +106,24 @@ public sealed class LottieBenchmarkController : MonoBehaviour
     private void OnGUI()
     {
         EnsureStyles();
-        float scale = Mathf.Clamp(Screen.width / 1280f, 0.7f, 1.35f);
+        float scale = GetUiScale();
         Matrix4x4 oldMatrix = GUI.matrix;
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-        float logicalWidth = Screen.width / scale;
-        float logicalHeight = Screen.height / scale;
+        Rect safeArea = Screen.safeArea;
+        Rect logicalSafeArea = new Rect(
+            safeArea.xMin / scale,
+            (Screen.height - safeArea.yMax) / scale,
+            safeArea.width / scale,
+            safeArea.height / scale);
+        const float margin = 12f;
+        float panelWidth = Mathf.Min(610f, logicalSafeArea.width - margin * 2f);
+        Rect panelArea = new Rect(
+            logicalSafeArea.xMin + margin,
+            logicalSafeArea.yMin + margin,
+            panelWidth,
+            logicalSafeArea.height - margin * 2f);
 
-        GUILayout.BeginArea(new Rect(12f, 12f, Mathf.Min(610f, logicalWidth - 24f), logicalHeight - 24f), _panelStyle);
+        GUILayout.BeginArea(panelArea, _panelStyle);
         _controlScroll = GUILayout.BeginScrollView(_controlScroll);
         GUILayout.Label("rlottie performance lab", _headingStyle);
         GUILayout.Label("Deterministic render batches plus observed Unity frame timing. Runs unchanged in Editor, Windows, iOS, and other device players.", _smallStyle);
@@ -228,10 +239,28 @@ public sealed class LottieBenchmarkController : MonoBehaviour
 
         if (_showPreviews && _instances.Count > 0)
         {
-            DrawPreviews(new Rect(634f, 12f, logicalWidth - 646f, logicalHeight - 24f));
+            float previewX = panelArea.xMax + margin;
+            DrawPreviews(new Rect(
+                previewX,
+                panelArea.y,
+                logicalSafeArea.xMax - previewX - margin,
+                panelArea.height));
         }
 
         GUI.matrix = oldMatrix;
+    }
+
+    private static float GetUiScale()
+    {
+        if (Application.isMobilePlatform)
+        {
+            // Target a 720-pixel short edge so controls remain touch-friendly
+            // in both portrait and landscape, independent of device DPI.
+            float shortEdge = Mathf.Min(Screen.width, Screen.height);
+            return Mathf.Clamp(shortEdge / 720f, 1f, 3f);
+        }
+
+        return Mathf.Clamp(Screen.width / 1280f, 0.7f, 1.35f);
     }
 
     private void DrawPreviews(Rect area)

@@ -15,6 +15,7 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const string ResultArgument = "-lottieSmokeResult";
     private const string QuitArgument = "-lottieSmokeQuit";
     private const string DefaultResultFileName = "lottie-smoke-result.json";
+    private const string AndroidRequestExtra = "lottieSmoke";
     private const float AnimationTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
 
@@ -68,6 +69,10 @@ public sealed class LottieSmokeController : MonoBehaviour
         _resultPath = GetArgument(arguments, ResultArgument, string.Empty);
         if (string.IsNullOrEmpty(_resultPath) && Application.platform == RuntimePlatform.Android)
         {
+            if (!IsAndroidSmokeRequested())
+            {
+                yield break;
+            }
             _resultPath = Path.Combine(Application.persistentDataPath, DefaultResultFileName);
         }
         if (string.IsNullOrEmpty(_resultPath))
@@ -494,6 +499,26 @@ public sealed class LottieSmokeController : MonoBehaviour
                 return true;
             }
         }
+        return false;
+    }
+
+    private static bool IsAndroidSmokeRequested()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (AndroidJavaObject intent = activity.Call<AndroidJavaObject>("getIntent"))
+            {
+                return intent.Call<bool>("getBooleanExtra", AndroidRequestExtra, false);
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning("Could not read the Android smoke request: " + exception.Message);
+        }
+#endif
         return false;
     }
 
