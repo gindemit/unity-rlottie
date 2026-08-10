@@ -94,6 +94,9 @@ namespace RLottie.CI
                     return BuildTarget.WebGL;
                 case "ios":
                     return BuildTarget.iOS;
+                case "macos":
+                case "standaloneosx":
+                    return BuildTarget.StandaloneOSX;
                 default:
                     throw new ArgumentException("Unsupported -ciTarget value: " + targetName);
             }
@@ -113,6 +116,9 @@ namespace RLottie.CI
                     return Path.Combine(root, "webgl");
                 case "ios":
                     return Path.Combine(root, "ios");
+                case "macos":
+                case "standaloneosx":
+                    return Path.Combine(root, "macos", "RLottieSmoke.app");
                 default:
                     return Path.Combine(root, "windows", "RLottieSmoke.exe");
             }
