@@ -10,11 +10,11 @@ on:
         type: boolean
   pull_request:
     branches:
-      - codex/remove-texture.apply-and-move-updates-to-native
+      - dev
       - 'unity/**'
   push:
     branches:
-      - codex/remove-texture.apply-and-move-updates-to-native
+      - dev
 
 concurrency:
   group: unity-platform-matrix-${{ github.ref }}
@@ -101,11 +101,19 @@ jobs:
           - name: Windows64
             target_platform: StandaloneWindows64
             ci_target: Windows64
+            graphics_api: Auto
             output: artifacts/windows/RLottieSmoke.exe
             artifact: rlottie-windows-${{ github.run_id }}
-          - name: Android
+          - name: Linux Vulkan
+            target_platform: StandaloneLinux64
+            ci_target: Linux64
+            graphics_api: Vulkan
+            output: artifacts/linux/RLottieSmoke.x86_64
+            artifact: rlottie-linux-vulkan-${{ github.run_id }}
+          - name: Android Vulkan
             target_platform: Android
             ci_target: Android
+            graphics_api: Vulkan
             output: artifacts/android/RLottieSmoke.apk
             artifact: rlottie-android-${{ github.run_id }}
     permissions:
@@ -135,6 +143,7 @@ jobs:
           customParameters: >-
             -ciTarget ${{ matrix.ci_target }}
             -ciPipeline Auto
+            -ciGraphicsApi ${{ matrix.graphics_api }}
             -ciOutputPath /github/workspace/${{ matrix.output }}
 
       - name: Upload player
@@ -143,6 +152,71 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.output }}
           if-no-files-found: error
+
+  linux_vulkan_smoke:
+    name: Linux Vulkan native build and player smoke
+    needs: build_players
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Vulkan build/runtime dependencies and X server
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends cmake ninja-build libgl-dev libvulkan-dev libvulkan1 mesa-vulkan-drivers vulkan-tools xvfb
+
+      - name: Compile Linux native Vulkan backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S projects/CMake -B out/ci-linux-vulkan -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRLOTTIE_LINUX=ON | tee out/linux-vulkan-configure.log
+          grep -F "Vulkan native texture upload enabled" out/linux-vulkan-configure.log
+          cmake --build out/ci-linux-vulkan --parallel
+
+      - name: Download Linux Vulkan player
+        uses: actions/download-artifact@v4
+        with:
+          name: rlottie-linux-vulkan-${{ github.run_id }}
+          path: artifacts/linux
+
+      - name: Run Linux Vulkan smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x artifacts/linux/RLottieSmoke.x86_64
+          vulkaninfo --summary
+          set +e
+          timeout 45s xvfb-run -a artifacts/linux/RLottieSmoke.x86_64 \
+            -force-vulkan \
+            -screen-width 1280 \
+            -screen-height 720 \
+            -logFile "${PWD}/artifacts/linux/player.log"
+          player_status=$?
+          set -e
+          if [[ ${player_status} -ne 0 && ${player_status} -ne 124 ]]; then
+            cat artifacts/linux/player.log
+            exit ${player_status}
+          fi
+          grep -F "Successfully loaded animation" artifacts/linux/player.log
+          grep -F "Render data allocated successfully" artifacts/linux/player.log
+          ! grep -E "FATAL|Crash!!!|DllNotFoundException|EntryPointNotFoundException|Failed to allocate render data" artifacts/linux/player.log
+          if grep -Fq "[Lottie] Graphics device type: Vulkan" artifacts/linux/player.log; then
+            grep -F "[LottiePlugin] Vulkan native upload enabled" artifacts/linux/player.log
+          else
+            echo "Hosted runner exposed no Unity-compatible Vulkan GPU; native Vulkan execution was not exercised."
+          fi
+
+      - name: Upload Linux Vulkan smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rlottie-linux-vulkan-smoke-${{ github.run_id }}
+          path: artifacts/linux/player.log
+          if-no-files-found: warn
 
   firebase_test_lab:
     name: Firebase Test Lab Android
@@ -224,6 +298,7 @@ jobs:
         include:
           - pipeline: BuiltIn
             platform: Windows64
+            graphics_api: Auto
             ref: unity/6000.5.3f1
             target_platform: StandaloneWindows64
             output: artifacts/device-gate/windows-built-in/RLottieSmoke.exe
@@ -231,6 +306,7 @@ jobs:
             artifact: rlottie-device-windows-built-in-${{ github.run_id }}
           - pipeline: URP
             platform: Windows64
+            graphics_api: Auto
             ref: unity/6000.5.3f1-urp
             target_platform: StandaloneWindows64
             output: artifacts/device-gate/windows-urp/RLottieSmoke.exe
@@ -238,6 +314,7 @@ jobs:
             artifact: rlottie-device-windows-urp-${{ github.run_id }}
           - pipeline: HDRP
             platform: Windows64
+            graphics_api: Auto
             ref: unity/6000.5.3f1-hdrp
             target_platform: StandaloneWindows64
             output: artifacts/device-gate/windows-hdrp/RLottieSmoke.exe
@@ -245,6 +322,7 @@ jobs:
             artifact: rlottie-device-windows-hdrp-${{ github.run_id }}
           - pipeline: BuiltIn
             platform: Android
+            graphics_api: Vulkan
             ref: unity/6000.5.3f1
             target_platform: Android
             output: artifacts/device-gate/android-built-in/RLottieSmoke.apk
@@ -252,6 +330,7 @@ jobs:
             artifact: rlottie-device-android-built-in-${{ github.run_id }}
           - pipeline: URP
             platform: Android
+            graphics_api: Vulkan
             ref: unity/6000.5.3f1-urp
             target_platform: Android
             output: artifacts/device-gate/android-urp/RLottieSmoke.apk
@@ -285,6 +364,7 @@ jobs:
           customParameters: >-
             -ciTarget ${{ matrix.platform }}
             -ciPipeline ${{ matrix.pipeline }}
+            -ciGraphicsApi ${{ matrix.graphics_api }}
             -ciOutputPath /github/workspace/${{ matrix.output }}
 
       - name: Upload player
