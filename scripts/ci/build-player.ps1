@@ -4,10 +4,12 @@ param(
     [string] $Unity,
     [Parameter(Mandatory = $true)]
     [string] $ProjectPath,
-    [ValidateSet('Windows64', 'Android', 'WebGL')]
+    [ValidateSet('Windows64', 'Linux64', 'Android', 'WebGL')]
     [string] $Target = 'Windows64',
     [ValidateSet('Auto', 'BuiltIn', 'URP', 'HDRP')]
     [string] $Pipeline = 'Auto',
+    [ValidateSet('Auto', 'Vulkan')]
+    [string] $GraphicsApi = 'Auto',
     [Parameter(Mandatory = $true)]
     [string] $OutputPath,
     [Parameter(Mandatory = $true)]
@@ -37,6 +39,7 @@ $arguments = @(
     '-executeMethod', 'RLottie.CI.BuildMatrix.Build',
     '-ciTarget', $Target,
     '-ciPipeline', $Pipeline,
+    '-ciGraphicsApi', $GraphicsApi,
     '-ciOutputPath', $OutputPath,
     '-logFile', $LogFile
 )

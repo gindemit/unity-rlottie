@@ -10,6 +10,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $Screenshot,
     [int] $RunSeconds = 20,
+    [switch] $RequireNativeVulkanUpload,
     [switch] $SkipInstall
 )
 
@@ -79,6 +80,14 @@ if ($log -notmatch '\[Lottie\] Render data allocated successfully') {
 }
 if ($log -match 'FATAL EXCEPTION|DllNotFoundException|EntryPointNotFoundException|\bCrash!!!|Failed to allocate render data') {
     throw 'The Android device log contains a native-plugin or rendering failure.'
+}
+if ($RequireNativeVulkanUpload) {
+    if ($log -notmatch '\[LottiePlugin\] Vulkan native upload enabled') {
+        throw 'The Android player did not enable the Vulkan native-upload path.'
+    }
+    if ($log -match '\[LottiePlugin\] Vulkan native upload unavailable; using Texture2D\.Apply fallback') {
+        throw 'The Android player fell back to Texture2D.Apply instead of using Vulkan native upload.'
+    }
 }
 if ((Get-Item -LiteralPath $Screenshot).Length -lt 1024) {
     throw "Android screenshot is unexpectedly small: $Screenshot"

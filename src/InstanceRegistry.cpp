@@ -40,6 +40,25 @@ InstanceState* GetState(lottie_animation_wrapper* animation, bool create)
     return raw;
 }
 
+bool LockStateForUpload(
+    lottie_animation_wrapper* animation,
+    InstanceState*& state,
+    std::unique_lock<std::mutex>& lifetimeLock)
+{
+    state = nullptr;
+    std::unique_lock<std::mutex> registryLock(gInstancesMutex);
+    auto it = gInstances.find(animation);
+    if (it == gInstances.end())
+    {
+        return false;
+    }
+
+    state = it->second.get();
+    lifetimeLock = std::unique_lock<std::mutex>(state->lifetimeMutex);
+    registryLock.unlock();
+    return true;
+}
+
 void ResetTextureState(lottie_animation_wrapper* animation, InstanceState* state)
 {
     if (state == nullptr)
