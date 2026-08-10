@@ -79,6 +79,10 @@ public sealed class LottieSmokeController : MonoBehaviour
         {
             yield break;
         }
+        if (!Path.IsPathRooted(_resultPath))
+        {
+            _resultPath = Path.Combine(Application.persistentDataPath, _resultPath);
+        }
 
         _quitWhenComplete = HasArgument(arguments, QuitArgument);
         _result = new SmokeResult
