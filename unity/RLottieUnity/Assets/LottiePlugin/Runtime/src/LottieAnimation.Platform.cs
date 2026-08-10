@@ -220,6 +220,9 @@ namespace LottiePlugin
                     _useShaderConversion = false;
                 }
             }
+            TextureUploadBackend = _useShaderConversion
+                ? LottieTextureUploadBackend.WebGLShaderConversion
+                : LottieTextureUploadBackend.WebGLManagedTextureUpload;
 #else
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
@@ -234,6 +237,11 @@ namespace LottiePlugin
                 _usesCPURendering = true;
             }
 #endif
+            TextureUploadBackend = _usesCPURendering
+                ? LottieTextureUploadBackend.ManagedTextureUpload
+                : (_usesUnityOwnedNativeTexture
+                    ? LottieTextureUploadBackend.NativeVulkan
+                    : LottieTextureUploadBackend.NativeExternalTexture);
 #endif
             if (_usesCPURendering)
             {
@@ -285,6 +293,7 @@ namespace LottiePlugin
                     _nativeTexturePtr = IntPtr.Zero;
                     _usesUnityOwnedNativeTexture = false;
                     _usesCPURendering = true;
+                    TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
                     LogVulkanApplyFallback();
                 }
             }
@@ -349,6 +358,7 @@ namespace LottiePlugin
 
                     _usesUnityOwnedNativeTexture = false;
                     _usesCPURendering = true;
+                    TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
                     LogVulkanApplyFallback();
                     Texture.Apply();
                     return;
