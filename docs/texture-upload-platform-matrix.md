@@ -2,9 +2,10 @@
 
 ## Scope and snapshot
 
-This document describes the implementation inspected on 2026-08-10 at commit
+This document describes the implementation on `dev` as updated on 2026-08-10.
+The earlier branch comparison was made at commit
 `4dc22680668674a935d1902aeb0484362dff50b3` (`4dc2268`, "Rebuild Android
-plugins with Unity exports"). At that snapshot:
+plugins with Unity exports"). At that earlier snapshot:
 
 - the feature branch analyzed at the time and `origin/main` resolved to the
   same commit;
@@ -23,14 +24,14 @@ The synchronous and asynchronous draw paths make the same upload choice.
 | Windows | Direct3D 11 | No | Native external texture and render-thread upload |
 | Windows | Direct3D 12 | No | Native external texture and render-thread upload |
 | Windows | OpenGL Core | No | Native external GL texture and render-thread upload |
-| Windows | Vulkan | Yes | CPU-backed Unity `Texture2D`, followed by `Texture.Apply()` |
+| Windows | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | Linux Editor or Standalone | OpenGL Core | Yes | Linux is explicitly forced to the managed CPU-texture path |
-| Linux Editor or Standalone | Vulkan | Yes | Linux is explicitly forced to the managed CPU-texture path |
+| Linux Editor or Standalone | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | macOS | Metal | No | Native external Metal texture and native upload |
 | macOS | OpenGL Core | Unsupported | The Apple native build implements Metal only; native texture creation fails instead of falling back to Apply |
 | iOS | Metal | No | Native external Metal texture and native upload |
 | Android | OpenGL ES 2 or 3 | No | Native external GL texture and render-thread upload |
-| Android | Vulkan | Yes | CPU-backed Unity `Texture2D`, followed by `Texture.Apply()` |
+| Android | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | WebGL | Shader conversion (default) | Yes | Apply to the source `Texture2D`, then blit into the exposed `RenderTexture` |
 | WebGL | Native conversion | Yes | Apply converted pixels to the exposed `Texture2D` |
 | WebGL | Shader unavailable | Yes | Automatic fallback to the native-conversion path |
@@ -38,20 +39,23 @@ The synchronous and asynchronous draw paths make the same upload choice.
 The Built-in, URP, and HDRP render pipelines do not select the upload path.
 The active graphics API and platform compile symbols select it. Consequently:
 
-- Windows Built-in, URP, and HDRP use Apply only when the active API is Vulkan;
+- Windows Built-in, URP, and HDRP use Apply on Vulkan only when the native
+  capability check or upload fails;
 - macOS Built-in, URP, and HDRP do not use Apply when running Metal;
-- Android Built-in and URP use Apply on Vulkan but not OpenGL ES;
+- Android Built-in and URP use the native path on supported Vulkan devices and
+  Apply only as a runtime fallback; OpenGL ES retains its native upload path;
 - iOS Built-in and URP do not use Apply on Metal; and
 - WebGL Built-in and URP always use Apply. HDRP is not a targeted WebGL,
   Android, or iOS configuration in the project matrix.
 
-The relevant managed decisions in the analyzed commit are:
+The relevant managed decisions are:
 
 1. WebGL player builds force `_usesCPURendering = true`.
-2. All Vulkan devices set `_usesCPURendering = true`.
-3. Linux Editor and Linux Standalone builds overwrite the decision and force
-   `_usesCPURendering = true` for every graphics API.
-4. CPU-rendering branches call Apply after a synchronous result or a completed
+2. Vulkan creates a Unity-owned `Texture2D`, registers its cached native handle,
+   and selects native upload only when the native capability check succeeds.
+3. Linux OpenGL retains the managed CPU-texture path; Linux Vulkan can use the
+   native Vulkan path.
+4. Managed-upload branches call Apply after a synchronous result or a completed
    asynchronous result.
 5. Other branches call `RequestTextureUpload()`, which queues a native upload
    consumed by `GL.IssuePluginEvent` on Unity's render thread.
@@ -59,20 +63,23 @@ The relevant managed decisions in the analyzed commit are:
 In WebGL shader mode, Apply is called on the intermediate source `Texture2D`,
 not on the exposed output `RenderTexture`.
 
-## Vulkan without Apply: feasibility result
+## Vulkan without Apply: implementation status
 
-Native Vulkan upload without a per-frame Apply call is feasible, but the
-current Vulkan backend is not an implementation of it. `VulkanBackend.cpp` is a
-stub: it does not acquire `IUnityGraphicsVulkan`, create upload buffers, access a
-Unity texture, or record a copy. Its log messages say that Unity performs the
-upload, while the managed code actually performs that upload through Apply.
+Native Vulkan upload without a per-frame Apply call is implemented for Windows,
+Linux, and Android. The backend acquires `IUnityGraphicsVulkanV2` with a v1
+fallback, registers a Unity-owned texture, records an outside-render-pass copy
+from mapped staging memory, and uses Unity resource access and safe-frame data
+for synchronization and retirement.
 
-Simply changing `_usesCPURendering` to `false` is unsafe. The current native
-Vulkan `EnsureTextureVulkan()` reports success without setting a valid native
-texture pointer, and `UploadVulkan()` deliberately performs no work. That change
-would produce a null or stale texture and no visible frame.
+The path is capability guarded. If the Unity Vulkan interface, texture
+registration, required Vulkan functions, or an upload operation is unavailable,
+managed code retains or returns to `Texture2D.Apply()` instead of exposing a
+blank texture. The runtime emits one of these diagnostic messages:
 
-### Recommended ownership model
+- `[LottiePlugin] Vulkan native upload enabled`
+- `[LottiePlugin] Vulkan native upload unavailable; using Texture2D.Apply fallback`
+
+### Implemented ownership model
 
 Use a **Unity-owned sampled texture with plugin-owned Vulkan staging buffers**.
 This is preferable to making the plugin own the sampled `VkImage` because Unity
@@ -107,7 +114,7 @@ Vulkan. Relevant primary references:
 - [Texture2D.CreateExternalTexture](https://docs.unity3d.com/ScriptReference/Texture2D.CreateExternalTexture.html)
 - [Unity NativeRenderingPlugin sample](https://github.com/Unity-Technologies/NativeRenderingPlugin)
 
-### Required code changes
+### Implemented components
 
 #### Managed runtime
 
@@ -193,21 +200,31 @@ Vulkan. Relevant primary references:
 | Old Unity interface compatibility | Query supported Vulkan interface versions and retain Apply as a guarded fallback where native upload is unavailable |
 | Device loss or graphics API restart | Recreate staging resources and re-register the Unity texture after device initialization |
 
-### Suggested implementation sequence
+### Implementation sequence
 
-1. Introduce explicit upload-path and texture-ownership state without changing
-   existing behavior.
-2. Add Unity-owned texture registration and cache the Vulkan interface.
-3. Implement a single mapped staging buffer and render-thread copy for desktop
-   Vulkan.
-4. Add multiple staging slots and safe resource retirement.
-5. Enable Linux Vulkan without removing the Linux OpenGL Apply fallback.
-6. Enable Android Vulkan after ARM64 device validation.
-7. Add an automatic capability check. Fall back to Apply, with a warning, when
-   the Vulkan interface, transfer-destination texture usage, or required device
-   functions are unavailable.
+1. Explicit upload-path and texture-ownership state.
+2. Unity-owned texture registration and cached Vulkan interfaces.
+3. Mapped staging buffers and render-thread copies.
+4. Multiple staging slots, lifetime locking, and safe resource retirement.
+5. Linux Vulkan support while retaining the Linux OpenGL Apply fallback.
+6. Android Vulkan support and ARM64 physical-device validation.
+7. Automatic capability and runtime failure checks with Apply fallback.
 
 ### Validation matrix and acceptance criteria
+
+Validation completed for this implementation:
+
+- Windows x64 native plugin builds with the guarded no-header fallback.
+- Linux x64 native plugin builds against the system Vulkan headers. A Unity
+  2022.3 Linux player loads the plugin and both sample animations without the
+  former plugin-load crash. The local software Vulkan device is reported as a
+  CPU device and rejected by Unity, so Linux native Vulkan execution remains a
+  GPU-runner validation item.
+- Android native plugins build for `arm64-v8a`, `armeabi-v7a`, `x86`, and
+  `x86_64` with Unity 2022.3's NDK.
+- A Vulkan-only Unity 2022.3 Android player passed the rendered-player smoke on
+  a Samsung SM-N975F (Mali-G76). Its log selected Vulkan, enabled native upload,
+  loaded both animations, and contained no Apply fallback or native failure.
 
 Exercise both immediate and asynchronous rendering, multiple simultaneous
 animations, resize/recreation, pause/resume, disposal with queued uploads, and
