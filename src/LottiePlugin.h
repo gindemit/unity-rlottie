@@ -1,10 +1,44 @@
-#ifndef _VORBIS_PLUGIN_H_
-#define _VORBIS_PLUGIN_H_
+#ifndef _LOTTIE_PLUGIN_H_
+#define _LOTTIE_PLUGIN_H_
 
 #include "ExportApi.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <future>
 #include <rlottie.h>
+
+// --- Unity PluginAPI integration -------------------------------------------
+// If we build with the official Unity PluginAPI headers, include them here so
+// UNITY_INTERFACE_API is defined BEFORE we typedef UnityRenderingEvent.
+#if !defined(__EMSCRIPTEN__)
+#   include "IUnityInterface.h"
+#endif
+
+// Provide portable fallbacks when PluginAPI headers are not available.
+#if !defined(UNITY_INTERFACE_API)
+#   if defined(_MSC_VER)
+#       define UNITY_INTERFACE_API __stdcall
+#   else
+#       define UNITY_INTERFACE_API
+#   endif
+#endif
+
+#if !defined(UNITY_INTERFACE_EXPORT)
+#   if defined(_MSC_VER)
+#       define UNITY_INTERFACE_EXPORT __declspec(dllexport)
+#   else
+#       define UNITY_INTERFACE_EXPORT __attribute__((visibility("default")))
+#   endif
+#endif
+// --------------------------------------------------------------------------
+
+// Log level enum matching industry standards
+typedef enum {
+    LOTTIE_LOG_NONE = 0,
+    LOTTIE_LOG_ERROR = 1,
+    LOTTIE_LOG_WARNING = 2,
+    LOTTIE_LOG_INFO = 3
+} LottieLogLevel;
 
 typedef struct lottie_animation_wrapper {
     lottie_animation_wrapper *self;
@@ -14,6 +48,7 @@ typedef struct lottie_animation_wrapper {
     double duration;
     int64_t width;
     int64_t height;
+    LottieLogLevel logLevel;
 } lottie_animation_wrapper;
 
 typedef struct lottie_render_data {
@@ -39,19 +74,47 @@ extern "C" {
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
-        bool keep_aspect_ratio);
+        bool keep_aspect_ratio,
+        bool convert_bgra_to_rgba);
 
     EXPORT_API int32_t lottie_render_create_future_async(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data,
         uint32_t frame_number,
-        bool keep_aspect_ratio);
+        bool keep_aspect_ratio,
+        bool convert_bgra_to_rgba);
+    EXPORT_API int32_t lottie_render_try_get_future_result(
+        lottie_animation_wrapper* animation_wrapper,
+        lottie_render_data* render_data,
+        int32_t* ready);
     EXPORT_API int32_t lottie_render_get_future_result(
         lottie_animation_wrapper* animation_wrapper,
         lottie_render_data* render_data);
 
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data);
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data);
+    
+    EXPORT_API int32_t lottie_set_log_level(
+        lottie_animation_wrapper* animation_wrapper,
+        LottieLogLevel log_level);
+    
+    EXPORT_API int32_t lottie_set_global_log_level(LottieLogLevel log_level);
+
+    // Match Unity's expected render-event callback signature. Now that
+    // UNITY_INTERFACE_API is guaranteed to be defined, this typedef parses cleanly
+    // on all compilers (MSVC/Clang/GCC/ObjC++).
+    typedef void (UNITY_INTERFACE_API *UnityRenderingEvent)(int eventID);
+
+    EXPORT_API void* lottie_create_texture(lottie_animation_wrapper* animation, int width, int height);
+    EXPORT_API void* lottie_create_texture_with_color_space(
+        lottie_animation_wrapper* animation,
+        int width,
+        int height,
+        bool prefer_srgb_sampling);
+    EXPORT_API void  lottie_destroy_texture(lottie_animation_wrapper* animation, void* tex);
+    EXPORT_API void* lottie_get_native_texture_ptr(lottie_animation_wrapper* animation);
+    EXPORT_API void  lottie_update_texture(lottie_animation_wrapper* animation);
+    EXPORT_API UnityRenderingEvent lottie_get_render_event_func(void);
 }
 
-#endif // !_VORBIS_PLUGIN_H_
+#endif // !_LOTTIE_PLUGIN_H_

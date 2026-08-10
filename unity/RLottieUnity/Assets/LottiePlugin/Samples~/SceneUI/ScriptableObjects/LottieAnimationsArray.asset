@@ -13,48 +13,48 @@ MonoBehaviour:
   m_Name: LottieAnimationsArray
   m_EditorClassIdentifier: 
   _animations:
-  - LottieSamples/alright_sticker
-  - LottieSamples/black_friday_animation
-  - LottieSamples/body_movin
-  - LottieSamples/butterfly_loading
-  - LottieSamples/check_animation
-  - LottieSamples/concept_floral_branch_butterfly_and_tree
-  - LottieSamples/confetti
-  - LottieSamples/favourite_app_icon
-  - LottieSamples/glow_loading
-  - LottieSamples/hamburger_arrow_transition
-  - LottieSamples/hubit
-  - LottieSamples/lottiefiles_sticker_2
-  - LottieSamples/lottiefiles_sticker_5
-  - LottieSamples/marketing
-  - LottieSamples/motorcycle
-  - LottieSamples/phone
-  - LottieSamples/power_sticker
-  - LottieSamples/preloader
-  - LottieSamples/squid_game/0
-  - LottieSamples/squid_game/1
-  - LottieSamples/squid_game/10
-  - LottieSamples/squid_game/11
-  - LottieSamples/squid_game/12
-  - LottieSamples/squid_game/13
-  - LottieSamples/squid_game/14
-  - LottieSamples/squid_game/15
-  - LottieSamples/squid_game/16
-  - LottieSamples/squid_game/17
-  - LottieSamples/squid_game/18
-  - LottieSamples/squid_game/19
-  - LottieSamples/squid_game/2
-  - LottieSamples/squid_game/20
-  - LottieSamples/squid_game/21
-  - LottieSamples/squid_game/22
-  - LottieSamples/squid_game/23
-  - LottieSamples/squid_game/24
-  - LottieSamples/squid_game/3
-  - LottieSamples/squid_game/4
-  - LottieSamples/squid_game/5
-  - LottieSamples/squid_game/6
-  - LottieSamples/squid_game/7
-  - LottieSamples/squid_game/8
-  - LottieSamples/squid_game/9
-  - LottieSamples/sticker
-  - LottieSamples/taking_the_duggy_out
+  - {fileID: 4900000, guid: 66b2159d1d9b9c04396b50798f3c8b60, type: 3}
+  - {fileID: 4900000, guid: 8fcf53b3b9df7284ca27f71c41ac3eb8, type: 3}
+  - {fileID: 4900000, guid: f2dd9100846570c4c8087496488b8128, type: 3}
+  - {fileID: 4900000, guid: 25616892fb66b8648988830049aa28eb, type: 3}
+  - {fileID: 4900000, guid: 5567911f765b6394eaee2233b594481a, type: 3}
+  - {fileID: 4900000, guid: 7579dda07c9de0d438430f880e782e7e, type: 3}
+  - {fileID: 4900000, guid: acff5f124a0b9894091e77ce5807006e, type: 3}
+  - {fileID: 4900000, guid: 6676189a98e25a94eb57292940a9351e, type: 3}
+  - {fileID: 4900000, guid: 7694c577054edbd44bee692ec995e641, type: 3}
+  - {fileID: 4900000, guid: a860d03d8f00f8f409db0988eb06010e, type: 3}
+  - {fileID: 4900000, guid: 8e09cf9f6317dbe4fbe0d6a855116233, type: 3}
+  - {fileID: 4900000, guid: a9e4c9d11d58df54e8457996c6ee8e6d, type: 3}
+  - {fileID: 4900000, guid: 3cde22cd853e71e44876b36292f802f7, type: 3}
+  - {fileID: 4900000, guid: 7a284d5684d4c7b45a9935de393fdd55, type: 3}
+  - {fileID: 4900000, guid: 35c7e5fc44b43e64c8ae1d56f14d3fd0, type: 3}
+  - {fileID: 4900000, guid: 9c44ccbc52f034d4dbc425d135aca23b, type: 3}
+  - {fileID: 4900000, guid: dc9260a46979fd34590311952c8645d0, type: 3}
+  - {fileID: 4900000, guid: 9bea409fc574135448a8a406f66dd9a0, type: 3}
+  - {fileID: 4900000, guid: c204f37277864144b9e53dbc5282fc7e, type: 3}
+  - {fileID: 4900000, guid: 47cf0022ed7743b41b6565edd31cba0d, type: 3}
+  - {fileID: 4900000, guid: 642dab636ea4cd9488d17fb342c9f515, type: 3}
+  - {fileID: 4900000, guid: 3476218c0e3231c4382239cbee8c15b5, type: 3}
+  - {fileID: 4900000, guid: 9d75cab21366fb448b3bb15f5b136837, type: 3}
+  - {fileID: 4900000, guid: 4a0aa21adca29b043a7518f534608666, type: 3}
+  - {fileID: 4900000, guid: 2a236d599b791ef48aeaadfca4b089b5, type: 3}
+  - {fileID: 4900000, guid: f4dacd673ad8d374aba6946e29572bce, type: 3}
+  - {fileID: 4900000, guid: 3593e51dd8921794cb110a94314278fe, type: 3}
+  - {fileID: 4900000, guid: 82276cdc558318e41a5abb8e67a95dd0, type: 3}
+  - {fileID: 4900000, guid: 5f3cb3cdd7615ce42a248161ef623394, type: 3}
+  - {fileID: 4900000, guid: 681d1cc1dc6c9c941af24d02eb325374, type: 3}
+  - {fileID: 4900000, guid: 82cf094d1784000468ffa803b38873ef, type: 3}
+  - {fileID: 4900000, guid: d5642139f4f98d3429f653b254ad96d5, type: 3}
+  - {fileID: 4900000, guid: 3ed9b37590e2441478b91d2f6e1913a2, type: 3}
+  - {fileID: 4900000, guid: 8d1fe0aa56bde5440b9cc3a32926df74, type: 3}
+  - {fileID: 4900000, guid: 2783ecdbc01e55e4eb8c96cfb515f59b, type: 3}
+  - {fileID: 4900000, guid: 2e1c557c7a7329f4f844f437ab073e30, type: 3}
+  - {fileID: 4900000, guid: 8dc4b3be1c536af4cbd2c75a3244683e, type: 3}
+  - {fileID: 4900000, guid: 968f4ca0aabb3ba4298d7875389e46aa, type: 3}
+  - {fileID: 4900000, guid: b6e7f48e9811fba4faa849c8a648922f, type: 3}
+  - {fileID: 4900000, guid: 8f2dd7f417f198547b2ee34203296603, type: 3}
+  - {fileID: 4900000, guid: 9a18a0a15b7f53c4a89121f7101cfc3f, type: 3}
+  - {fileID: 4900000, guid: 5a2ad52af5647ee4d89427cbc872d4bc, type: 3}
+  - {fileID: 4900000, guid: d267ce3793182d94c848d309f4a42717, type: 3}
+  - {fileID: 4900000, guid: 7ad9743a8785534488a93dafeeb5aef0, type: 3}
+  - {fileID: 4900000, guid: 245ddb5ae8b399343942c24748196644, type: 3}

@@ -7,11 +7,11 @@ namespace LottiePlugin.Sample.SceneUI.UI
         [SerializeField] private LottieAnimationsPreview _lottieAnimationsPreview;
         [SerializeField] private TMPro.TMP_Dropdown _textureSizeDropdown;
 
-        private string[] _animationPaths;
+        private TextAsset[] _animations;
 
-        internal void Init(string[] animationPaths)
+        internal void Init(TextAsset[] animations)
         {
-            _animationPaths = animationPaths;
+            _animations = animations;
             _textureSizeDropdown.onValueChanged.AddListener(OnTextureSizeDropdownValueChanged);
             OnTextureSizeDropdownValueChanged(_textureSizeDropdown.value);
         }
@@ -30,7 +30,7 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 return;
             }
             _lottieAnimationsPreview.Dispose();
-            _lottieAnimationsPreview.Init(_animationPaths, textureSize);
+            _lottieAnimationsPreview.Init(_animations, textureSize);
         }
     }
 }

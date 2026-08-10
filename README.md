@@ -1,6 +1,6 @@
 # Unity Lottie Animation Plugin
 ![GitHub release](https://img.shields.io/github/release/gindemit/unity-rlottie.svg)
-![Unity version](https://img.shields.io/badge/unity-2019.4%2B-green.svg)
+![Unity version](https://img.shields.io/badge/unity-2022.3+-green.svg)
 ![License](https://img.shields.io/github/license/gindemit/unity-rlottie.svg)
 
 > 🧪 **EXPERIMENTAL RELEASE AVAILABLE!**  
