@@ -97,23 +97,24 @@ The following paths are not classified as unsupported:
 - Vulkan has a guarded managed fallback when its Unity interface or an upload
   operation is unavailable.
 
-Android Vulkan is implemented, but its native upload path is **currently
-failing validation on Unity 6000.5.3f1** and must not be treated as release-
-supported for that Unity version until the regression is fixed. On 2026-08-10,
-the same physical Samsung SM-N975F (Mali-G76, Android 12) produced this matrix:
+Android Vulkan is implemented and passes Unity 6000.5.3f1 validation. On
+2026-08-10, the same physical Samsung SM-N975F (Mali-G76, Android 12) produced
+this matrix:
 
 | Pipeline | API | Selected upload backend | Rendered-player result |
 |---|---|---|---|
 | Built-in | OpenGL ES 3 | `NativeExternalTexture` | Passed all checks |
 | URP | OpenGL ES 3 | `NativeExternalTexture` | Passed all checks |
-| Built-in | Vulkan | `NativeVulkan` | Failed `animatedImagePixelsChange` |
-| URP | Vulkan | `NativeVulkan` | Failed `animatedImagePixelsChange` |
+| Built-in | Vulkan | `NativeVulkan` | Passed all checks |
+| URP | Vulkan | `NativeVulkan` | Passed all checks |
 
-In both Vulkan failures, the animation frame advanced from 0 to 3, but the
-sampled pixel hash stayed unchanged. This isolates the observed failure to the
-Vulkan upload path rather than the Built-in or URP render pipeline. The
-capability check currently enables `NativeVulkan` instead of selecting the
-managed Apply fallback, so the guarded fallback does not hide this failure.
+The original Vulkan runs reported an unchanged sampled pixel hash even though
+device screenshots showed the native-uploaded animation changing. The smoke
+test used an immediate `Graphics.Blit` plus `ReadPixels`, which returned stale
+contents for this Unity-owned texture after a native Vulkan write. Validation
+now uses `AsyncGPUReadback` for `NativeVulkan` textures and waits for a changed
+GPU-visible signature. Built-in and URP both pass with distinct frame hashes;
+the native upload implementation did not require a fallback or backend change.
 
 ## Vulkan without Apply: implementation status
 
@@ -278,10 +279,11 @@ Validation completed for this implementation:
   rendered-player smoke on a Samsung SM-N975F (Mali-G76). Its log selected
   Vulkan, enabled native upload, loaded both animations, and contained no Apply
   fallback or native failure.
-- A later Unity 6000.5.3f1 run on the same device failed the dynamic-pixel check
-  with `NativeVulkan` on both Built-in and URP, while OpenGL ES 3 passed both
-  pipelines. Android Vulkan therefore has a current Unity-version regression
-  despite the earlier Unity 2022.3 pass.
+- Unity 6000.5.3f1 Built-in and URP players pass the rendered-player smoke on
+  the same device with `NativeVulkan`. The earlier dynamic-pixel failures were
+  validation false negatives caused by immediate `Graphics.Blit`/`ReadPixels`
+  capture of the native-written texture; asynchronous GPU readback observes
+  changing frame hashes on both pipelines.
 
 Exercise both immediate and asynchronous rendering, multiple simultaneous
 animations, resize/recreation, pause/resume, disposal with queued uploads, and
