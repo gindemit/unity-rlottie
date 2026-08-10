@@ -214,6 +214,26 @@ public sealed class LottieSmokeController : MonoBehaviour
             return false;
         }
 
+        LottieAnimation owner = null;
+        AnimatedImage image = FindObjectOfType<AnimatedImage>();
+        if (image != null && image.Animation != null && image.Animation.OutputTexture == source)
+        {
+            owner = image.Animation;
+        }
+        if (owner == null)
+        {
+            AnimatedButton button = FindObjectOfType<AnimatedButton>();
+            if (button != null && button.Animation != null && button.Animation.OutputTexture == source)
+            {
+                owner = button.Animation;
+            }
+        }
+        if (owner != null && owner.TextureUploadBackend == LottieTextureUploadBackend.ManagedTextureUpload &&
+            source is Texture2D managedTexture)
+        {
+            return TryCaptureManagedTexture(managedTexture, out signature, out error);
+        }
+
         RenderTexture temporary = null;
         Texture2D readable = null;
         RenderTexture previous = RenderTexture.active;
@@ -263,6 +283,58 @@ public sealed class LottieSmokeController : MonoBehaviour
             {
                 RenderTexture.ReleaseTemporary(temporary);
             }
+        }
+    }
+
+    private static bool TryCaptureManagedTexture(Texture2D texture, out PixelSignature signature, out string error)
+    {
+        signature = default;
+        error = null;
+        try
+        {
+            var pixels = texture.GetRawTextureData<byte>();
+            int expectedLength = texture.width * texture.height * 4;
+            if (pixels.Length < expectedLength)
+            {
+                error = "Texture pixel buffer is smaller than expected.";
+                return false;
+            }
+
+            ulong hash = 14695981039346656037UL;
+            int visiblePixels = 0;
+            for (int sampleY = 0; sampleY < 64; sampleY++)
+            {
+                int y = sampleY * (texture.height - 1) / 63;
+                for (int sampleX = 0; sampleX < 64; sampleX++)
+                {
+                    int x = sampleX * (texture.width - 1) / 63;
+                    int offset = (y * texture.width + x) * 4;
+                    byte first = pixels[offset];
+                    byte second = pixels[offset + 1];
+                    byte third = pixels[offset + 2];
+                    byte alpha = pixels[offset + 3];
+                    if (alpha > 8)
+                    {
+                        visiblePixels++;
+                    }
+                    hash = HashByte(hash, first);
+                    hash = HashByte(hash, second);
+                    hash = HashByte(hash, third);
+                    hash = HashByte(hash, alpha);
+                }
+            }
+
+            signature = new PixelSignature
+            {
+                Hash = hash.ToString("x16", CultureInfo.InvariantCulture),
+                VisiblePixels = visiblePixels
+            };
+            return true;
+        }
+        catch (Exception exception)
+        {
+            error = exception.GetType().Name + ": " + exception.Message;
+            return false;
         }
     }
 
