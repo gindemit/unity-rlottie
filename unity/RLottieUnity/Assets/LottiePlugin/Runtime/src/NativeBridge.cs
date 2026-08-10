@@ -103,6 +103,19 @@ namespace LottiePlugin
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_update_texture")]
         internal static extern void LottieUpdateTexture(IntPtr animationWrapper);
 
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_supports_native_vulkan_upload")]
+        internal static extern int LottieSupportsNativeVulkanUpload();
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_register_unity_vulkan_texture")]
+        internal static extern int LottieRegisterUnityVulkanTexture(
+            IntPtr animationWrapper,
+            IntPtr nativeTexture,
+            int width,
+            int height);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_is_vulkan_upload_available")]
+        internal static extern int LottieIsVulkanUploadAvailable(IntPtr animationWrapper);
+
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_render_event_func")]
         internal static extern IntPtr LottieGetRenderEventFunc();
 #endif

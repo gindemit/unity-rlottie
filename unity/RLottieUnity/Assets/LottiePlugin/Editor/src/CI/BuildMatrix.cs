@@ -13,11 +13,13 @@ namespace RLottie.CI
 
         public static void Build()
         {
+            GraphicsApiState graphicsApiState = default(GraphicsApiState);
             try
             {
                 string targetName = GetArgument("-ciTarget", "Windows64");
                 string outputPath = GetArgument("-ciOutputPath", GetDefaultOutput(targetName));
                 string expectedPipeline = GetArgument("-ciPipeline", "Auto");
+                string requestedGraphicsApi = GetArgument("-ciGraphicsApi", "Auto");
 
                 ValidateRenderPipeline(expectedPipeline);
                 EnsureSceneExists();
@@ -29,6 +31,7 @@ namespace RLottie.CI
                     throw new InvalidOperationException("Failed to switch the active build target to " + target + ".");
                 }
 
+                graphicsApiState = ConfigureGraphicsApi(target, requestedGraphicsApi);
                 EnsureOutputDirectory(outputPath, target);
 
                 BuildPlayerOptions options = new BuildPlayerOptions
@@ -56,6 +59,10 @@ namespace RLottie.CI
                 Debug.LogException(exception);
                 EditorApplication.Exit(1);
             }
+            finally
+            {
+                RestoreGraphicsApi(graphicsApiState);
+            }
         }
 
         private static BuildTarget ParseTarget(string targetName)
@@ -67,6 +74,9 @@ namespace RLottie.CI
                     return BuildTarget.StandaloneWindows64;
                 case "android":
                     return BuildTarget.Android;
+                case "linux64":
+                case "standalonelinux64":
+                    return BuildTarget.StandaloneLinux64;
                 case "webgl":
                     return BuildTarget.WebGL;
                 default:
@@ -81,6 +91,9 @@ namespace RLottie.CI
             {
                 case "android":
                     return Path.Combine(root, "android", "RLottieSmoke.apk");
+                case "linux64":
+                case "standalonelinux64":
+                    return Path.Combine(root, "linux", "RLottieSmoke.x86_64");
                 case "webgl":
                     return Path.Combine(root, "webgl");
                 default:
@@ -147,6 +160,65 @@ namespace RLottie.CI
             }
 
             Debug.Log("RLottie render pipeline validation passed: " + detected + " (asset=" + assetType + ").");
+        }
+
+        private static GraphicsApiState ConfigureGraphicsApi(BuildTarget target, string requestedGraphicsApi)
+        {
+            if (string.Equals(requestedGraphicsApi, "Auto", StringComparison.OrdinalIgnoreCase))
+            {
+                return default(GraphicsApiState);
+            }
+
+            if (!string.Equals(requestedGraphicsApi, "Vulkan", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Unsupported -ciGraphicsApi value: " + requestedGraphicsApi);
+            }
+
+            if (target != BuildTarget.Android && target != BuildTarget.StandaloneLinux64 &&
+                target != BuildTarget.StandaloneWindows64)
+            {
+                throw new InvalidOperationException("Vulkan is not supported by this CI target: " + target);
+            }
+
+            GraphicsApiState state = new GraphicsApiState
+            {
+                Target = target,
+                Automatic = PlayerSettings.GetUseDefaultGraphicsAPIs(target),
+                Apis = PlayerSettings.GetGraphicsAPIs(target),
+                Changed = true
+            };
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
+            PlayerSettings.SetGraphicsAPIs(target, new[] { GraphicsDeviceType.Vulkan });
+            Debug.Log("RLottie CI graphics API forced to Vulkan for " + target + ".");
+            return state;
+        }
+
+        private static void RestoreGraphicsApi(GraphicsApiState state)
+        {
+            if (!state.Changed)
+            {
+                return;
+            }
+
+            try
+            {
+                PlayerSettings.SetGraphicsAPIs(state.Target, state.Apis);
+                PlayerSettings.SetUseDefaultGraphicsAPIs(state.Target, state.Automatic);
+                Debug.Log("RLottie CI graphics API settings restored for " + state.Target + ".");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError("Failed to restore graphics API settings for " + state.Target + ": " + exception);
+            }
+        }
+
+        private struct GraphicsApiState
+        {
+            public BuildTarget Target;
+            public bool Automatic;
+            public GraphicsDeviceType[] Apis;
+            public bool Changed;
         }
 
         private static string GetArgument(string name, string fallback)

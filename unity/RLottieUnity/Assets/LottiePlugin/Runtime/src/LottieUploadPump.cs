@@ -49,7 +49,9 @@ namespace LottiePlugin
             int budget = LottieScheduler.MaxUploadsPerFrame;
             for (int i = 0; i < budget; i++)
             {
-                GL.IssuePluginEvent(sRenderEventFunc, i + 1);
+                // Vulkan configures this stable event ID to execute outside a
+                // render pass. The callback dequeues one upload per event.
+                GL.IssuePluginEvent(sRenderEventFunc, 1);
             }
         }
 

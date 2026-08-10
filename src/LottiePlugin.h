@@ -114,6 +114,13 @@ extern "C" {
     EXPORT_API void  lottie_destroy_texture(lottie_animation_wrapper* animation, void* tex);
     EXPORT_API void* lottie_get_native_texture_ptr(lottie_animation_wrapper* animation);
     EXPORT_API void  lottie_update_texture(lottie_animation_wrapper* animation);
+    EXPORT_API int32_t lottie_supports_native_vulkan_upload(void);
+    EXPORT_API int32_t lottie_register_unity_vulkan_texture(
+        lottie_animation_wrapper* animation,
+        void* native_texture,
+        int width,
+        int height);
+    EXPORT_API int32_t lottie_is_vulkan_upload_available(lottie_animation_wrapper* animation);
     EXPORT_API UnityRenderingEvent lottie_get_render_event_func(void);
 }
 
