@@ -1,5 +1,9 @@
 # Unity RLottie Plugin
 
+## Adjacent Unity clones
+
+The parent directory contains separate repository clones for supported Unity versions and render pipelines. Prefer using the appropriate existing adjacent clone instead of creating temporary worktrees or switching this clone to a version/pipeline branch. Clone names follow `unity-rlottie-<version>`, `unity-rlottie-<version>-urp`, and `unity-rlottie-<version>-hdrp`; inspect the parent directory and use the newest installed version that matches the requested pipeline. Use this `unity-rlottie` clone for shared development work when no version/pipeline-specific clone is required.
+
 This repository hosts a Unity plugin that brings the [rlottie](https://github.com/Samsung/rlottie) animation library to the Unity ecosystem. The project builds native binaries for multiple platforms using CMake and provides C# scripts to integrate Lottie animations inside Unity games or applications.
 
 ## Repository layout
@@ -45,4 +49,3 @@ git submodule update --init --recursive
 
 ## Usage in Unity
 Import the Unity package found under `unity/RLottieUnity` into your project or reference it via Git using the path `unity/RLottieUnity/Assets/LottiePlugin`. The runtime scripts expose an `AnimatedImage` component that can play Lottie JSON files on UI `RawImage` elements.
-
