@@ -43,10 +43,31 @@ function Invoke-Git {
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
+    $output = @($output | ForEach-Object { $_.ToString() })
     if ($exitCode -ne 0) {
         throw "git $($Arguments -join ' ') failed in ${Repository}:`n$($output -join "`n")"
     }
     return $output
+}
+
+function Test-GitObject {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Repository,
+        [Parameter(Mandatory = $true)]
+        [string] $Object
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & git -C $Repository cat-file -e $Object 2>$null
+        $exists = $LASTEXITCODE -eq 0
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return $exists
 }
 
 function Test-GitRef {
@@ -223,8 +244,7 @@ foreach ($target in $targetRepositories) {
         # also protects cleanly merged files and removes source-only files that
         # do not exist in an older Unity branch.
         foreach ($path in $branchOwnedPaths) {
-            & git -C $target.Directory cat-file -e "HEAD:$path" 2>$null
-            if ($LASTEXITCODE -eq 0) {
+            if (Test-GitObject -Repository $target.Directory -Object "HEAD:$path") {
                 Invoke-Git -Repository $target.Directory -Arguments @('checkout', 'HEAD', '--', $path) | Out-Null
                 Invoke-Git -Repository $target.Directory -Arguments @('add', '--force', '--', $path) | Out-Null
             }
