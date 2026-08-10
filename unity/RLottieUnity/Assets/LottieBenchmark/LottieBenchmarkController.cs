@@ -17,6 +17,7 @@ using Debug = UnityEngine.Debug;
 /// </summary>
 public sealed class LottieBenchmarkController : MonoBehaviour
 {
+    private const string AndroidArgumentsExtra = "lottieBenchmarkArguments";
     private const double SixtyFpsBudgetMs = 1000.0 / 60.0;
     private const int MaxVisiblePreviews = 12;
 
@@ -65,7 +66,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
 
     private void Start()
     {
-        string[] arguments = Environment.GetCommandLineArgs();
+        string[] arguments = GetBenchmarkArguments();
         if (!HasArgument(arguments, "-lottieBenchmarkMatrix"))
         {
             return;
@@ -84,6 +85,35 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             Application.targetFrameRate = -1;
         }
         StartCoroutine(StartAutomaticMatrixNextFrame());
+    }
+
+    private static string[] GetBenchmarkArguments()
+    {
+        string[] arguments = Environment.GetCommandLineArgs();
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (AndroidJavaObject intent = activity.Call<AndroidJavaObject>("getIntent"))
+            {
+                string extra = intent.Call<string>("getStringExtra", AndroidArgumentsExtra);
+                if (!string.IsNullOrEmpty(extra))
+                {
+                    string[] extraArguments = extra.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    var combined = new string[arguments.Length + extraArguments.Length];
+                    Array.Copy(arguments, combined, arguments.Length);
+                    Array.Copy(extraArguments, 0, combined, arguments.Length, extraArguments.Length);
+                    return combined;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning("Could not read Android benchmark arguments: " + exception.Message);
+        }
+#endif
+        return arguments;
     }
 
     private void Update()
@@ -106,13 +136,27 @@ public sealed class LottieBenchmarkController : MonoBehaviour
     private void OnGUI()
     {
         EnsureStyles();
-        float scale = Mathf.Clamp(Screen.width / 1280f, 0.7f, 1.35f);
+        float scale = GetUiScale();
         Matrix4x4 oldMatrix = GUI.matrix;
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-        float logicalWidth = Screen.width / scale;
-        float logicalHeight = Screen.height / scale;
+        Rect safeArea = Screen.safeArea;
+        Rect logicalSafeArea = new Rect(
+            safeArea.xMin / scale,
+            (Screen.height - safeArea.yMax) / scale,
+            safeArea.width / scale,
+            safeArea.height / scale);
+        const float margin = 12f;
+        float panelWidth = Mathf.Min(610f, logicalSafeArea.width - margin * 2f);
+        Rect panelArea = new Rect(
+            logicalSafeArea.xMin + margin,
+            logicalSafeArea.yMin + margin,
+            panelWidth,
+            logicalSafeArea.height - margin * 2f);
+        float sidePreviewX = panelArea.xMax + margin;
+        float sidePreviewWidth = logicalSafeArea.xMax - sidePreviewX - margin;
+        bool hasSidePreview = sidePreviewWidth >= 100f;
 
-        GUILayout.BeginArea(new Rect(12f, 12f, Mathf.Min(610f, logicalWidth - 24f), logicalHeight - 24f), _panelStyle);
+        GUILayout.BeginArea(panelArea, _panelStyle);
         _controlScroll = GUILayout.BeginScrollView(_controlScroll);
         GUILayout.Label("rlottie performance lab", _headingStyle);
         GUILayout.Label("Deterministic render batches plus observed Unity frame timing. Runs unchanged in Editor, Windows, iOS, and other device players.", _smallStyle);
@@ -189,6 +233,22 @@ public sealed class LottieBenchmarkController : MonoBehaviour
                 _instances.Count, _widthText, _heightText, _liveBatchMs), _smallStyle);
         }
 
+        if (_showPreviews && _instances.Count > 0 && !hasSidePreview)
+        {
+            GUILayout.Space(8f);
+            GUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            float previewSize = Mathf.Min(280f, panelArea.width - 16f);
+            Rect inlinePreview = GUILayoutUtility.GetRect(
+                previewSize,
+                previewSize,
+                GUILayout.Width(previewSize),
+                GUILayout.Height(previewSize));
+            DrawPreviews(inlinePreview);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+        }
+
         GUILayout.Space(10f);
         GUILayout.BeginHorizontal();
         GUILayout.Label("Results", _headingStyle);
@@ -226,12 +286,29 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         GUILayout.EndScrollView();
         GUILayout.EndArea();
 
-        if (_showPreviews && _instances.Count > 0)
+        if (_showPreviews && _instances.Count > 0 && hasSidePreview)
         {
-            DrawPreviews(new Rect(634f, 12f, logicalWidth - 646f, logicalHeight - 24f));
+            DrawPreviews(new Rect(
+                sidePreviewX,
+                panelArea.y,
+                sidePreviewWidth,
+                panelArea.height));
         }
 
         GUI.matrix = oldMatrix;
+    }
+
+    private static float GetUiScale()
+    {
+        if (Application.isMobilePlatform)
+        {
+            // Target a 720-pixel short edge so controls remain touch-friendly
+            // in both portrait and landscape, independent of device DPI.
+            float shortEdge = Mathf.Min(Screen.width, Screen.height);
+            return Mathf.Clamp(shortEdge / 720f, 1f, 3f);
+        }
+
+        return Mathf.Clamp(Screen.width / 1280f, 0.7f, 1.35f);
     }
 
     private void DrawPreviews(Rect area)
@@ -258,7 +335,10 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             Texture texture = _instances[i].OutputTexture;
             if (texture != null)
             {
-                GUI.DrawTexture(rect, texture, ScaleMode.ScaleToFit, true);
+                // Match the UI RawImages in Main.unity, which present rlottie
+                // output with a Y scale of -1.
+                Rect textureRect = FitTextureInside(rect, texture);
+                GUI.DrawTextureWithTexCoords(textureRect, texture, new Rect(0f, 1f, 1f, -1f), true);
             }
         }
 
@@ -267,6 +347,20 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             GUI.Label(new Rect(area.x + 8f, area.yMax - 25f, area.width - 16f, 20f),
                 string.Format(CultureInfo.InvariantCulture, "Showing {0} of {1}; all {1} are rendered.", visible, _instances.Count), _smallStyle);
         }
+    }
+
+    private static Rect FitTextureInside(Rect area, Texture texture)
+    {
+        float textureAspect = texture.width / (float)Mathf.Max(1, texture.height);
+        float areaAspect = area.width / Mathf.Max(1f, area.height);
+        if (textureAspect > areaAspect)
+        {
+            float height = area.width / textureAspect;
+            return new Rect(area.x, area.y + (area.height - height) * 0.5f, area.width, height);
+        }
+
+        float width = area.height * textureAspect;
+        return new Rect(area.x + (area.width - width) * 0.5f, area.y, width, area.height);
     }
 
     private static void LabeledTextField(string label, ref string value, float labelWidth)

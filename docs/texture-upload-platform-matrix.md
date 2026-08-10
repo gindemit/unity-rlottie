@@ -63,6 +63,59 @@ The relevant managed decisions are:
 In WebGL shader mode, Apply is called on the intermediate source `Texture2D`,
 not on the exposed output `RenderTexture`.
 
+## Unsupported, fallback-only, and currently failing APIs
+
+Here, **unsupported** means the plugin has no native texture backend for the
+renderer reported by Unity. It does not mean that Unity itself cannot use that
+graphics API. `RendererCommon::ToRenderer()` currently recognizes only D3D11,
+D3D12, OpenGL Core, OpenGL ES 2/3, Metal, and Vulkan. Any other renderer is
+mapped to `Renderer::Unknown`, and native texture creation fails.
+
+The following current Unity renderer values are therefore unsupported by this
+plugin:
+
+| Platform family | Unity renderer value | Status |
+|---|---|---|
+| PlayStation | `kUnityGfxRendererPS4` | Unsupported; no PlayStation texture backend |
+| PlayStation | `kUnityGfxRendererPS5`, `kUnityGfxRendererPS5NGGC` | Unsupported; no PlayStation texture backend |
+| Xbox | `kUnityGfxRendererXboxOne`, `kUnityGfxRendererXboxOneD3D12` | Unsupported; the Windows D3D backends are not Xbox backends |
+| Xbox/GameCore | `kUnityGfxRendererGameCoreXboxOne`, `kUnityGfxRendererGameCoreXboxSeries` | Unsupported; no GameCore texture backend |
+| Nintendo Switch | `kUnityGfxRendererNvn` | Unsupported; no NVN texture backend |
+| Headless/batch mode | `kUnityGfxRendererNull` | No GPU texture backend; rendered-player validation is not available |
+| macOS | OpenGL Core | Unsupported by the Apple native build, which implements Metal only |
+
+Legacy Direct3D 9, legacy desktop OpenGL, and PlayStation Vita GXM are removed
+from the bundled Unity native-plugin interface and are not targets.
+
+The following paths are not classified as unsupported:
+
+- Linux OpenGL Core is **fallback-only**: it uses managed CPU pixels and
+  `Texture2D.Apply()` because Unity does not guarantee a current GL context on
+  the scripting thread.
+- WebGL is **managed-upload only** and uses `Texture2D.Apply()` by design; it
+  does not use a native graphics-device texture backend.
+- Vulkan has a guarded managed fallback when its Unity interface or an upload
+  operation is unavailable.
+
+Android Vulkan is implemented and passes Unity 6000.5.3f1 validation. On
+2026-08-10, the same physical Samsung SM-N975F (Mali-G76, Android 12) produced
+this matrix:
+
+| Pipeline | API | Selected upload backend | Rendered-player result |
+|---|---|---|---|
+| Built-in | OpenGL ES 3 | `NativeExternalTexture` | Passed all checks |
+| URP | OpenGL ES 3 | `NativeExternalTexture` | Passed all checks |
+| Built-in | Vulkan | `NativeVulkan` | Passed all checks |
+| URP | Vulkan | `NativeVulkan` | Passed all checks |
+
+The original Vulkan runs reported an unchanged sampled pixel hash even though
+device screenshots showed the native-uploaded animation changing. The smoke
+test used an immediate `Graphics.Blit` plus `ReadPixels`, which returned stale
+contents for this Unity-owned texture after a native Vulkan write. Validation
+now uses `AsyncGPUReadback` for `NativeVulkan` textures and waits for a changed
+GPU-visible signature. Built-in and URP both pass with distinct frame hashes;
+the native upload implementation did not require a fallback or backend change.
+
 ## Vulkan without Apply: implementation status
 
 Native Vulkan upload without a per-frame Apply call is implemented for Windows,
@@ -222,9 +275,15 @@ Validation completed for this implementation:
   GPU-runner validation item.
 - Android native plugins build for `arm64-v8a`, `armeabi-v7a`, `x86`, and
   `x86_64` with Unity 2022.3's NDK.
-- A Vulkan-only Unity 2022.3 Android player passed the rendered-player smoke on
-  a Samsung SM-N975F (Mali-G76). Its log selected Vulkan, enabled native upload,
-  loaded both animations, and contained no Apply fallback or native failure.
+- A Vulkan-only Unity 2022.3 Android player previously passed the
+  rendered-player smoke on a Samsung SM-N975F (Mali-G76). Its log selected
+  Vulkan, enabled native upload, loaded both animations, and contained no Apply
+  fallback or native failure.
+- Unity 6000.5.3f1 Built-in and URP players pass the rendered-player smoke on
+  the same device with `NativeVulkan`. The earlier dynamic-pixel failures were
+  validation false negatives caused by immediate `Graphics.Blit`/`ReadPixels`
+  capture of the native-written texture; asynchronous GPU readback observes
+  changing frame hashes on both pipelines.
 
 Exercise both immediate and asynchronous rendering, multiple simultaneous
 animations, resize/recreation, pause/resume, disposal with queued uploads, and
@@ -250,3 +309,7 @@ The Vulkan-native path is complete only when:
 - resize, disposal, and device restart do not leak or use freed resources; and
 - unsupported Unity/device combinations fall back to the Apply path instead of
   returning a blank texture.
+
+The Unity 6000.5.3f1 Android result does not currently meet these acceptance
+criteria because animation state advances without a corresponding sampled
+texture update.
