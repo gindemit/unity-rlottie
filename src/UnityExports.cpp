@@ -7,6 +7,7 @@
 #include "UploadPipeline.h"
 #include "UnityIntegration.h"
 #include "LottieLogger.h"
+#include "VulkanBackend.h"
 
 #include "IUnityInterface.h"
 #include "IUnityGraphics.h"
@@ -137,6 +138,8 @@ EXPORT_API void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int dev
 #endif
                 break;
             case Renderer::Vulkan:
+                // ConfigureEvent is installed from Unity's graphics-device
+                // initialize callback. Device entry points are acquired lazily.
                 LottieLogInfo(nullptr, "[Lottie] Vulkan device initialized");
                 break;
             default:
@@ -186,6 +189,7 @@ EXPORT_API void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int dev
 
         ClearAllInstances();
         ClearUploadQueue();
+        ShutdownVulkan();
     }
 }
 

@@ -37,6 +37,45 @@ namespace LottiePlugin
                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
         }
 
+        private bool TryEnableNativeVulkanUpload()
+        {
+            try
+            {
+                if (NativeBridge.LottieSupportsNativeVulkanUpload() != 0)
+                {
+                    if (!sVulkanNativeUploadLogged)
+                    {
+                        sVulkanNativeUploadLogged = true;
+                        Debug.Log("[LottiePlugin] Vulkan native upload enabled");
+                    }
+                    return true;
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                // Older native plugins do not expose Vulkan upload capability.
+            }
+            catch (DllNotFoundException)
+            {
+                // Preserve the existing managed upload path when the native
+                // plugin is not available yet (for example during import).
+            }
+
+            LogVulkanApplyFallback();
+            return false;
+        }
+
+        private void LogVulkanApplyFallback()
+        {
+            if (sVulkanFallbackLogged)
+            {
+                return;
+            }
+
+            sVulkanFallbackLogged = true;
+            Debug.LogWarning("[LottiePlugin] Vulkan native upload unavailable; using Texture2D.Apply fallback");
+        }
+
         private void PlatformDisposeAsyncDraw()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
@@ -183,12 +222,17 @@ namespace LottiePlugin
             }
 #else
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
-            _usesCPURendering = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
+            bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
+            _usesUnityOwnedNativeTexture = isVulkan && TryEnableNativeVulkanUpload();
+            _usesCPURendering = isVulkan && !_usesUnityOwnedNativeTexture;
 #if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
             // Unity's Linux OpenGL editor does not guarantee a current context on
-            // the scripting thread. Render into Unity-owned CPU texture memory,
-            // as the Vulkan path does, and upload it with Texture2D.Apply().
-            _usesCPURendering = true;
+            // the scripting thread. Keep Apply for OpenGL, while Vulkan uses the
+            // native render-thread upload when the interface is available.
+            if (!isVulkan)
+            {
+                _usesCPURendering = true;
+            }
 #endif
 #endif
             if (_usesCPURendering)
@@ -222,6 +266,28 @@ namespace LottiePlugin
                 _ownsPixelData = false;
             }
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
+            else if (_usesUnityOwnedNativeTexture)
+            {
+                Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 0, false);
+                ConfigureRuntimeTexture(Texture);
+                _pixelData = Texture.GetRawTextureData<byte>();
+                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                _ownsPixelData = false;
+
+                _nativeTexturePtr = Texture.GetNativeTexturePtr();
+                if (_nativeTexturePtr == IntPtr.Zero ||
+                    NativeBridge.LottieRegisterUnityVulkanTexture(
+                        _animationWrapperIntPtr,
+                        _nativeTexturePtr,
+                        (int)width,
+                        (int)height) == 0)
+                {
+                    _nativeTexturePtr = IntPtr.Zero;
+                    _usesUnityOwnedNativeTexture = false;
+                    _usesCPURendering = true;
+                    LogVulkanApplyFallback();
+                }
+            }
             else
             {
                 int bufferSize = (int)(width * height * sizeof(uint));
@@ -259,6 +325,40 @@ namespace LottiePlugin
         private void RequestTextureUpload()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
+            if (_usesUnityOwnedNativeTexture)
+            {
+                if (NativeBridge.LottieIsVulkanUploadAvailable(_animationWrapperIntPtr) == 0)
+                {
+                    if (!_vulkanReregisterAttempted)
+                    {
+                        _vulkanReregisterAttempted = true;
+                        _nativeTexturePtr = Texture.GetNativeTexturePtr();
+                        if (_nativeTexturePtr != IntPtr.Zero &&
+                            NativeBridge.LottieRegisterUnityVulkanTexture(
+                                _animationWrapperIntPtr,
+                                _nativeTexturePtr,
+                                Texture.width,
+                                Texture.height) != 0)
+                        {
+                            // Keep this recovery frame visible while Unity and the
+                            // render thread resume native uploads after device restart.
+                            Texture.Apply();
+                            return;
+                        }
+                    }
+
+                    _usesUnityOwnedNativeTexture = false;
+                    _usesCPURendering = true;
+                    LogVulkanApplyFallback();
+                    Texture.Apply();
+                    return;
+                }
+
+                _vulkanReregisterAttempted = false;
+                NativeBridge.LottieUpdateTexture(_animationWrapperIntPtr);
+                return;
+            }
+
             IntPtr currentPtr = NativeBridge.LottieGetNativeTexturePtr(_animationWrapperIntPtr);
             if (currentPtr != _nativeTexturePtr)
             {
