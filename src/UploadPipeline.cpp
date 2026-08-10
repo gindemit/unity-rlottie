@@ -18,8 +18,9 @@ void PerformUploadFor(lottie_animation_wrapper* animation)
     Renderer renderer = GetCurrentRenderer();
     LottieLogInfo(animation, "[Lottie] PerformUploadFor: renderer=%d", (int)renderer);
 
-    InstanceState* state = GetState(animation, /*create=*/false);
-    if (state == nullptr)
+    InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> stateLifetimeLock;
+    if (!LockStateForUpload(animation, state, stateLifetimeLock))
     {
         LottieLogWarning(animation, "[Lottie] PerformUploadFor: state is null");
         return;
