@@ -178,6 +178,26 @@ else()
     message(FATAL_ERROR "No Unity headers found in '${UNITY_PLUGINAPI_DIR}'")
 endif()
 
+# IUnityGraphicsVulkan includes the platform Vulkan header. Android NDK
+# toolchains provide it automatically; desktop builders can provide either a
+# Vulkan SDK (VULKAN_SDK) or a system Vulkan-Headers installation. The plugin
+# retains its managed Texture2D.Apply fallback when headers are unavailable.
+if (ANDROID)
+    target_compile_definitions(LottiePlugin PRIVATE LOTTIE_VULKAN_AVAILABLE=1)
+else()
+    find_path(RLOTTIE_VULKAN_INCLUDE_DIR
+        NAMES vulkan/vulkan.h
+        HINTS "$ENV{VULKAN_SDK}"
+        PATH_SUFFIXES Include include)
+    if (RLOTTIE_VULKAN_INCLUDE_DIR)
+        target_include_directories(LottiePlugin PRIVATE "${RLOTTIE_VULKAN_INCLUDE_DIR}")
+        target_compile_definitions(LottiePlugin PRIVATE LOTTIE_VULKAN_AVAILABLE=1)
+        message(STATUS "Vulkan native texture upload enabled (${RLOTTIE_VULKAN_INCLUDE_DIR})")
+    else()
+        message(WARNING "Vulkan headers not found; native Vulkan texture upload disabled")
+    endif()
+endif()
+
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
 

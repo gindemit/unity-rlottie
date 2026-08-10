@@ -91,6 +91,10 @@ namespace LottiePlugin
         private NativeArray<byte> _pixelData;
         private bool _ownsPixelData;
         private bool _usesCPURendering;
+        private bool _usesUnityOwnedNativeTexture;
+        private bool _vulkanReregisterAttempted;
+        private static bool sVulkanNativeUploadLogged;
+        private static bool sVulkanFallbackLogged;
         private float _timeSinceLastRenderCall;
         private double _frameDelta;
         private double _clipFrameDelta;
