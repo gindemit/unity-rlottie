@@ -103,18 +103,21 @@ jobs:
             ci_target: Windows64
             graphics_api: Auto
             output: artifacts/windows/RLottieSmoke.exe
+            artifact_path: artifacts/windows
             artifact: rlottie-windows-${{ github.run_id }}
           - name: Linux Vulkan
             target_platform: StandaloneLinux64
             ci_target: Linux64
             graphics_api: Vulkan
             output: artifacts/linux/RLottieSmoke.x86_64
+            artifact_path: artifacts/linux
             artifact: rlottie-linux-vulkan-${{ github.run_id }}
           - name: Android Vulkan
             target_platform: Android
             ci_target: Android
             graphics_api: Vulkan
             output: artifacts/android/RLottieSmoke.apk
+            artifact_path: artifacts/android/RLottieSmoke.apk
             artifact: rlottie-android-${{ github.run_id }}
     permissions:
       contents: read
@@ -150,7 +153,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.output }}
+          path: ${{ matrix.artifact_path }}
           if-no-files-found: error
 
   linux_vulkan_smoke:
