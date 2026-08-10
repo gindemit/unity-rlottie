@@ -16,6 +16,7 @@ namespace LottiePlugin
         public bool PauseIfCulled { get; set; } = true;
         public Func<bool> VisibilityEvaluator { get; set; }
         public LottieLogLevel LogLevel { get; set; } = LottieLogLevel.Warning;
+        public bool UseManagedTextureUpload { get; set; }
     }
 
     public sealed partial class LottieAnimation : IDisposable
@@ -92,6 +93,7 @@ namespace LottiePlugin
         private bool _ownsPixelData;
         private bool _usesCPURendering;
         private bool _usesUnityOwnedNativeTexture;
+        private bool _useManagedTextureUpload;
         private bool _vulkanReregisterAttempted;
         private static bool sVulkanNativeUploadLogged;
         private static bool sVulkanFallbackLogged;
@@ -170,6 +172,7 @@ namespace LottiePlugin
             PauseIfCulled = options.PauseIfCulled;
             _visibilityEvaluator = options.VisibilityEvaluator;
             _logLevel = options.LogLevel;
+            _useManagedTextureUpload = options.UseManagedTextureUpload;
             if (_animationWrapperIntPtr != IntPtr.Zero)
             {
                 NativeBridge.LottieSetLogLevel(_animationWrapperIntPtr, _logLevel);
