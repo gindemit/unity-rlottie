@@ -20,6 +20,7 @@ namespace LottiePlugin.UI
         public ButtonClickedEvent OnClick => _onClick;
 
         public Transform Transform { get; private set; }
+        public LottieAnimation Animation => _lottieAnimation;
         internal TextAsset AnimationJson => _animationJson;
 
         internal RawImage RawImage => _rawImage;

@@ -9,6 +9,15 @@ using UnityEngine;
 
 namespace LottiePlugin
 {
+    public enum LottieTextureUploadBackend
+    {
+        ManagedTextureUpload,
+        NativeVulkan,
+        NativeExternalTexture,
+        WebGLManagedTextureUpload,
+        WebGLShaderConversion
+    }
+
     public sealed class LottieAnimationOptions
     {
         public int TargetFps { get; set; } = 30;
@@ -48,6 +57,7 @@ namespace LottiePlugin
         public long TotalFramesCount => _animationWrapper.totalFrames;
         public double DurationSeconds => _animationWrapper.duration;
         public bool IsPlaying { get; private set; }
+        public LottieTextureUploadBackend TextureUploadBackend { get; private set; }
         public int TargetFps
         {
             get => _targetFps;

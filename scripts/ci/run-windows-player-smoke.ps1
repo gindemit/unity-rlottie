@@ -4,16 +4,26 @@ param(
     [string] $Player,
     [Parameter(Mandatory = $true)]
     [string] $LogFile,
+    [string] $ResultFile,
     [int] $RunSeconds = 20
 )
 
 $ErrorActionPreference = 'Stop'
 $Player = (Resolve-Path -LiteralPath $Player).Path
 $LogFile = [IO.Path]::GetFullPath($LogFile)
+$ResultFile = if ($ResultFile) { [IO.Path]::GetFullPath($ResultFile) } else { "$LogFile.smoke.json" }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ResultFile) | Out-Null
+Remove-Item -LiteralPath $ResultFile -Force -ErrorAction SilentlyContinue
 
 $process = Start-Process -FilePath $Player `
-    -ArgumentList @('-logFile', $LogFile, '-screen-width', '1280', '-screen-height', '720') `
+    -ArgumentList @(
+        '-logFile', "`"$LogFile`"",
+        '-screen-width', '1280',
+        '-screen-height', '720',
+        '-lottieSmokeResult', "`"$ResultFile`"",
+        '-lottieSmokeQuit'
+    ) `
     -WindowStyle Hidden -PassThru
 try {
     $exited = $process.WaitForExit($RunSeconds * 1000)
@@ -28,19 +38,15 @@ finally {
     }
 }
 
-if (-not (Test-Path -LiteralPath $LogFile)) {
-    throw "RLottie player log is missing: $LogFile"
+if (-not (Test-Path -LiteralPath $ResultFile)) {
+    throw "RLottie smoke result is missing: $ResultFile"
 }
 
-$log = Get-Content -Raw -LiteralPath $LogFile
-if ($log -notmatch '\[Lottie\] Successfully loaded animation') {
-    throw 'The Windows player did not load a Lottie animation.'
-}
-if ($log -notmatch '\[Lottie\] Render data allocated successfully') {
-    throw 'The Windows player did not allocate native render data.'
-}
-if ($log -match 'DllNotFoundException|EntryPointNotFoundException|\bCrash!!!|Failed to allocate render data') {
-    throw 'The Windows player log contains a native-plugin or rendering failure.'
+$result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
+$failedChecks = @($result.checks | Where-Object { -not $_.passed })
+if (-not $result.passed -or $failedChecks.Count -gt 0) {
+    $details = $failedChecks | ForEach-Object { "$($_.name): $($_.details)" }
+    throw "Windows rendered-player smoke test failed:`n$($details -join "`n")"
 }
 
-Write-Output "Windows rendered-player smoke test passed. Log: $LogFile"
+Write-Output "Windows rendered-player smoke test passed. Result: $ResultFile; log: $LogFile"
