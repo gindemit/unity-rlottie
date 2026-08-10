@@ -30,8 +30,20 @@ function Invoke-Git {
         [string[]] $Arguments
     )
 
-    $output = & git -C $Repository @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    # Windows PowerShell wraps native stderr lines in ErrorRecord objects. With
+    # the script-wide Stop policy, harmless git progress such as
+    # "Everything up-to-date" otherwise terminates execution before we can
+    # inspect the native exit code.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & git -C $Repository @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) {
         throw "git $($Arguments -join ' ') failed in ${Repository}:`n$($output -join "`n")"
     }
     return $output
@@ -187,8 +199,15 @@ foreach ($target in $targetRepositories) {
             continue
         }
 
-        $mergeOutput = & git -C $target.Directory merge --no-commit --no-ff $sourceTrackingRef 2>&1
-        $mergeExitCode = $LASTEXITCODE
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $mergeOutput = & git -C $target.Directory merge --no-commit --no-ff $sourceTrackingRef 2>&1
+            $mergeExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
         $unmergedPaths = @(& git -C $target.Directory diff --name-only --diff-filter=U)
         $unexpectedConflicts = @($unmergedPaths | Where-Object { -not (Test-BranchOwnedPath -Path $_) })
 
