@@ -37,8 +37,25 @@ namespace LottiePlugin
                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
         }
 
-        private bool TryEnableNativeVulkanUpload()
+        private bool TryEnableNativeVulkanUpload(uint width, uint height)
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            const ulong affectedUploadBytes = 4UL * 1024UL * 1024UL;
+            ulong uploadBytes = (ulong)width * height * 4UL;
+            if (uploadBytes >= affectedUploadBytes &&
+                SystemInfo.graphicsDeviceName.IndexOf("Mali-G76", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                if (!sVulkanLargeTextureFallbackLogged)
+                {
+                    sVulkanLargeTextureFallbackLogged = true;
+                    Debug.LogWarning(string.Format(
+                        "[LottiePlugin] Using managed Vulkan texture upload for {0} byte textures on {1}; " +
+                        "the native upload is not presented correctly at or above 4 MiB by this driver.",
+                        uploadBytes, SystemInfo.graphicsDeviceName));
+                }
+                return false;
+            }
+#endif
             try
             {
                 if (NativeBridge.LottieSupportsNativeVulkanUpload() != 0)
@@ -226,7 +243,7 @@ namespace LottiePlugin
 #else
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
-            _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload();
+            _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload(width, height);
             _usesCPURendering = _useManagedTextureUpload || (isVulkan && !_usesUnityOwnedNativeTexture);
 #if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
             // Unity's Linux OpenGL editor does not guarantee a current context on

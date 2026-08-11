@@ -107,6 +107,7 @@ namespace LottiePlugin
         private bool _vulkanReregisterAttempted;
         private static bool sVulkanNativeUploadLogged;
         private static bool sVulkanFallbackLogged;
+        private static bool sVulkanLargeTextureFallbackLogged;
         private float _timeSinceLastRenderCall;
         private double _frameDelta;
         private double _clipFrameDelta;
