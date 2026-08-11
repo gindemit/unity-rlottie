@@ -93,6 +93,60 @@ namespace LottiePlugin
             Debug.LogWarning("[LottiePlugin] Vulkan native upload unavailable; using Texture2D.Apply fallback");
         }
 
+        private void LogOpenGLApplyFallback()
+        {
+            if (sOpenGLFallbackLogged)
+            {
+                return;
+            }
+
+            sOpenGLFallbackLogged = true;
+            Debug.LogWarning("[LottiePlugin] Linux OpenGL native upload unavailable; using Texture2D.Apply fallback");
+        }
+
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        private bool TryRegisterUnityOwnedTexture(uint width, uint height)
+        {
+            _nativeTexturePtr = Texture.GetNativeTexturePtr();
+            if (_nativeTexturePtr == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (_usesUnityOwnedOpenGLTexture)
+                {
+                    bool registered = NativeBridge.LottieRegisterUnityOpenGLTexture(
+                        _animationWrapperIntPtr,
+                        _nativeTexturePtr,
+                        (int)width,
+                        (int)height) != 0;
+                    if (registered && !sOpenGLNativeUploadLogged)
+                    {
+                        sOpenGLNativeUploadLogged = true;
+                        Debug.Log("[LottiePlugin] Linux OpenGL native upload enabled");
+                    }
+                    return registered;
+                }
+
+                return NativeBridge.LottieRegisterUnityVulkanTexture(
+                    _animationWrapperIntPtr,
+                    _nativeTexturePtr,
+                    (int)width,
+                    (int)height) != 0;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+#endif
+
         private void PlatformDisposeAsyncDraw()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
@@ -244,21 +298,20 @@ namespace LottiePlugin
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
             _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload(width, height);
-            _usesCPURendering = _useManagedTextureUpload || (isVulkan && !_usesUnityOwnedNativeTexture);
 #if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
-            // Unity's Linux OpenGL editor does not guarantee a current context on
-            // the scripting thread. Keep Apply for OpenGL, while Vulkan uses the
-            // native render-thread upload when the interface is available.
-            if (!isVulkan)
-            {
-                _usesCPURendering = true;
-            }
+            _usesUnityOwnedOpenGLTexture = deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore &&
+                !_useManagedTextureUpload;
+#else
+            _usesUnityOwnedOpenGLTexture = false;
 #endif
+            _usesCPURendering = _useManagedTextureUpload || (isVulkan && !_usesUnityOwnedNativeTexture);
             TextureUploadBackend = _usesCPURendering
                 ? LottieTextureUploadBackend.ManagedTextureUpload
-                : (_usesUnityOwnedNativeTexture
+                : (_usesUnityOwnedOpenGLTexture
+                    ? LottieTextureUploadBackend.NativeOpenGL
+                    : (_usesUnityOwnedNativeTexture
                     ? LottieTextureUploadBackend.NativeVulkan
-                    : LottieTextureUploadBackend.NativeExternalTexture);
+                    : LottieTextureUploadBackend.NativeExternalTexture));
 #endif
             if (_usesCPURendering)
             {
@@ -291,7 +344,7 @@ namespace LottiePlugin
                 _ownsPixelData = false;
             }
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
-            else if (_usesUnityOwnedNativeTexture)
+            else if (_usesUnityOwnedNativeTexture || _usesUnityOwnedOpenGLTexture)
             {
                 Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 0, false);
                 ConfigureRuntimeTexture(Texture);
@@ -299,19 +352,22 @@ namespace LottiePlugin
                 _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
                 _ownsPixelData = false;
 
-                _nativeTexturePtr = Texture.GetNativeTexturePtr();
-                if (_nativeTexturePtr == IntPtr.Zero ||
-                    NativeBridge.LottieRegisterUnityVulkanTexture(
-                        _animationWrapperIntPtr,
-                        _nativeTexturePtr,
-                        (int)width,
-                        (int)height) == 0)
+                if (!TryRegisterUnityOwnedTexture(width, height))
                 {
                     _nativeTexturePtr = IntPtr.Zero;
+                    bool wasOpenGL = _usesUnityOwnedOpenGLTexture;
                     _usesUnityOwnedNativeTexture = false;
+                    _usesUnityOwnedOpenGLTexture = false;
                     _usesCPURendering = true;
                     TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
-                    LogVulkanApplyFallback();
+                    if (wasOpenGL)
+                    {
+                        LogOpenGLApplyFallback();
+                    }
+                    else
+                    {
+                        LogVulkanApplyFallback();
+                    }
                 }
             }
             else
@@ -351,6 +407,48 @@ namespace LottiePlugin
         private void RequestTextureUpload()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
+            if (_usesUnityOwnedOpenGLTexture)
+            {
+                int uploadAvailable;
+                try
+                {
+                    uploadAvailable = NativeBridge.LottieIsOpenGLUploadAvailable(_animationWrapperIntPtr);
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    uploadAvailable = 0;
+                }
+                catch (DllNotFoundException)
+                {
+                    uploadAvailable = 0;
+                }
+
+                if (uploadAvailable == 0)
+                {
+                    if (!_openGLReregisterAttempted)
+                    {
+                        _openGLReregisterAttempted = true;
+                        if (TryRegisterUnityOwnedTexture((uint)Texture.width, (uint)Texture.height))
+                        {
+                            // Keep this frame visible while native upload recovers.
+                            Texture.Apply();
+                            return;
+                        }
+                    }
+
+                    _usesUnityOwnedOpenGLTexture = false;
+                    _usesCPURendering = true;
+                    TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
+                    LogOpenGLApplyFallback();
+                    Texture.Apply();
+                    return;
+                }
+
+                _openGLReregisterAttempted = false;
+                NativeBridge.LottieUpdateTexture(_animationWrapperIntPtr);
+                return;
+            }
+
             if (_usesUnityOwnedNativeTexture)
             {
                 if (NativeBridge.LottieIsVulkanUploadAvailable(_animationWrapperIntPtr) == 0)

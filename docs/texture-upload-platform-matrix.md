@@ -2,7 +2,7 @@
 
 ## Scope and snapshot
 
-This document describes the implementation on `dev` as updated on 2026-08-10.
+This document describes the implementation on `dev` as updated on 2026-08-11.
 The earlier branch comparison was made at commit
 `4dc22680668674a935d1902aeb0484362dff50b3` (`4dc2268`, "Rebuild Android
 plugins with Unity exports"). At that earlier snapshot:
@@ -25,7 +25,7 @@ The synchronous and asynchronous draw paths make the same upload choice.
 | Windows | Direct3D 12 | No | Native external texture and render-thread upload |
 | Windows | OpenGL Core | No | Native external GL texture and render-thread upload |
 | Windows | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
-| Linux Editor or Standalone | OpenGL Core | Yes | Linux is explicitly forced to the managed CPU-texture path |
+| Linux Editor or Standalone | OpenGL Core | No when native OpenGL upload is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | Linux Editor or Standalone | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | macOS | Metal | No | Native external Metal texture and native upload |
 | macOS | OpenGL Core | Unsupported | The Apple native build implements Metal only; native texture creation fails instead of falling back to Apply |
@@ -53,8 +53,8 @@ The relevant managed decisions are:
 1. WebGL player builds force `_usesCPURendering = true`.
 2. Vulkan creates a Unity-owned `Texture2D`, registers its cached native handle,
    and selects native upload only when the native capability check succeeds.
-3. Linux OpenGL retains the managed CPU-texture path; Linux Vulkan can use the
-   native Vulkan path.
+3. Linux OpenGL and Vulkan use Unity-owned textures with native render-thread
+   uploads when their capability checks succeed.
 4. Managed-upload branches call Apply after a synchronous result or a completed
    asynchronous result.
 5. Other branches call `RequestTextureUpload()`, which queues a native upload
@@ -89,9 +89,11 @@ from the bundled Unity native-plugin interface and are not targets.
 
 The following paths are not classified as unsupported:
 
-- Linux OpenGL Core is **fallback-only**: it uses managed CPU pixels and
-  `Texture2D.Apply()` because Unity does not guarantee a current GL context on
-  the scripting thread.
+- Linux OpenGL Core uses a Unity-owned texture. The scripting thread only
+  registers Unity's cached native texture handle; extension detection and
+  `glTexSubImage2D()` run from `GL.IssuePluginEvent` with Unity's render-thread
+  context. Registration or upload failures retain or restore
+  `Texture2D.Apply()`.
 - WebGL is **managed-upload only** and uses `Texture2D.Apply()` by design; it
   does not use a native graphics-device texture backend.
 - Vulkan has a guarded managed fallback when its Unity interface or an upload
@@ -180,8 +182,8 @@ Vulkan. Relevant primary references:
   memory, but route completed Vulkan frames through `RequestTextureUpload()`.
 - Track whether the output texture is Unity-owned or plugin-owned. Do not call
   `UpdateExternalTexture()` for a Unity-owned Vulkan texture.
-- Change the Linux override so it forces Apply only for the Linux OpenGL path;
-  otherwise it would continue to mask the new Linux Vulkan path.
+- Keep the Vulkan and Linux OpenGL capability checks independent so either
+  backend can return to managed upload without masking the other.
 - Keep WebGL unchanged because it cannot use this native plugin path.
 
 #### Native bridge and instance state
@@ -259,7 +261,7 @@ Vulkan. Relevant primary references:
 2. Unity-owned texture registration and cached Vulkan interfaces.
 3. Mapped staging buffers and render-thread copies.
 4. Multiple staging slots, lifetime locking, and safe resource retirement.
-5. Linux Vulkan support while retaining the Linux OpenGL Apply fallback.
+5. Linux Vulkan support, followed by Unity-owned Linux OpenGL native upload.
 6. Android Vulkan support and ARM64 physical-device validation.
 7. Automatic capability and runtime failure checks with Apply fallback.
 
@@ -292,7 +294,7 @@ graphics-device restart.
 | Platform | API | Minimum pipelines | Notes |
 |---|---|---|---|
 | Windows x64 | Vulkan | Built-in, URP, HDRP where supported | Run Vulkan validation layers and RenderDoc capture |
-| Linux x64 | Vulkan | Built-in and URP | Prove the Linux OpenGL fallback is unchanged |
+| Linux x64 | Vulkan and OpenGL Core | Built-in and URP | Exercise both native paths and force each guarded Apply fallback |
 | Android ARM64 | Vulkan | Built-in and URP | Test physical devices from more than one GPU vendor |
 
 Run the supported Unity-version range, especially 2019.4, 2021.3, and current
