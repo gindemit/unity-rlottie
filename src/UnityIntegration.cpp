@@ -150,7 +150,7 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEventInternal(UnityGfxDeviceEven
 
         SetCurrentRenderer(Renderer::Unknown);
 
-#if defined(__ANDROID__) || defined(_WIN32)
+#if !defined(__APPLE__)
         ResetGLExtensionState();
 #endif
 
