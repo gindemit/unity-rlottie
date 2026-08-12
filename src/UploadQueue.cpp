@@ -19,15 +19,16 @@ void EnqueueUpload(lottie_animation_wrapper* animation)
         return;
     }
 
-    InstanceState* state = GetState(animation, /*create=*/false);
-    if (state == nullptr)
+    InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> lifetimeLock;
+    if (!LockStateForUpload(animation, state, lifetimeLock))
     {
         LottieLogWarning(animation, "[Lottie] EnqueueUpload: no instance state");
         return;
     }
 
     const uint64_t latest = state->uploadVersion.load(std::memory_order_acquire);
-    if (latest == 0 || latest == state->uploadedVersion)
+    if (latest == 0 || latest == state->uploadedVersion.load(std::memory_order_acquire))
     {
         return;
     }
@@ -52,12 +53,14 @@ void EnqueueUpload(lottie_animation_wrapper* animation)
 
         gPendingUploads.push(animation);
     }
+    lifetimeLock.unlock();
 
     if (dropped != nullptr && dropped != animation)
     {
         LottieLogWarning(dropped, "[Lottie] Upload queue full, dropping oldest upload");
-        InstanceState* droppedState = GetState(dropped, /*create=*/false);
-        if (droppedState != nullptr)
+        InstanceState* droppedState = nullptr;
+        std::unique_lock<std::mutex> droppedLifetimeLock;
+        if (LockStateForUpload(dropped, droppedState, droppedLifetimeLock))
         {
             droppedState->uploadQueued.store(false, std::memory_order_release);
         }
