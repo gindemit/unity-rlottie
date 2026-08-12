@@ -58,6 +58,12 @@ typedef struct lottie_render_data {
     uint32_t bytesPerLine;
 #if !defined(__EMSCRIPTEN__)
     std::future<rlottie::Surface> render_future;
+    lottie_animation_wrapper* render_pool_owner = nullptr;
+    int render_pool_slot = -1;
+    uint32_t* external_buffer = nullptr;
+    uint32_t external_bytes_per_line = 0;
+    bool render_skipped = false;
+    void* render_pool_state = nullptr;
 #endif
 } lottie_render_data;
 
