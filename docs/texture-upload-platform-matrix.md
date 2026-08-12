@@ -2,39 +2,83 @@
 
 ## Scope and snapshot
 
-This document describes the implementation on `dev` as updated on 2026-08-11.
-The earlier branch comparison was made at commit
-`4dc22680668674a935d1902aeb0484362dff50b3` (`4dc2268`, "Rebuild Android
-plugins with Unity exports"). At that earlier snapshot:
-
-- the feature branch analyzed at the time and `origin/main` resolved to the
-  same commit;
-- therefore `main` contains every committed change reachable from that feature
-  branch at this snapshot; and
-- this is a point-in-time statement. The branches can diverge after either one
-  receives another commit.
+This document describes the implementation on the repository's default branch,
+`main`, at commit `be050a6` as audited on 2026-08-12. It describes code support;
+where execution has not been validated on physical hardware, that is stated
+separately.
 
 In this document, **Apply** specifically means a call to `Texture2D.Apply()`.
-The synchronous and asynchronous draw paths make the same upload choice.
+The synchronous and asynchronous draw paths make the same upload choice. The
+matrix assumes `LottieAnimationOptions.UseManagedTextureUpload` is left at its
+default value of `false` and the animation is created directly or through
+`AnimatedImage`. Component-specific overrides and runtime fallbacks are listed
+below.
 
 ## Current platform and graphics API matrix
 
-| Platform | Graphics API or output mode | Apply used? | Current upload path |
+| Platform | Graphics API or output mode | Apply used by default? | Non-Apply implementation and status |
 |---|---|---:|---|
-| Windows | Direct3D 11 | No | Native external texture and render-thread upload |
-| Windows | Direct3D 12 | No | Native external texture and render-thread upload |
-| Windows | OpenGL Core | No | Native external GL texture and render-thread upload |
-| Windows | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
-| Linux Editor or Standalone | OpenGL Core | No when native OpenGL upload is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
-| Linux Editor or Standalone | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
-| macOS | Metal | No | Native external Metal texture and native upload |
-| macOS | OpenGL Core | Unsupported | The Apple native build implements Metal only; native texture creation fails instead of falling back to Apply |
-| iOS | Metal | No | Native external Metal texture and native upload |
-| Android | OpenGL ES 2 or 3 | No | Native external GL texture and render-thread upload |
-| Android | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
-| WebGL | Shader conversion (default) | Yes | Apply to the source `Texture2D`, then blit into the exposed `RenderTexture` |
-| WebGL | Native conversion | Yes | Apply converted pixels to the exposed `Texture2D` |
-| WebGL | Shader unavailable | Yes | Automatic fallback to the native-conversion path |
+| Windows | Direct3D 11 | No | Plugin-owned external texture; implemented |
+| Windows | Direct3D 12 | No | Plugin-owned external texture; implemented |
+| Windows | OpenGL Core | No | Plugin-owned external GL texture; implemented |
+| Windows | Vulkan | No when capability checks pass; otherwise Yes | Unity-owned texture; implemented, desktop execution remains a validation item |
+| Linux Editor or Standalone | OpenGL Core | No when registration and upload remain available; otherwise Yes | Unity-owned texture; implemented with guarded Apply fallback |
+| Linux Editor or Standalone | Vulkan | No when capability checks pass; otherwise Yes | Unity-owned texture; implemented, GPU execution remains a validation item |
+| macOS | Metal | No | Plugin-owned external texture; implemented |
+| macOS | OpenGL Core | No native path | Apple native build implements Metal only; default native creation fails. Explicit managed upload is required to use Apply |
+| iOS | Metal | No | Plugin-owned external texture; implemented |
+| Android | OpenGL ES 2 or 3 | No | Plugin-owned external GL texture; implemented and device-validated |
+| Android | Vulkan | No when capability checks pass; otherwise Yes | Unity-owned texture; implemented. Unity 2022.3 passed, but Unity 6000.5.3f1 currently fails validation on the tested Mali-G76 device |
+| WebGL | Shader conversion (default) | Yes | No non-Apply path; Apply the source texture, then blit to the exposed render texture |
+| WebGL | Native conversion or shader-unavailable fallback | Yes | No non-Apply path; Apply converted pixels to the exposed texture |
+
+The native render-thread upload calls are:
+
+| Graphics API | Texture ownership | Upload API used by the plug-in |
+|---|---|---|
+| Direct3D 11 | Plug-in | `ID3D11DeviceContext::Map(..., D3D11_MAP_WRITE_DISCARD, ...)` on a dynamic `ID3D11Texture2D` |
+| Direct3D 12 | Plug-in | Mapped upload buffer followed by `ID3D12GraphicsCommandList::CopyTextureRegion` |
+| OpenGL Core / OpenGL ES 2 or 3 | Plug-in on Windows and Android; Unity on Linux | `glTexSubImage2D` from the Unity render-thread plug-in event |
+| Metal | Plug-in | `MTLTexture.replaceRegion` |
+| Vulkan | Unity | `IUnityGraphicsVulkan::AccessTexture` plus `vkCmdCopyBufferToImage` on Unity's current command buffer |
+
+All native paths still render the Lottie frame into CPU memory first. “Non-Apply”
+means only that the CPU-to-GPU texture upload is performed by the native plug-in
+instead of `Texture2D.Apply()`.
+
+## Selecting and identifying the upload path
+
+`LottieAnimationOptions.UseManagedTextureUpload` is the public selection API.
+It is read when `LoadFromJsonData` or `LoadFromJsonFile` creates the animation
+and cannot be switched on an existing instance:
+
+```csharp
+var options = new LottieAnimationOptions
+{
+    UseManagedTextureUpload = false // default: prefer a supported native path
+};
+
+var animation = LottieAnimation.LoadFromJsonData(
+    json, resourcesPath, width, height, options);
+```
+
+- `false` prefers the matrix's native path. Vulkan and Linux OpenGL can still
+  change to Apply if capability, registration, device-restart recovery, or
+  upload checks fail.
+- `true` forces the managed Apply path on non-WebGL platforms. It can also be
+  used with a renderer that has no native backend, such as macOS OpenGL Core.
+- `AnimatedImage` leaves the option at `false`, so the matrix applies to it.
+- `AnimatedButton` currently forces the option to `true` on Vulkan, OpenGL
+  Core, OpenGL ES 2, and OpenGL ES 3. Consequently, `AnimatedButton` uses the
+  non-Apply path only on D3D11, D3D12, and Metal. This behavior is hard-coded
+  and is not exposed as an inspector setting.
+- WebGL always uses Apply regardless of this option.
+
+This `main` snapshot does not expose the selected backend as a public property.
+For Vulkan and Linux OpenGL, use the enable/fallback log messages documented
+below together with `SystemInfo.graphicsDeviceType`. D3D, Metal, Windows GL,
+and Android GLES select their native backend directly when managed upload is
+not forced; native texture creation throws if that backend cannot initialize.
 
 The Built-in, URP, and HDRP render pipelines do not select the upload path.
 The active graphics API and platform compile symbols select it. Consequently:
@@ -65,14 +109,16 @@ not on the exposed output `RenderTexture`.
 
 ## Unsupported, fallback-only, and currently failing APIs
 
-Here, **unsupported** means the plugin has no native texture backend for the
-renderer reported by Unity. It does not mean that Unity itself cannot use that
-graphics API. `RendererCommon::ToRenderer()` currently recognizes only D3D11,
-D3D12, OpenGL Core, OpenGL ES 2/3, Metal, and Vulkan. Any other renderer is
-mapped to `Renderer::Unknown`, and native texture creation fails.
+Here, **unsupported** means the plugin has no native, non-Apply texture backend
+for the renderer reported by Unity. It does not mean that Unity itself cannot
+use that graphics API. `RendererCommon::ToRenderer()` currently recognizes only
+D3D11, D3D12, OpenGL Core, OpenGL ES 2/3, Metal, and Vulkan. Any other renderer
+is mapped to `Renderer::Unknown`, and default native texture creation fails.
+Callers may explicitly set `UseManagedTextureUpload = true` to bypass native
+texture creation and use Apply where Unity supports a writable `Texture2D`.
 
-The following current Unity renderer values are therefore unsupported by this
-plugin:
+The following current Unity renderer values are therefore unsupported for
+native non-Apply uploads:
 
 | Platform family | Unity renderer value | Status |
 |---|---|---|

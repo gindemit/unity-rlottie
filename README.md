@@ -123,7 +123,7 @@ https://github.com/gindemit/unity-rlottie/assets/5675979/3301d00e-fc9e-49c0-bc7f
 
 ## Documentation
 
-* [Texture upload paths and Vulkan native-upload analysis](docs/texture-upload-platform-matrix.md)
+* [Native (non-Apply) texture upload support matrix](docs/texture-upload-platform-matrix.md)
 
 ## Support
 
