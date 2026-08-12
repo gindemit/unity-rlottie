@@ -37,6 +37,31 @@ namespace LottiePlugin
                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
         }
 
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        private unsafe void UseManagedTextureUploadFallback(uint width, uint height, string reason)
+        {
+            if (_ownsPixelData && _pixelData.IsCreated)
+            {
+                _pixelData.Dispose();
+            }
+
+            _pixelData = default;
+            _ownsPixelData = false;
+            _nativeTexturePtr = IntPtr.Zero;
+            _usesUnityOwnedNativeTexture = false;
+            _usesUnityOwnedOpenGLTexture = false;
+            _usesCPURendering = true;
+            TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
+
+            Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 0, false);
+            ConfigureRuntimeTexture(Texture);
+            _pixelData = Texture.GetRawTextureData<byte>();
+            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+
+            Debug.LogWarning($"[LottiePlugin] Native texture upload unavailable ({reason}); using Texture2D.Apply fallback");
+        }
+#endif
+
         private bool TryEnableNativeVulkanUpload()
         {
             try
@@ -370,21 +395,39 @@ namespace LottiePlugin
                     preferSrgbSampling);
                 if (_nativeTexturePtr == IntPtr.Zero)
                 {
-                    throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
+                    // A renderer can be supported by Unity without having a native
+                    // backend in this plugin. Clean up any partial native state and
+                    // retain functional rendering through the managed upload path.
+                    NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, IntPtr.Zero);
+                    UseManagedTextureUploadFallback(width, height, deviceType.ToString());
+                    return;
                 }
 
                 // In Linear projects we request sRGB native textures on D3D and expose them as
                 // non-linear external textures so Unity applies sRGB sampling correctly.
                 // In Gamma projects we keep the previous linear external texture path.
                 bool linearExternalTexture = isDirect3D && !preferSrgbSampling;
-                Texture = Texture2D.CreateExternalTexture(
-                    (int)width,
-                    (int)height,
-                    TextureFormat.BGRA32,
-                    false,
-                    linearExternalTexture,
-                    _nativeTexturePtr);
-                ConfigureRuntimeTexture(Texture);
+                try
+                {
+                    Texture = Texture2D.CreateExternalTexture(
+                        (int)width,
+                        (int)height,
+                        TextureFormat.BGRA32,
+                        false,
+                        linearExternalTexture,
+                        _nativeTexturePtr);
+                    if (Texture == null)
+                    {
+                        throw new InvalidOperationException("Unity did not create an external texture wrapper.");
+                    }
+                    ConfigureRuntimeTexture(Texture);
+                }
+                catch (Exception exception)
+                {
+                    NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
+                    UseManagedTextureUploadFallback(width, height,
+                        $"{deviceType}: {exception.GetType().Name}");
+                }
             }
 #endif
         }
