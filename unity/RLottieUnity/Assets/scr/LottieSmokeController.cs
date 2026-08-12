@@ -323,7 +323,10 @@ public sealed class LottieSmokeController : MonoBehaviour
         LottieTextureUploadBackend backend,
         PixelCapture capture)
     {
-        if (backend == LottieTextureUploadBackend.NativeVulkan)
+        // Native upload backends can update Unity-owned textures outside Unity's
+        // normal upload path, so wait for the GPU before validating their pixels.
+        if (backend == LottieTextureUploadBackend.NativeVulkan ||
+            backend == LottieTextureUploadBackend.NativeOpenGL)
         {
             yield return CaptureTextureAsync(source, capture);
             yield break;
