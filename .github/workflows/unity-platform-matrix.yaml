@@ -224,6 +224,36 @@ jobs:
             artifacts/linux/smoke-result.json
           if-no-files-found: warn
 
+  windows_native_smoke:
+    name: Windows native rendered-player smoke
+    needs: build_players
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rlottie-windows-${{ github.run_id }}
+          path: artifacts/windows
+
+      - name: Run rendered-player smoke test
+        shell: pwsh
+        run: >-
+          ./scripts/ci/run-windows-player-smoke.ps1
+          -Player artifacts/windows/RLottieSmoke.exe
+          -LogFile artifacts/windows/Player.log
+          -RequireNativeUpload
+
+      - name: Upload player smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rlottie-windows-native-smoke-${{ github.run_id }}
+          path: |
+            artifacts/windows/Player.log
+            artifacts/windows/Player.log.smoke.json
+          if-no-files-found: warn
+
   firebase_test_lab:
     name: Firebase Test Lab Android
     needs: build_players
