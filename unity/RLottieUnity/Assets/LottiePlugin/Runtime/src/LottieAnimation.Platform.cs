@@ -346,7 +346,9 @@ namespace LottiePlugin
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
             else if (_usesUnityOwnedNativeTexture || _usesUnityOwnedOpenGLTexture)
             {
-                Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 0, false);
+                // Native uploads update mip level 0 only. A single-level texture
+                // prevents minified sampling from reading stale generated mips.
+                Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 1, false);
                 ConfigureRuntimeTexture(Texture);
                 _pixelData = Texture.GetRawTextureData<byte>();
                 _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
