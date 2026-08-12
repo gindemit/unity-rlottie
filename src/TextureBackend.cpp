@@ -19,6 +19,57 @@
 
 #include "VulkanBackend.h"
 
+bool PrepareRenderSlotForRenderer(
+    InstanceState* state,
+    int slotIndex,
+    uint32_t width,
+    uint32_t height,
+    uint8_t*& data,
+    uint32_t& stride)
+{
+    data = nullptr;
+    stride = width * 4;
+    switch (GetCurrentRenderer())
+    {
+        case Renderer::D3D12:
+#if defined(_WIN32)
+            return PrepareRenderSlotD3D12(state, slotIndex, width, height, data, stride);
+#else
+            return false;
+#endif
+        case Renderer::Vulkan:
+            return PrepareRenderSlotVulkan(state, slotIndex, width, height, data, stride);
+        default:
+            return true;
+    }
+}
+
+void RefreshCompletedRenderSlots(InstanceState* state)
+{
+    switch (GetCurrentRenderer())
+    {
+        case Renderer::D3D12:
+#if defined(_WIN32)
+            RefreshCompletedRenderSlotsD3D12(state);
+#endif
+            break;
+        case Renderer::Vulkan:
+            RefreshCompletedRenderSlotsVulkan(state);
+            break;
+        default:
+            break;
+    }
+}
+
+void BeginUploadEventForRenderer(InstanceState* state)
+{
+    if (GetCurrentRenderer() == Renderer::Vulkan)
+    {
+        BeginUploadEventVulkan(state);
+    }
+    RefreshCompletedRenderSlots(state);
+}
+
 bool EnsureTextureForRenderer(lottie_animation_wrapper* animation, InstanceState* state, int width, int height)
 {
     if (state == nullptr || width <= 0 || height <= 0)

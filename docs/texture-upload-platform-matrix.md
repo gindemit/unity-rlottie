@@ -1,5 +1,35 @@
 # Texture upload paths and Vulkan native-upload analysis
 
+## Three-slot native render pool (implemented)
+
+Native texture paths now use a fixed three-slot ownership protocol. Each slot
+moves through `Free -> Rendering -> Ready -> Uploading -> Free`; rlottie renders
+directly into slot-owned memory, and publication changes only metadata. This
+removes the former full-frame `PublishUpload` copy and prevents a renderer from
+overwriting pixels that the render thread or GPU still owns.
+
+- D3D11, OpenGL, and Metal preallocate three tightly packed CPU buffers. Their
+  upload calls consume a stable slot synchronously, so it becomes free when the
+  API call returns. OpenGL's BGRA-to-RGBA scratch conversion remains necessary
+  on devices without a BGRA extension.
+- D3D12 renders directly into one of the three persistently mapped, row-pitch
+  aligned upload regions. A region remains `Uploading` until Unity's frame
+  fence completes its recorded value. Texture destruction waits for the last
+  referenced frame-fence value before unmapping the upload resource.
+- Vulkan renders directly into exactly three persistently mapped transfer
+  buffers. Non-coherent allocations are flushed before command recording, and
+  Unity's `safeFrameNumber` is the only signal that returns an uploading slot
+  to `Free`.
+- Managed `Texture2D.Apply` fallback and WebGL still render into their external
+  Unity-owned buffers. They do not allocate or publish native pool slots.
+
+When all slots are GPU-owned, a frame is skipped instead of allocating or
+blocking. When multiple completed frames are ready, the newest is uploaded and
+older ready frames are coalesced. The queue tail clears `uploadQueued` and then
+rechecks the published version, closing the former lost-wakeup window. Registry
+removal first prevents new lookups, then waits for any active upload before
+resetting backend resources.
+
 ## Scope and snapshot
 
 This document describes the implementation on the canonical `dev` branch as
@@ -333,50 +363,25 @@ longer has a known sampled-texture update failure.
 
 ### Staging-buffer ownership and optimized fix
 
-The native upload pipeline currently copies each completed rlottie frame into
-one reusable `InstanceState::stagingBuffer`. `PerformUploadFor()` copies the
-`UploadContext` while holding `uploadMutex`, but the context retains a pointer
-into that vector after the lock is released. A concurrently completed render
-can resize or overwrite the vector while D3D11, D3D12, OpenGL, or Metal reads
-it. Vulkan happens to lock again while copying into its mapped buffer, but that
-backend-specific behavior is not a valid general lifetime guarantee.
+The optimized three-slot design described by the original audit is now the
+implementation. The intermediate two-slot mailbox was intentionally skipped.
+Native `lottie_render_data` temporarily redirects its surface to an acquired
+slot and restores the managed pointer at publication, preserving the existing
+ABI and the managed/WebGL external-buffer behavior.
 
-Two independent design reviews reached the same phased recommendation:
+The pool is bounded: it replaces an older `Ready` frame when possible and skips
+a render when all three slots are `Rendering` or `Uploading`. It never grows in
+response to backpressure. Generic native paths allocate all three frame buffers
+together on first use; D3D12 and Vulkan use the backend's three mapped regions
+directly, eliminating both the publication copy and their former second copy.
 
-1. Replace the single vector with a two-slot, preallocated staging mailbox.
-   Each slot owns its byte storage, dimensions, stride, version, and state
-   (`Free`, `Ready`, or `Uploading`). Publication writes only a non-uploading
-   slot and may replace an older ready frame. The render thread claims the
-   newest ready slot, releases the mutex, uploads from its stable address, and
-   then frees the slot.
-2. This first phase retains exactly the one full-frame `memcpy` already present
-   in `PublishUpload()`. It adds no per-frame allocation and no additional copy
-   bandwidth. Its cost is one extra persistent frame-sized CPU allocation per
-   active animation: about 1 MiB at 512 x 512, 4 MiB at 1024 x 1024, and
-   7.9 MiB at 1920 x 1080 for four-byte pixels.
-3. The optimized end state is a native-owned three-slot render pool with
-   `Free`, `Rendering`, `Ready`, and `Uploading` ownership. rlottie renders
-   directly into an acquired slot; async completion publishes that slot and the
-   render callback uploads it. This removes the current publication copy. Three
-   slots permit one render, one ready frame, and one upload concurrently.
-
-The direct render pool requires a native API and lifecycle change because the
-current `lottie_render_data` exposes one persistent managed pointer and async
-surfaces capture it. Managed upload and WebGL should retain their external
-buffer behavior. Native async rendering can report backpressure when every slot
-is occupied; synchronous `DrawOneFrame` should wait for a slot unless its public
-contract is deliberately changed to allow frame skipping.
-
-Holding `uploadMutex` throughout a backend upload was rejected: it blocks frame
-publication on graphics work and conflicts with Vulkan's current nested staging
-lock. Copying into a local vector or `shared_ptr` for every upload is safe but
-adds the extra full-frame copy and allocation churn that the mailbox avoids.
-Lock-free pointer exchange still requires reclamation or hazard ownership and
-does not improve on fixed slots here.
+No pool mutex is held during backend upload. Ownership prevents publication or
+rendering from touching the selected slot until synchronous consumption ends or
+the explicit API's completion signal releases it.
 
 ### Related correctness work
 
-The mailbox change should be implemented together with these adjacent fixes:
+The pool change includes these adjacent fixes:
 
 - close the upload-queue lost-wakeup window by rechecking for a newer ready
   version after an upload clears its queued flag and requeueing when necessary;
@@ -385,11 +390,11 @@ The mailbox change should be implemented together with these adjacent fixes:
 - protect publication and removal with instance lifetime ownership. The current
   registry and upload queue pass raw animation/state pointers, while removal
   can reset and erase state without acquiring the upload lifetime lock;
-- audit D3D12 upload-ring reuse separately. CPU mailbox ownership does not prove
-  that a mapped D3D12 upload slot is no longer referenced by the GPU; and
-- avoid retaining `GetRawTextureData()` views for native paths in the direct
-  render-pool design. Unity documents that stored views can become invalid when
-  texture storage changes.
+- D3D12 mapped-region reuse is gated by Unity's frame fence, and Vulkan mapped
+  buffer reuse is gated by `safeFrameNumber`;
+- plugin-owned native texture paths no longer allocate a managed frame buffer.
+  Unity-owned OpenGL/Vulkan paths retain their raw-data view only for live
+  fallback continuity, but native rendering redirects away from it.
 
 ### Additional improvements and validation
 
