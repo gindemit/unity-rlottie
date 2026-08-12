@@ -1,6 +1,11 @@
 # CMakeList.txt : CMake project for LottiePlugin
 cmake_minimum_required (VERSION 3.16)
 
+# rlottie still declares compatibility with CMake 3.3. CMake 4 removed
+# compatibility with policy versions older than 3.5, so provide the minimum
+# policy version while the dependency is configured.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
 project(LottiePlugin)
 

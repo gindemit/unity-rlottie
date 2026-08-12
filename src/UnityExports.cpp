@@ -29,6 +29,10 @@
 #include "OpenGLBackend.h"
 #endif
 
+#if !defined(__APPLE__) && !defined(_WIN32) && !defined(__ANDROID__)
+#include "OpenGLBackend.h"
+#endif
+
 // Render event callback - called on the render thread
 static void UNITY_INTERFACE_API OnRenderEvent(int /*eventID*/)
 {
@@ -183,7 +187,7 @@ EXPORT_API void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int dev
 
         SetCurrentRenderer(Renderer::Unknown);
 
-#if defined(__ANDROID__) || defined(_WIN32)
+#if !defined(__APPLE__)
         ResetGLExtensionState();
 #endif
 

@@ -21,4 +21,15 @@ RLottieSmoke.exe -lottieBenchmarkMatrix -lottieBenchmarkInstances 10 -lottieBenc
 
 Omit `-lottieBenchmarkUncapped` when the observed frame metric should include the player's configured VSync/frame cap. On iOS, use the in-scene controls and retrieve the logged summary or CSV from the app container.
 
-The existing `RLottie.CI.BuildMatrix.Build` method accepts `-ciTarget Windows64` or `-ciTarget iOS`. Add `-ciDevelopment true -ciAutoconnectProfiler true` to produce a development player that connects to the Unity Profiler and exposes the benchmark markers.
+The existing `RLottie.CI.BuildMatrix.Build` method accepts Windows, Linux,
+Android, WebGL, and iOS targets. Add `-ciDevelopment true
+-ciAutoconnectProfiler true` to produce a development player that connects to
+the Unity Profiler and exposes the benchmark markers.
+
+Android release players accept benchmark options through the
+`lottieBenchmarkArguments` activity intent extra. The repository runner builds,
+installs, executes, cools down between, and pulls CSV files sequentially:
+
+```powershell
+scripts\benchmarks\run-android-performance-matrix.ps1
+```
