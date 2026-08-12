@@ -9,6 +9,9 @@
 #include "TextureBackend.h"
 #include "UnityIntegration.h"
 #include "VulkanBackend.h"
+#if !defined(__APPLE__)
+#include "OpenGLBackend.h"
+#endif
 #endif
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
@@ -492,6 +495,33 @@ extern "C"
     EXPORT_API int32_t lottie_is_vulkan_upload_available(lottie_animation_wrapper* animation)
     {
         return IsVulkanUploadAvailable(animation) ? 1 : 0;
+    }
+
+    EXPORT_API int32_t lottie_register_unity_opengl_texture(
+        lottie_animation_wrapper* animation,
+        void* native_texture,
+        int width,
+        int height)
+    {
+#if !defined(__APPLE__)
+        return RegisterUnityTextureOpenGL(animation, native_texture, width, height) ? 1 : 0;
+#else
+        (void)animation;
+        (void)native_texture;
+        (void)width;
+        (void)height;
+        return 0;
+#endif
+    }
+
+    EXPORT_API int32_t lottie_is_opengl_upload_available(lottie_animation_wrapper* animation)
+    {
+#if !defined(__APPLE__)
+        return IsOpenGLUploadAvailable(animation) ? 1 : 0;
+#else
+        (void)animation;
+        return 0;
+#endif
     }
 #endif // !defined(__EMSCRIPTEN__)
 }

@@ -20,9 +20,15 @@ void ResetGLExtensionState();
 bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
 void UploadOpenGL(InstanceState* state, const UploadContext& ctx);
 void ResetTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state);
+bool RegisterUnityTextureOpenGL(
+    lottie_animation_wrapper* animation,
+    void* nativeTexture,
+    int width,
+    int height);
+bool IsOpenGLUploadAvailable(lottie_animation_wrapper* animation);
 
 // OpenGL error checking helper
-void CheckGLError(lottie_animation_wrapper* animation, const char* operation);
+bool CheckGLError(lottie_animation_wrapper* animation, const char* operation);
 
 #endif // !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
 
