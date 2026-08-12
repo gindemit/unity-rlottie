@@ -110,7 +110,6 @@ namespace LottiePlugin
         private bool _openGLReregisterAttempted;
         private static bool sVulkanNativeUploadLogged;
         private static bool sVulkanFallbackLogged;
-        private static bool sVulkanLargeTextureFallbackLogged;
         private static bool sOpenGLNativeUploadLogged;
         private static bool sOpenGLFallbackLogged;
         private float _timeSinceLastRenderCall;

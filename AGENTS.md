@@ -7,6 +7,12 @@
 - Do not commit, merge, cherry-pick, push, or otherwise modify `main`. Only touch `main` when the user explicitly overrides this rule in the current request.
 - Use `dev` as the source branch when propagating shared changes into the Unity-version and render-pipeline branches. Do not use `main` as the propagation source.
 - Keep version- or pipeline-specific work on its matching `unity/**` branch or adjacent clone, while bringing shared fixes in from `dev`.
+- Every push to `dev` must be accompanied by synchronization to all `unity/**`
+  branches. Do not use a standalone `git push origin dev`; after committing on
+  `dev`, run `scripts/sync-unity-branches.ps1`. It pushes `dev`, merges it into
+  every adjacent Unity-version/render-pipeline clone, and pushes each target
+  branch. Treat any failed target as an incomplete push and resolve or report it
+  before finishing the task.
 - GitHub Actions for shared changes are expected to run from pushes to `dev`; verify the `dev` workflow run after pushing when CI status matters.
 
 ## Adjacent Unity clones
