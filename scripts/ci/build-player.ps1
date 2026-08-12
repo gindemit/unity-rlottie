@@ -8,7 +8,7 @@ param(
     [string] $Target = 'Windows64',
     [ValidateSet('Auto', 'BuiltIn', 'URP', 'HDRP')]
     [string] $Pipeline = 'Auto',
-    [ValidateSet('Auto', 'Vulkan')]
+    [ValidateSet('Auto', 'Vulkan', 'OpenGLES3')]
     [string] $GraphicsApi = 'Auto',
     [Parameter(Mandatory = $true)]
     [string] $OutputPath,
@@ -44,9 +44,12 @@ $arguments = @(
     '-logFile', $LogFile
 )
 
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+$process = Start-Process -FilePath $Unity -ArgumentList $arguments -PassThru -NoNewWindow
+$process.WaitForExit()
+$process.Refresh()
 $unityExitCode = $process.ExitCode
-if ($unityExitCode -ne 0) {
+$successMarker = Select-String -LiteralPath $LogFile -SimpleMatch 'RLottie CI result: Succeeded' -Quiet -ErrorAction SilentlyContinue
+if (($null -ne $unityExitCode -and $unityExitCode -ne 0) -or -not $successMarker) {
     Get-Content -LiteralPath $LogFile -Tail 200 -ErrorAction SilentlyContinue
     throw "Unity build failed with exit code $unityExitCode. See $LogFile"
 }
