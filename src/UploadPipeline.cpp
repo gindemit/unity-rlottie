@@ -3,9 +3,22 @@
 #include "TextureBackend.h"
 #include "RendererCommon.h"
 #include "LottieLogger.h"
-#include <cstring>
+#include "UploadQueue.h"
 
 #if !defined(__EMSCRIPTEN__)
+
+namespace
+{
+void FinishQueueTurn(lottie_animation_wrapper* animation, InstanceState* state)
+{
+    state->uploadQueued.store(false, std::memory_order_release);
+    if (state->uploadVersion.load(std::memory_order_acquire) >
+        state->uploadedVersion.load(std::memory_order_acquire))
+    {
+        EnqueueUpload(animation);
+    }
+}
+}
 
 void PerformUploadFor(lottie_animation_wrapper* animation)
 {
@@ -15,50 +28,62 @@ void PerformUploadFor(lottie_animation_wrapper* animation)
         return;
     }
 
-    Renderer renderer = GetCurrentRenderer();
-    LottieLogInfo(animation, "[Lottie] PerformUploadFor: renderer=%d", (int)renderer);
-
     InstanceState* state = nullptr;
     std::unique_lock<std::mutex> stateLifetimeLock;
     if (!LockStateForUpload(animation, state, stateLifetimeLock))
     {
-        LottieLogWarning(animation, "[Lottie] PerformUploadFor: state is null");
         return;
     }
 
-    const uint64_t requested = state->requestedVersion.load(std::memory_order_acquire);
-    if (requested == 0 || requested == state->uploadedVersion)
-    {
-        LottieLogInfo(animation, "[Lottie] PerformUploadFor: no new data to upload");
-        state->uploadQueued.store(false, std::memory_order_release);
-        return;
-    }
+    Renderer renderer = GetCurrentRenderer();
+    LottieLogInfo(animation, "[Lottie] PerformUploadFor: renderer=%d", (int)renderer);
+    BeginUploadEventForRenderer(state);
 
     UploadContext ctx;
+    uint64_t requested = 0;
+    if (!AcquireNewestReadySlot(state, ctx, requested))
     {
-        std::lock_guard<std::mutex> lock(state->uploadMutex);
-        ctx = state->uploadCtx;
+        LottieLogInfo(animation, "[Lottie] PerformUploadFor: no new data to upload");
+        state->uploadedVersion.store(
+            state->uploadVersion.load(std::memory_order_acquire),
+            std::memory_order_release);
+        FinishQueueTurn(animation, state);
+        return;
     }
 
     if (ctx.data == nullptr)
     {
         LottieLogWarning(animation, "[Lottie] PerformUploadFor: upload context data is null");
-        state->uploadQueued.store(false, std::memory_order_release);
+        ReleaseUploadSlot(state, ctx.slotIndex);
+        state->uploadedVersion.store(requested, std::memory_order_release);
+        FinishQueueTurn(animation, state);
         return;
     }
 
     if (!EnsureTextureForRenderer(animation, state, static_cast<int>(ctx.width), static_cast<int>(ctx.height)))
     {
         LottieLogError(animation, "[Lottie] PerformUploadFor: EnsureTexture failed");
-        state->uploadQueued.store(false, std::memory_order_release);
+        ReleaseUploadSlot(state, ctx.slotIndex);
+        state->uploadedVersion.store(requested, std::memory_order_release);
+        FinishQueueTurn(animation, state);
         return;
     }
 
     LottieLogInfo(animation, "[Lottie] PerformUploadFor: uploading texture data");
     UploadForRenderer(state, ctx);
 
-    state->uploadedVersion = requested;
-    state->uploadQueued.store(false, std::memory_order_release);
+    // D3D12 and Vulkan keep Uploading ownership until their frame completion
+    // signal says mapped memory is safe. Immediate APIs have consumed the CPU
+    // pointer before returning.
+    if (renderer != Renderer::D3D12 && renderer != Renderer::Vulkan)
+    {
+        ReleaseUploadSlot(state, ctx.slotIndex);
+    }
+
+    state->uploadedVersion.store(requested, std::memory_order_release);
+    // Close the clear-vs-publish lost-wakeup window. A publisher racing the
+    // upload tail either observes uploadQueued=true, or is re-enqueued here.
+    FinishQueueTurn(animation, state);
     LottieLogInfo(animation, "[Lottie] PerformUploadFor: upload completed successfully");
 }
 
@@ -70,38 +95,8 @@ void PublishUpload(lottie_animation_wrapper* animation, const lottie_render_data
         return;
     }
 
-    InstanceState* state = GetState(animation);
-    if (state == nullptr)
-    {
-        LottieLogWarning(animation, "[Lottie] PublishUpload: could not get state");
-        return;
-    }
-
-    // Calculate buffer size
-    size_t bufferSize = static_cast<size_t>(render_data->bytesPerLine) * render_data->height;
-    const uint8_t* srcData = reinterpret_cast<const uint8_t*>(render_data->buffer);
-
-    {
-        std::lock_guard<std::mutex> lock(state->uploadMutex);
-        
-        // Resize staging buffer if needed and copy the pixel data
-        // This creates an owned copy so rlottie can start rendering the next frame
-        // without corrupting the data we're about to upload to the GPU
-        if (state->stagingBuffer.size() != bufferSize)
-        {
-            state->stagingBuffer.resize(bufferSize);
-        }
-        std::memcpy(state->stagingBuffer.data(), srcData, bufferSize);
-        
-        // Update upload context to point to our staging buffer copy
-        state->uploadCtx.data = state->stagingBuffer.data();
-        state->uploadCtx.width = render_data->width;
-        state->uploadCtx.height = render_data->height;
-        state->uploadCtx.stride = render_data->bytesPerLine;
-    }
-
-    state->uploadVersion.fetch_add(1, std::memory_order_release);
-    LottieLogInfo(animation, "[Lottie] PublishUpload: data copied to staging buffer, version incremented");
+    PublishRenderSlot(animation, const_cast<lottie_render_data*>(render_data));
+    LottieLogInfo(animation, "[Lottie] PublishUpload: render slot published without a frame copy");
 }
 
 #endif // !defined(__EMSCRIPTEN__)
