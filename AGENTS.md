@@ -1,5 +1,14 @@
 # Unity RLottie Plugin
 
+## Branch policy
+
+- Treat `dev` as the canonical integration branch for all shared development.
+- Prefer starting work from `dev`, commit completed shared changes to `dev`, and push to `origin/dev`.
+- Do not commit, merge, cherry-pick, push, or otherwise modify `main`. Only touch `main` when the user explicitly overrides this rule in the current request.
+- Use `dev` as the source branch when propagating shared changes into the Unity-version and render-pipeline branches. Do not use `main` as the propagation source.
+- Keep version- or pipeline-specific work on its matching `unity/**` branch or adjacent clone, while bringing shared fixes in from `dev`.
+- GitHub Actions for shared changes are expected to run from pushes to `dev`; verify the `dev` workflow run after pushing when CI status matters.
+
 ## Adjacent Unity clones
 
 The parent directory contains separate repository clones for supported Unity versions and render pipelines. Prefer using the appropriate existing adjacent clone instead of creating temporary worktrees or switching this clone to a version/pipeline branch. Clone names follow `unity-rlottie-<version>`, `unity-rlottie-<version>-urp`, and `unity-rlottie-<version>-hdrp`; inspect the parent directory and use the newest installed version that matches the requested pipeline. Use this `unity-rlottie` clone for shared development work when no version/pipeline-specific clone is required.
