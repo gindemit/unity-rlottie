@@ -216,8 +216,12 @@ namespace RLottie.CI
 
             PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
             GraphicsDeviceType graphicsApi = isVulkan ? GraphicsDeviceType.Vulkan : GraphicsDeviceType.OpenGLES3;
-            PlayerSettings.SetGraphicsAPIs(target, new[] { graphicsApi });
-            Debug.Log("RLottie CI graphics API forced to " + graphicsApi + " for " + target + ".");
+            GraphicsDeviceType[] graphicsApis = isVulkan && target == BuildTarget.StandaloneLinux64
+                ? new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLCore }
+                : new[] { graphicsApi };
+            PlayerSettings.SetGraphicsAPIs(target, graphicsApis);
+            Debug.Log("RLottie CI graphics APIs configured as " + string.Join(", ", graphicsApis) +
+                " for " + target + ".");
             return state;
         }
 
