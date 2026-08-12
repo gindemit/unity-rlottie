@@ -392,6 +392,11 @@ namespace LottiePlugin
         private void RequestTextureUpload()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
+            // Do not let a one-shot render queue its only upload before the
+            // render-thread event pump exists. Continuous animations used to
+            // hide this startup race by naturally queueing another frame.
+            LottieUploadPump.EnsureInstance();
+
             if (_usesUnityOwnedOpenGLTexture)
             {
                 int uploadAvailable;
