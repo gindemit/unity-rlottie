@@ -89,5 +89,44 @@ namespace LottiePlugin.Tests.Runtime
             _animatedImage.DisposeLottieAnimation();
             Assert.IsNull(_animatedImage.LottieAnimation);
         }
+
+        [UnityTest]
+        public IEnumerator ManagedTextureUploadRendersAVisibleFrame()
+        {
+            LottieAnimation animation = LottieAnimation.LoadFromJsonData(
+                _lottieAnimation.text,
+                string.Empty,
+                64,
+                64,
+                new LottieAnimationOptions
+                {
+                    UseManagedTextureUpload = true
+                });
+
+            try
+            {
+                Assert.AreEqual(LottieTextureUploadBackend.ManagedTextureUpload, animation.TextureUploadBackend);
+                Assert.AreSame(animation.Texture, animation.OutputTexture);
+
+                animation.DrawOneFrame(1);
+                yield return null;
+
+                Color32[] pixels = animation.Texture.GetPixels32();
+                bool hasVisiblePixel = false;
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    if (pixels[i].a > 8)
+                    {
+                        hasVisiblePixel = true;
+                        break;
+                    }
+                }
+                Assert.IsTrue(hasVisiblePixel, "Managed texture upload produced a fully transparent frame.");
+            }
+            finally
+            {
+                animation.Dispose();
+            }
+        }
     }
 }

@@ -19,7 +19,7 @@ The synchronous and asynchronous draw paths make the same upload choice.
 | Linux Editor or Standalone | OpenGL Core | No when native OpenGL upload is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | Linux Editor or Standalone | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | macOS | Metal | No | Native external Metal texture and native upload |
-| macOS | OpenGL Core | Unsupported | The Apple native build implements Metal only; native texture creation fails instead of falling back to Apply |
+| macOS | OpenGL Core | Yes | No Apple OpenGL native backend; automatic managed-upload fallback |
 | iOS | Metal | No | Native external Metal texture and native upload |
 | Android | OpenGL ES 2 or 3 | No | Native external GL texture and render-thread upload |
 | Android | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
@@ -54,15 +54,10 @@ The relevant managed decisions are:
 In WebGL shader mode, Apply is called on the intermediate source `Texture2D`,
 not on the exposed output `RenderTexture`.
 
-`AnimatedButton` is a deliberate exception to the default matrix. Its
-`CreateOptions()` currently sets `UseManagedTextureUpload = true` for Vulkan,
-OpenGL Core, OpenGL ES 2, and OpenGL ES 3. Therefore it calls Apply on those
-APIs, while `AnimatedImage` leaves the option at its default `false` and uses
-the native path when available. The override was introduced after the button's
-single initial frame could be queued before the render-thread upload pump was
-ready; continuously playing `AnimatedImage` naturally queued later frames and
-did not exhibit the same symptom. D3D11, D3D12, and Metal buttons still use
-their native external-texture paths.
+`AnimatedButton` and `AnimatedImage` now make the same upload-path selection.
+The former `AnimatedButton` managed-upload override was removed after the
+render-thread pump was changed to initialize before the component queues its
+one-shot first frame. Both components use native upload when it is available.
 
 ## Unsupported, fallback-only, and currently failing APIs
 
@@ -70,7 +65,13 @@ Here, **unsupported** means the plugin has no native texture backend for the
 renderer reported by Unity. It does not mean that Unity itself cannot use that
 graphics API. `RendererCommon::ToRenderer()` currently recognizes only D3D11,
 D3D12, OpenGL Core, OpenGL ES 2/3, Metal, and Vulkan. Any other renderer is
-mapped to `Renderer::Unknown`, and native texture creation fails.
+mapped to `Renderer::Unknown`, and native texture creation returns no texture.
+
+Native texture creation and external-texture wrapping failures now fall back to
+a managed BGRA `Texture2D` instead of failing animation construction. This makes
+unsupported renderers and transient native initialization failures functional,
+but they use `Texture2D.Apply()` and emit a warning identifying the renderer or
+wrapper failure. It does not turn those renderers into native-upload backends.
 
 The following current Unity renderer values are therefore unsupported by this
 plugin:
@@ -83,7 +84,7 @@ plugin:
 | Xbox/GameCore | `kUnityGfxRendererGameCoreXboxOne`, `kUnityGfxRendererGameCoreXboxSeries` | Unsupported; no GameCore texture backend |
 | Nintendo Switch | `kUnityGfxRendererNvn` | Unsupported; no NVN texture backend |
 | Headless/batch mode | `kUnityGfxRendererNull` | No GPU texture backend; rendered-player validation is not available |
-| macOS | OpenGL Core | Unsupported by the Apple native build, which implements Metal only |
+| macOS | OpenGL Core | No native backend in the Apple build; managed-upload fallback remains functional |
 
 Legacy Direct3D 9, legacy desktop OpenGL, and PlayStation Vita GXM are removed
 from the bundled Unity native-plugin interface and are not targets.
@@ -327,3 +328,87 @@ The Vulkan-native path is complete only when:
 The remaining acceptance work is broader vendor, color-space, lifecycle, and
 desktop Vulkan coverage; the tested Unity 6000.5.3f1 Android configuration no
 longer has a known sampled-texture update failure.
+
+## Follow-up engineering audit
+
+### Staging-buffer ownership and optimized fix
+
+The native upload pipeline currently copies each completed rlottie frame into
+one reusable `InstanceState::stagingBuffer`. `PerformUploadFor()` copies the
+`UploadContext` while holding `uploadMutex`, but the context retains a pointer
+into that vector after the lock is released. A concurrently completed render
+can resize or overwrite the vector while D3D11, D3D12, OpenGL, or Metal reads
+it. Vulkan happens to lock again while copying into its mapped buffer, but that
+backend-specific behavior is not a valid general lifetime guarantee.
+
+Two independent design reviews reached the same phased recommendation:
+
+1. Replace the single vector with a two-slot, preallocated staging mailbox.
+   Each slot owns its byte storage, dimensions, stride, version, and state
+   (`Free`, `Ready`, or `Uploading`). Publication writes only a non-uploading
+   slot and may replace an older ready frame. The render thread claims the
+   newest ready slot, releases the mutex, uploads from its stable address, and
+   then frees the slot.
+2. This first phase retains exactly the one full-frame `memcpy` already present
+   in `PublishUpload()`. It adds no per-frame allocation and no additional copy
+   bandwidth. Its cost is one extra persistent frame-sized CPU allocation per
+   active animation: about 1 MiB at 512 x 512, 4 MiB at 1024 x 1024, and
+   7.9 MiB at 1920 x 1080 for four-byte pixels.
+3. The optimized end state is a native-owned three-slot render pool with
+   `Free`, `Rendering`, `Ready`, and `Uploading` ownership. rlottie renders
+   directly into an acquired slot; async completion publishes that slot and the
+   render callback uploads it. This removes the current publication copy. Three
+   slots permit one render, one ready frame, and one upload concurrently.
+
+The direct render pool requires a native API and lifecycle change because the
+current `lottie_render_data` exposes one persistent managed pointer and async
+surfaces capture it. Managed upload and WebGL should retain their external
+buffer behavior. Native async rendering can report backpressure when every slot
+is occupied; synchronous `DrawOneFrame` should wait for a slot unless its public
+contract is deliberately changed to allow frame skipping.
+
+Holding `uploadMutex` throughout a backend upload was rejected: it blocks frame
+publication on graphics work and conflicts with Vulkan's current nested staging
+lock. Copying into a local vector or `shared_ptr` for every upload is safe but
+adds the extra full-frame copy and allocation churn that the mailbox avoids.
+Lock-free pointer exchange still requires reclamation or hazard ownership and
+does not improve on fixed slots here.
+
+### Related correctness work
+
+The mailbox change should be implemented together with these adjacent fixes:
+
+- close the upload-queue lost-wakeup window by rechecking for a newer ready
+  version after an upload clears its queued flag and requeueing when necessary;
+- make `uploadedVersion` atomic or keep every version comparison and transition
+  under the mailbox mutex;
+- protect publication and removal with instance lifetime ownership. The current
+  registry and upload queue pass raw animation/state pointers, while removal
+  can reset and erase state without acquiring the upload lifetime lock;
+- audit D3D12 upload-ring reuse separately. CPU mailbox ownership does not prove
+  that a mapped D3D12 upload slot is no longer referenced by the GPU; and
+- avoid retaining `GetRawTextureData()` views for native paths in the direct
+  render-pool design. Unity documents that stored views can become invalid when
+  texture storage changes.
+
+### Additional improvements and validation
+
+- Evaluate `Texture.IncrementUpdateCount()` after Vulkan GPU-side writes, as is
+  already done for Unity-owned OpenGL textures. Validate immediate blits and
+  asynchronous readback before making it unconditional.
+- Prototype WebGL upload through Unity's custom texture-update callback or a
+  render-thread OpenGL ES `glTexSubImage2D` path. Unity's native rendering sample
+  supports WebGL texture updates, so `Apply()` is a current implementation
+  choice rather than necessarily a permanent platform limit. Keep the current
+  managed path until WebGL 1/2 browser validation demonstrates compatibility.
+- Add native mailbox stress tests covering concurrent publish/upload, newest-
+  frame coalescing, queue saturation, disposal during queued work, resize, and
+  graphics-device restart. Run them with native sanitizers where possible.
+- Expand rendered-player coverage to WebGL browsers, Apple Metal, multiple
+  Android Vulkan GPU vendors, Gamma and Linear color spaces, and the supported
+  Unity 2019.4, 2021.3, and Unity 6 branches.
+
+The Windows player produced by the normal CI matrix now has a mandatory hosted
+rendered-player smoke job which rejects managed upload for both `AnimatedImage`
+and `AnimatedButton`. The runtime tests also explicitly exercise the managed
+fallback and verify that it produces visible pixels.
