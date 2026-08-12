@@ -58,6 +58,58 @@ namespace
                      animation_wrapper->duration);
         return animation_wrapper;
     }
+
+#if !defined(__EMSCRIPTEN__)
+    // Android is built with -fno-exceptions. Clang defines __EXCEPTIONS only
+    // when catch syntax and stack unwinding are available; MSVC uses
+    // _CPPUNWIND. rlottie's future is expected not to throw on no-exception
+    // targets, while exception-enabled targets translate failures into the C
+    // ABI's integer error result.
+    bool ConsumeRenderFuture(lottie_render_data* renderData)
+    {
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+        try
+        {
+            renderData->render_future.get();
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+#else
+        renderData->render_future.get();
+        return true;
+#endif
+    }
+
+    bool CreateRenderFuture(
+        lottie_animation_wrapper* animation,
+        lottie_render_data* renderData,
+        uint32_t frameNumber,
+        bool keepAspectRatio)
+    {
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+        try
+        {
+#endif
+            rlottie::Surface surface(
+                renderData->buffer,
+                renderData->width,
+                renderData->height,
+                renderData->bytesPerLine);
+            renderData->render_future = animation->animation->render(
+                frameNumber, surface, keepAspectRatio);
+            return true;
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+        }
+        catch (...)
+        {
+            return false;
+        }
+#endif
+    }
+#endif
 }
 
 extern "C"
@@ -139,6 +191,14 @@ extern "C"
         {
             LottieLogError(animation_wrapper, "[WebGL] ERROR: animation_wrapper or animation is NULL!");
             return -1;
+        }
+#endif
+#if !defined(__EMSCRIPTEN__)
+        RenderSlotAcquireResult acquireResult = AcquireRenderSlot(animation_wrapper, render_data, /*waitForSlot=*/true);
+        if (acquireResult == RenderSlotAcquireResult::NativeBackpressure)
+        {
+            LottieLogWarning(animation_wrapper, "[Lottie] Sync render skipped: native render pool unavailable");
+            return 1;
         }
 #endif
         rlottie::Surface surface(
@@ -243,12 +303,23 @@ extern "C"
     {
         (void)convert_bgra_to_rgba; // Unused on non-WebGL platforms
         LottieLogInfo(animation_wrapper, "[Lottie] Creating async render future for frame %u", frame_number);
-        rlottie::Surface surface(
-            render_data->buffer,
-            render_data->width,
-            render_data->height,
-            render_data->bytesPerLine);
-        render_data->render_future = animation_wrapper->animation->render(frame_number, surface, keep_aspect_ratio);
+        render_data->render_skipped = false;
+        RenderSlotAcquireResult acquireResult = AcquireRenderSlot(animation_wrapper, render_data, /*waitForSlot=*/false);
+        if (acquireResult == RenderSlotAcquireResult::NativeBackpressure)
+        {
+            // Bounded backpressure: report a completed no-op to the managed
+            // async state machine instead of allocating or touching GPU-owned
+            // memory.
+            render_data->render_skipped = true;
+            LottieLogWarning(animation_wrapper, "[Lottie] Async render skipped: native render pool unavailable");
+            return 0;
+        }
+        if (!CreateRenderFuture(animation_wrapper, render_data, frame_number, keep_aspect_ratio))
+        {
+            CancelRenderSlot(render_data);
+            LottieLogError(animation_wrapper, "[Lottie] Failed to create async render future");
+            return -1;
+        }
         LottieLogInfo(animation_wrapper, "[Lottie] Async render future created");
         return 0;
     }
@@ -266,6 +337,13 @@ extern "C"
 
         *ready = 0;
 
+        if (render_data->render_skipped)
+        {
+            render_data->render_skipped = false;
+            *ready = 1;
+            return 0;
+        }
+
         if (!render_data->render_future.valid() ||
             render_data->render_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
         {
@@ -273,7 +351,12 @@ extern "C"
         }
 
         LottieLogInfo(animation_wrapper, "[Lottie] Render future ready, getting result");
-        render_data->render_future.get();
+        if (!ConsumeRenderFuture(render_data))
+        {
+            CancelRenderSlot(render_data);
+            LottieLogError(animation_wrapper, "[Lottie] Async render failed");
+            return -1;
+        }
 
         ProfBegin(GetProfilerMarkerPublish());
         PublishUpload(animation_wrapper, render_data);
@@ -289,8 +372,19 @@ extern "C"
         lottie_render_data* render_data)
     {
         LottieLogInfo(animation_wrapper, "[Lottie] Waiting for render future result");
+        if (render_data->render_skipped)
+        {
+            render_data->render_skipped = false;
+            return 0;
+        }
         ProfBegin(GetProfilerMarkerGetResult());
-        render_data->render_future.get();
+        if (!ConsumeRenderFuture(render_data))
+        {
+            CancelRenderSlot(render_data);
+            ProfEnd(GetProfilerMarkerGetResult());
+            LottieLogError(animation_wrapper, "[Lottie] Async render failed");
+            return -1;
+        }
         ProfEnd(GetProfilerMarkerGetResult());
 
         ProfBegin(GetProfilerMarkerPublish());
@@ -318,6 +412,28 @@ extern "C"
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data)
     {
         LottieLogInfo(nullptr, "[Lottie] Disposing render data");
+        if (render_data == nullptr || *render_data == nullptr)
+        {
+            return 0;
+        }
+#if !defined(__EMSCRIPTEN__)
+        lottie_render_data* data = *render_data;
+        if (data->render_future.valid())
+        {
+            if (!ConsumeRenderFuture(data))
+            {
+                CancelRenderSlot(data);
+                delete data;
+                *render_data = nullptr;
+                LottieLogError(nullptr, "[Lottie] Async render failed while disposing render data");
+                return -1;
+            }
+        }
+        if (data->render_pool_slot >= 0)
+        {
+            PublishRenderSlot(data->render_pool_owner, data);
+        }
+#endif
         delete (*render_data);
         *render_data = nullptr;
         return 0;
@@ -457,14 +573,19 @@ extern "C"
     EXPORT_API void lottie_destroy_texture(lottie_animation_wrapper* animation, void* /*tex*/)
     {
         LottieLogInfo(animation, "[Lottie] Destroying texture");
-        InstanceState* state = GetState(animation, /*create=*/false);
-        ResetTextureState(animation, state);
+        InstanceState* state = nullptr;
+        std::unique_lock<std::mutex> lifetimeLock;
+        if (LockStateForUpload(animation, state, lifetimeLock))
+        {
+            ResetTextureState(animation, state, /*lifetimeAlreadyLocked=*/true);
+        }
     }
 
     EXPORT_API void* lottie_get_native_texture_ptr(lottie_animation_wrapper* animation)
     {
-        InstanceState* state = GetState(animation, /*create=*/false);
-        return state != nullptr ? state->nativeTex : nullptr;
+        InstanceState* state = nullptr;
+        std::unique_lock<std::mutex> lifetimeLock;
+        return LockStateForUpload(animation, state, lifetimeLock) ? state->nativeTex : nullptr;
     }
 
     EXPORT_API void lottie_update_texture(lottie_animation_wrapper* animation)

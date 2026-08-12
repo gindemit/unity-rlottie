@@ -37,6 +37,8 @@ void SetD3D12Interfaces(IUnityGraphicsD3D12v8* v8, IUnityGraphicsD3D12v7* v7,
 bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
 void UploadD3D12(InstanceState* state, const UploadContext& ctx);
 void ResetTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state);
+bool PrepareRenderSlotD3D12(InstanceState* state, int slotIndex, uint32_t width, uint32_t height, uint8_t*& data, uint32_t& stride);
+void RefreshCompletedRenderSlotsD3D12(InstanceState* state);
 
 // D3D12 command list helpers
 void ReleaseOwnedD3D12CommandList();
