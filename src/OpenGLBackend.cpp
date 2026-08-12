@@ -296,13 +296,21 @@ bool RegisterUnityTextureOpenGL(
         return false;
     }
 
-    InstanceState* state = GetState(animation);
-    if (state == nullptr)
+    InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> lifetimeLock;
+    if (!LockStateForUpload(animation, state, lifetimeLock, /*create=*/true))
     {
         return false;
     }
-
-    std::lock_guard<std::mutex> lifetimeLock(state->lifetimeMutex);
+    WaitForActiveRenders(state);
+    {
+        std::lock_guard<std::mutex> poolLock(state->renderPoolMutex);
+        for (InstanceState::RenderSlot& slot : state->renderSlots)
+        {
+            slot = {};
+        }
+        state->renderPoolChanged.notify_all();
+    }
 
     // Linux passes a Unity-owned texture name. Registration deliberately does
     // not issue GL calls because it runs on Unity's scripting thread.
@@ -324,8 +332,9 @@ bool RegisterUnityTextureOpenGL(
 
 bool IsOpenGLUploadAvailable(lottie_animation_wrapper* animation)
 {
-    InstanceState* state = GetState(animation, /*create=*/false);
-    return state != nullptr && state->gl.unityOwnedTexture &&
+    InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> lifetimeLock;
+    return LockStateForUpload(animation, state, lifetimeLock) && state->gl.unityOwnedTexture &&
         state->gl.glTex != 0 && state->gl.uploadAvailable.load(std::memory_order_acquire);
 }
 
