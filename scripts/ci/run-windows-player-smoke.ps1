@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $LogFile,
     [string] $ResultFile,
-    [int] $RunSeconds = 20
+    [int] $RunSeconds = 20,
+    [switch] $RequireNativeUpload
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,6 +48,14 @@ $failedChecks = @($result.checks | Where-Object { -not $_.passed })
 if (-not $result.passed -or $failedChecks.Count -gt 0) {
     $details = $failedChecks | ForEach-Object { "$($_.name): $($_.details)" }
     throw "Windows rendered-player smoke test failed:`n$($details -join "`n")"
+}
+
+if ($RequireNativeUpload) {
+    $managedBackends = @('ManagedTextureUpload', 'WebGLManagedTextureUpload', 'WebGLShaderConversion')
+    if ($managedBackends -contains $result.animatedImageUploadBackend -or
+        $managedBackends -contains $result.animatedButtonUploadBackend) {
+        throw "Windows smoke test used a managed upload backend: AnimatedImage=$($result.animatedImageUploadBackend), AnimatedButton=$($result.animatedButtonUploadBackend)."
+    }
 }
 
 Write-Output "Windows rendered-player smoke test passed. Result: $ResultFile; log: $LogFile"
