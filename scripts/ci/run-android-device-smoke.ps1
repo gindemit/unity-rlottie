@@ -62,7 +62,18 @@ Invoke-Adb -Arguments @('shell', 'wm', 'dismiss-keyguard')
 Invoke-Adb -Arguments @('shell', 'am', 'force-stop', $Package)
 $remoteResult = "/sdcard/Android/data/$Package/files/lottie-smoke-result.json"
 & $Adb @adbPrefix shell rm -f $remoteResult | Out-Null
-Invoke-Adb -Arguments @('shell', 'monkey', '-p', $Package, '-c', 'android.intent.category.LAUNCHER', '1') | Out-Host
+$launcherActivity = (& $Adb @adbPrefix shell cmd package resolve-activity --brief `
+    -a android.intent.action.MAIN -c android.intent.category.LAUNCHER $Package 2>&1 | Select-Object -Last 1).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $launcherActivity.Contains('/')) {
+    throw "Could not resolve the Android launcher activity for ${Package}: $launcherActivity"
+}
+Invoke-Adb -Arguments @(
+    'shell', 'am', 'start', '-S',
+    '-n', $launcherActivity,
+    '-a', 'android.intent.action.MAIN',
+    '-c', 'android.intent.category.LAUNCHER',
+    '--ez', 'lottieSmoke', 'true'
+) | Out-Host
 
 $deadline = [DateTime]::UtcNow.AddSeconds($RunSeconds)
 do {

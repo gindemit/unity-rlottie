@@ -23,6 +23,7 @@ UnityVulkanInstance gInstance{};
 
 PFN_vkGetDeviceProcAddr pfnGetDeviceProcAddr = nullptr;
 PFN_vkGetPhysicalDeviceMemoryProperties pfnGetPhysicalDeviceMemoryProperties = nullptr;
+PFN_vkGetPhysicalDeviceProperties pfnGetPhysicalDeviceProperties = nullptr;
 PFN_vkCreateBuffer pfnCreateBuffer = nullptr;
 PFN_vkDestroyBuffer pfnDestroyBuffer = nullptr;
 PFN_vkGetBufferMemoryRequirements pfnGetBufferMemoryRequirements = nullptr;
@@ -35,6 +36,7 @@ PFN_vkFlushMappedMemoryRanges pfnFlushMappedMemoryRanges = nullptr;
 PFN_vkCmdCopyBufferToImage pfnCmdCopyBufferToImage = nullptr;
 bool gDeviceFunctionsReady = false;
 bool gUploadEventConfigured = false;
+bool gDeviceDetailsLogged = false;
 
 struct UploadSlot
 {
@@ -50,6 +52,7 @@ struct UploadSlot
 struct VulkanTextureData
 {
     std::vector<UploadSlot> slots;
+    bool copyConfigurationLogged = false;
 };
 
 void DestroySlot(UploadSlot& slot);
@@ -125,6 +128,22 @@ bool AccessTexture(void* texture, UnityVulkanImage* image)
         kUnityVulkanResourceAccess_PipelineBarrier, image);
 }
 
+bool FinishTextureUpload(void* texture)
+{
+    UnityVulkanImage image{};
+    if (gVulkanV2 != nullptr)
+    {
+        return gVulkanV2->AccessTexture(
+            texture, UnityVulkanWholeImage, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_ACCESS_SHADER_READ_BIT,
+            kUnityVulkanResourceAccess_PipelineBarrier, &image);
+    }
+    return gVulkan != nullptr && gVulkan->AccessTexture(
+        texture, UnityVulkanWholeImage, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_ACCESS_SHADER_READ_BIT,
+        kUnityVulkanResourceAccess_PipelineBarrier, &image);
+}
+
 bool GetRecordingState(UnityVulkanRecordingState* recording)
 {
     if (gVulkanV2 != nullptr)
@@ -159,7 +178,10 @@ bool EnsureDeviceFunctions()
         gInstance.getInstanceProcAddr(gInstance.instance, "vkGetDeviceProcAddr"));
     pfnGetPhysicalDeviceMemoryProperties = reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties>(
         gInstance.getInstanceProcAddr(gInstance.instance, "vkGetPhysicalDeviceMemoryProperties"));
-    if (pfnGetDeviceProcAddr == nullptr || pfnGetPhysicalDeviceMemoryProperties == nullptr)
+    pfnGetPhysicalDeviceProperties = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
+        gInstance.getInstanceProcAddr(gInstance.instance, "vkGetPhysicalDeviceProperties"));
+    if (pfnGetDeviceProcAddr == nullptr || pfnGetPhysicalDeviceMemoryProperties == nullptr ||
+        pfnGetPhysicalDeviceProperties == nullptr)
     {
         return false;
     }
@@ -180,6 +202,18 @@ bool EnsureDeviceFunctions()
         pfnFreeMemory != nullptr && pfnBindBufferMemory != nullptr && pfnMapMemory != nullptr &&
         pfnUnmapMemory != nullptr && pfnFlushMappedMemoryRanges != nullptr &&
         pfnCmdCopyBufferToImage != nullptr;
+    if (gDeviceFunctionsReady && !gDeviceDetailsLogged)
+    {
+        VkPhysicalDeviceProperties properties{};
+        pfnGetPhysicalDeviceProperties(gInstance.physicalDevice, &properties);
+        LottieLogInfo(nullptr,
+            "[Lottie] Vulkan upload device: name=%s vendor=0x%04x device=0x%04x driver=0x%08x api=%u.%u.%u maxImage2D=%u nonCoherentAtom=%llu",
+            properties.deviceName, properties.vendorID, properties.deviceID, properties.driverVersion,
+            VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion),
+            VK_VERSION_PATCH(properties.apiVersion), properties.limits.maxImageDimension2D,
+            static_cast<unsigned long long>(properties.limits.nonCoherentAtomSize));
+        gDeviceDetailsLogged = true;
+    }
     return gDeviceFunctionsReady;
 }
 
@@ -257,6 +291,12 @@ bool CreateUploadSlot(VkDeviceSize size, UploadSlot& slot)
 
     slot.size = requirements.size;
     slot.coherent = coherent;
+    const VkMemoryPropertyFlags memoryFlags = properties.memoryTypes[memoryType].propertyFlags;
+    LottieLogInfo(nullptr,
+        "[Lottie] Vulkan staging slot: requested=%llu allocated=%llu alignment=%llu memoryType=%u flags=0x%x coherent=%d",
+        static_cast<unsigned long long>(size), static_cast<unsigned long long>(requirements.size),
+        static_cast<unsigned long long>(requirements.alignment), memoryType,
+        static_cast<unsigned int>(memoryFlags), coherent ? 1 : 0);
     return true;
 }
 
@@ -306,9 +346,11 @@ void ShutdownVulkan()
     CollectRetiredTextures(0, true);
     gDeviceFunctionsReady = false;
     gUploadEventConfigured = false;
+    gDeviceDetailsLogged = false;
     gInstance = {};
     pfnGetDeviceProcAddr = nullptr;
     pfnGetPhysicalDeviceMemoryProperties = nullptr;
+    pfnGetPhysicalDeviceProperties = nullptr;
     pfnCreateBuffer = nullptr;
     pfnDestroyBuffer = nullptr;
     pfnGetBufferMemoryRequirements = nullptr;
@@ -460,6 +502,11 @@ void UploadVulkan(InstanceState* state, const UploadContext& ctx)
 
     {
         std::lock_guard<std::mutex> uploadLock(state->uploadMutex);
+        if (state->stagingBuffer.size() < static_cast<size_t>(bytes))
+        {
+            MarkUnavailable(state, "staging buffer size");
+            return;
+        }
         std::memcpy(slot->mapped, state->stagingBuffer.data(), static_cast<size_t>(bytes));
     }
     if (!slot->coherent)
@@ -478,16 +525,36 @@ void UploadVulkan(InstanceState* state, const UploadContext& ctx)
 
     VkBufferImageCopy copy{};
     copy.bufferOffset = 0;
-    copy.bufferRowLength = ctx.stride / 4;
-    copy.bufferImageHeight = ctx.height;
+    copy.bufferRowLength = ctx.stride == ctx.width * 4 ? 0 : ctx.stride / 4;
+    copy.bufferImageHeight = 0;
     copy.imageSubresource.aspectMask = image.aspect & VK_IMAGE_ASPECT_COLOR_BIT;
     copy.imageSubresource.mipLevel = 0;
     copy.imageSubresource.baseArrayLayer = 0;
     copy.imageSubresource.layerCount = 1;
     copy.imageExtent = {ctx.width, ctx.height, 1};
+    if (!data->copyConfigurationLogged)
+    {
+        LottieLogInfo(nullptr,
+            "[Lottie] Vulkan copy configuration: image=%ux%u stride=%u bytes=%llu format=%d usage=0x%x postLayout=%d postStage=0x%x postAccess=0x%x",
+            ctx.width, ctx.height, ctx.stride, static_cast<unsigned long long>(bytes),
+            static_cast<int>(image.format), static_cast<unsigned int>(image.usage),
+            static_cast<int>(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+            static_cast<unsigned int>(VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT),
+            static_cast<unsigned int>(VK_ACCESS_SHADER_READ_BIT));
+        data->copyConfigurationLogged = true;
+    }
     pfnCmdCopyBufferToImage(
         recording.commandBuffer, slot->buffer, image.image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+    // AccessTexture above transitions into TRANSFER_DST and makes earlier use
+    // visible to the copy. Finalize the access through Unity as well so it
+    // records the transfer-write -> shader-read dependency and keeps its
+    // resource-layout tracker consistent with the image's actual layout.
+    if (!FinishTextureUpload(state->nativeTex))
+    {
+        MarkUnavailable(state, "post-upload shader-read transition");
+        return;
+    }
     slot->lastUsedFrame = recording.currentFrameNumber;
     slot->used = true;
 }
