@@ -323,10 +323,13 @@ public sealed class LottieSmokeController : MonoBehaviour
         LottieTextureUploadBackend backend,
         PixelCapture capture)
     {
-        // Native upload backends can update Unity-owned textures outside Unity's
-        // normal upload path, so wait for the GPU before validating their pixels.
-        if (backend == LottieTextureUploadBackend.NativeVulkan ||
-            backend == LottieTextureUploadBackend.NativeOpenGL)
+        if (backend == LottieTextureUploadBackend.NativeOpenGL)
+        {
+            yield return CaptureTextureAsyncViaBlit(source, capture);
+            yield break;
+        }
+
+        if (backend == LottieTextureUploadBackend.NativeVulkan)
         {
             yield return CaptureTextureAsync(source, capture);
             yield break;
@@ -381,6 +384,63 @@ public sealed class LottieSmokeController : MonoBehaviour
             VisiblePixels = visiblePixels
         };
         capture.Succeeded = true;
+    }
+
+    private static IEnumerator CaptureTextureAsyncViaBlit(Texture source, PixelCapture capture)
+    {
+        if (source == null)
+        {
+            capture.Error = "OutputTexture is null.";
+            yield break;
+        }
+
+        RenderTexture temporary = RenderTexture.GetTemporary(
+            64,
+            64,
+            0,
+            RenderTextureFormat.ARGB32,
+            RenderTextureReadWrite.Linear);
+        try
+        {
+            Graphics.Blit(source, temporary);
+            AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(temporary, 0);
+            while (!request.done)
+            {
+                yield return null;
+            }
+            if (request.hasError)
+            {
+                capture.Error = "Async GPU render texture readback failed.";
+                yield break;
+            }
+
+            var pixels = request.GetData<Color32>();
+            ulong hash = 14695981039346656037UL;
+            int visiblePixels = 0;
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                Color32 pixel = pixels[i];
+                if (pixel.a > 8)
+                {
+                    visiblePixels++;
+                }
+                hash = HashByte(hash, pixel.r);
+                hash = HashByte(hash, pixel.g);
+                hash = HashByte(hash, pixel.b);
+                hash = HashByte(hash, pixel.a);
+            }
+
+            capture.Signature = new PixelSignature
+            {
+                Hash = hash.ToString("x16", CultureInfo.InvariantCulture),
+                VisiblePixels = visiblePixels
+            };
+            capture.Succeeded = true;
+        }
+        finally
+        {
+            RenderTexture.ReleaseTemporary(temporary);
+        }
     }
 
     private static bool TryCaptureManagedTexture(Texture2D texture, out PixelSignature signature, out string error)
