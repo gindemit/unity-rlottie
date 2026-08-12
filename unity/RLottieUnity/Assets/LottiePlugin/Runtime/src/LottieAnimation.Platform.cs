@@ -446,6 +446,9 @@ namespace LottiePlugin
 
                 _openGLReregisterAttempted = false;
                 NativeBridge.LottieUpdateTexture(_animationWrapperIntPtr);
+                // The render-thread plug-in updates this Unity-owned texture on
+                // the GPU, so notify Unity's texture caches without calling Apply.
+                Texture.IncrementUpdateCount();
                 return;
             }
 
