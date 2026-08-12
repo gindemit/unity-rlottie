@@ -62,6 +62,7 @@ namespace LottiePlugin
         }
 #endif
 
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
         private bool TryEnableNativeVulkanUpload()
         {
             try
@@ -112,7 +113,6 @@ namespace LottiePlugin
             Debug.LogWarning("[LottiePlugin] Linux OpenGL native upload unavailable; using Texture2D.Apply fallback");
         }
 
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
         private bool TryRegisterUnityOwnedTexture(uint width, uint height)
         {
             _nativeTexturePtr = Texture.GetNativeTexturePtr();
@@ -382,10 +382,11 @@ namespace LottiePlugin
             }
             else
             {
-                int bufferSize = (int)(width * height * sizeof(uint));
-                _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-                _ownsPixelData = true;
-                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                // Plugin-owned native textures render into the native three-slot
+                // pool. Do not retain an otherwise unused managed frame buffer.
+                _pixelData = default;
+                _ownsPixelData = false;
+                _lottieRenderData.buffer = null;
                 bool isDirect3D = IsDirect3DDevice(deviceType);
                 bool preferSrgbSampling = isDirect3D && QualitySettings.activeColorSpace == ColorSpace.Linear;
                 _nativeTexturePtr = NativeBridge.LottieCreateTexture(
