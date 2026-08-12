@@ -26,11 +26,13 @@ bool UsesNativeRenderPool(InstanceState* state)
         case Renderer::Vulkan:
             return state->vulkan.unityOwnedTexture &&
                 state->vulkan.uploadAvailable.load(std::memory_order_acquire);
+#if !defined(__APPLE__)
         case Renderer::OpenGL:
             // A deferred plugin-owned OpenGL texture starts with the dummy
             // pointer and becomes uploadable on the first render event.
             return state->nativeTex == reinterpret_cast<void*>(static_cast<uintptr_t>(kDeferredGLTexDummy)) ||
                 state->gl.uploadAvailable.load(std::memory_order_acquire);
+#endif
         case Renderer::D3D11:
         case Renderer::D3D12:
         case Renderer::Metal:
