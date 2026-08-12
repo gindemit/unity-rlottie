@@ -9,8 +9,8 @@ namespace LottiePlugin
         private static LottieUploadPump sInstance;
         private static IntPtr sRenderEventFunc = IntPtr.Zero;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void EnsureInstance()
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        internal static void EnsureInstance()
         {
             if (sInstance != null)
             {
@@ -43,7 +43,11 @@ namespace LottiePlugin
         {
             if (sRenderEventFunc == IntPtr.Zero)
             {
-                return;
+                sRenderEventFunc = NativeBridge.LottieGetRenderEventFunc();
+                if (sRenderEventFunc == IntPtr.Zero)
+                {
+                    return;
+                }
             }
 
             int budget = LottieScheduler.MaxUploadsPerFrame;
