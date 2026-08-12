@@ -2,17 +2,8 @@
 
 ## Scope and snapshot
 
-This document describes the implementation on `dev` as updated on 2026-08-11.
-The earlier branch comparison was made at commit
-`4dc22680668674a935d1902aeb0484362dff50b3` (`4dc2268`, "Rebuild Android
-plugins with Unity exports"). At that earlier snapshot:
-
-- the feature branch analyzed at the time and `origin/main` resolved to the
-  same commit;
-- therefore `main` contains every committed change reachable from that feature
-  branch at this snapshot; and
-- this is a point-in-time statement. The branches can diverge after either one
-  receives another commit.
+This document describes the implementation on the canonical `dev` branch as
+audited on 2026-08-12.
 
 In this document, **Apply** specifically means a call to `Texture2D.Apply()`.
 The synchronous and asynchronous draw paths make the same upload choice.
@@ -62,6 +53,16 @@ The relevant managed decisions are:
 
 In WebGL shader mode, Apply is called on the intermediate source `Texture2D`,
 not on the exposed output `RenderTexture`.
+
+`AnimatedButton` is a deliberate exception to the default matrix. Its
+`CreateOptions()` currently sets `UseManagedTextureUpload = true` for Vulkan,
+OpenGL Core, OpenGL ES 2, and OpenGL ES 3. Therefore it calls Apply on those
+APIs, while `AnimatedImage` leaves the option at its default `false` and uses
+the native path when available. The override was introduced after the button's
+single initial frame could be queued before the render-thread upload pump was
+ready; continuously playing `AnimatedImage` naturally queued later frames and
+did not exhibit the same symptom. D3D11, D3D12, and Metal buttons still use
+their native external-texture paths.
 
 ## Unsupported, fallback-only, and currently failing APIs
 
@@ -117,6 +118,13 @@ contents for this Unity-owned texture after a native Vulkan write. Validation
 now uses `AsyncGPUReadback` for `NativeVulkan` textures and waits for a changed
 GPU-visible signature. Built-in and URP both pass with distinct frame hashes;
 the native upload implementation did not require a fallback or backend change.
+
+A separate Mali-G76 issue affected textures at 1024 x 1024 and larger when
+they were minified. Unity had allocated a full mip chain, but the native Vulkan
+backend updates only mip level 0, so sampling could select stale lower mip
+levels. Unity-owned native textures now contain exactly one mip level. The
+temporary Mali-G76 managed-upload denylist for textures at or above 4 MiB has
+been removed because it predated and masked that fix.
 
 ## Vulkan without Apply: implementation status
 
@@ -286,6 +294,10 @@ Validation completed for this implementation:
   validation false negatives caused by immediate `Graphics.Blit`/`ReadPixels`
   capture of the native-written texture; asynchronous GPU readback observes
   changing frame hashes on both pipelines.
+- On 2026-08-12, Unity 6000.5.3f1 Built-in was revalidated on that Mali-G76 at
+  1024 x 1024 after removing the old 4 MiB denylist. The selected backend was
+  `NativeVulkan`; the sampled hash changed from `a7a119b46a06c987` to
+  `835277a42a36cd08`, and every rendered-player smoke check passed.
 
 Exercise both immediate and asynchronous rendering, multiple simultaneous
 animations, resize/recreation, pause/resume, disposal with queued uploads, and
@@ -312,6 +324,6 @@ The Vulkan-native path is complete only when:
 - unsupported Unity/device combinations fall back to the Apply path instead of
   returning a blank texture.
 
-The Unity 6000.5.3f1 Android result does not currently meet these acceptance
-criteria because animation state advances without a corresponding sampled
-texture update.
+The remaining acceptance work is broader vendor, color-space, lifecycle, and
+desktop Vulkan coverage; the tested Unity 6000.5.3f1 Android configuration no
+longer has a known sampled-texture update failure.
