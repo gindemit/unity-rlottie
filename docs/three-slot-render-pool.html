@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>unity-rlottie frame ownership &amp; the three-slot render pool</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0c10;
+      --panel: #11151c;
+      --panel-2: #171c25;
+      --line: #2a3240;
+      --text: #f2f4f7;
+      --muted: #a7b0bf;
+      --cyan: #62d9ff;
+      --mint: #78f0bd;
+      --amber: #ffc66d;
+      --rose: #ff858f;
+      --violet: #b9a5ff;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 80% 0%, rgba(98, 217, 255, .12), transparent 32rem),
+        radial-gradient(circle at 10% 35%, rgba(185, 165, 255, .08), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select { font: inherit; }
+    a { color: var(--cyan); }
+    code { color: #d6e6ff; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .hero { padding: 72px 0 42px; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: .16em; font-size: 12px; font-weight: 800; }
+    h1 { margin: 14px 0 18px; max-width: 930px; font-size: clamp(38px, 7vw, 78px); line-height: .98; letter-spacing: -.055em; }
+    h2 { margin: 0 0 10px; font-size: clamp(25px, 3vw, 38px); letter-spacing: -.035em; }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+    p { margin: 0 0 12px; }
+    .lede { max-width: 850px; color: #cbd2dc; font-size: clamp(17px, 2vw, 21px); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+    .chip { border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--muted); background: rgba(17, 21, 28, .72); }
+    .chip strong { color: var(--text); }
+    section { padding: 34px 0; }
+    .section-head { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 18px; }
+    .section-head p { color: var(--muted); max-width: 670px; }
+    .grid { display: grid; gap: 14px; }
+    .grid.three { grid-template-columns: repeat(3, 1fr); }
+    .grid.two { grid-template-columns: repeat(2, 1fr); }
+    .card { background: linear-gradient(145deg, rgba(23,28,37,.95), rgba(14,18,24,.95)); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: 0 18px 50px rgba(0,0,0,.16); }
+    .card p, .card li { color: var(--muted); }
+    .number { font: 800 42px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -.07em; color: var(--mint); }
+    .label { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    .callout { border-left: 3px solid var(--amber); background: rgba(255,198,109,.075); padding: 16px 18px; border-radius: 0 14px 14px 0; color: #e7d9bf; }
+    .callout strong { color: var(--amber); }
+    .toggle { display: inline-grid; grid-template-columns: 1fr 1fr; padding: 4px; background: #090b0f; border: 1px solid var(--line); border-radius: 12px; }
+    .toggle button { border: 0; border-radius: 9px; padding: 9px 16px; background: transparent; color: var(--muted); cursor: pointer; }
+    .toggle button.active { background: var(--cyan); color: #061018; font-weight: 800; }
+    .flow { display: grid; grid-template-columns: repeat(7, minmax(90px, 1fr)); gap: 8px; align-items: stretch; }
+    .node { position: relative; min-height: 120px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .node:not(:last-child)::after { content: "→"; position: absolute; right: -13px; top: 45%; z-index: 2; color: var(--cyan); font-weight: 900; }
+    .node b { display: block; margin-bottom: 6px; }
+    .node small { display: block; color: var(--muted); line-height: 1.35; }
+    .node.render { border-color: rgba(185,165,255,.5); }
+    .node.copy { border-color: rgba(255,133,143,.65); }
+    .node.own { border-color: rgba(120,240,189,.55); }
+    .node.gpu { border-color: rgba(98,217,255,.55); }
+    .copy-badge { display: inline-block; margin-top: 10px; padding: 3px 7px; border-radius: 7px; background: rgba(255,133,143,.14); color: var(--rose); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .state-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 14px; }
+    .state { padding: 11px; border: 1px solid var(--line); border-radius: 11px; text-align: center; background: #0c1016; }
+    .state:nth-child(1) { color: var(--muted); }
+    .state:nth-child(2) { color: var(--violet); }
+    .state:nth-child(3) { color: var(--mint); }
+    .state:nth-child(4) { color: var(--cyan); }
+    .calc { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+    .controls { display: grid; gap: 14px; }
+    label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+    input, select { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #0a0d12; color: var(--text); padding: 10px 11px; }
+    .dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .memory-bars { display: grid; gap: 16px; }
+    .metric-line { display: grid; grid-template-columns: 110px 1fr 100px; gap: 12px; align-items: center; }
+    .track { height: 18px; border-radius: 999px; background: #080a0d; overflow: hidden; border: 1px solid #232a35; }
+    .bar { height: 100%; width: 0; border-radius: inherit; transition: width .3s ease; }
+    .bar.current { background: linear-gradient(90deg, var(--violet), #7b65c9); }
+    .bar.proposed { background: linear-gradient(90deg, var(--mint), #3fbf91); }
+    .metric-value { text-align: right; font: 700 14px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .delta { margin-top: 18px; color: var(--muted); }
+    .delta strong { color: var(--text); }
+    .fine { color: var(--muted); font-size: 12px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; background: rgba(14,18,24,.9); }
+    th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: #cfd7e4; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; background: #141922; }
+    td { color: var(--muted); }
+    tr:last-child td { border-bottom: 0; }
+    td strong { color: var(--text); }
+    .tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 800; }
+    .tag.same { background: rgba(98,217,255,.12); color: var(--cyan); }
+    .tag.special { background: rgba(255,198,109,.12); color: var(--amber); }
+    .tag.none { background: rgba(167,176,191,.1); color: var(--muted); }
+    .steps { counter-reset: step; display: grid; gap: 10px; }
+    .step { display: grid; grid-template-columns: 38px 1fr; gap: 12px; align-items: start; }
+    .step::before { counter-increment: step; content: counter(step); width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); color: var(--cyan); font-weight: 800; }
+    .risk { color: var(--rose); }
+    .gain { color: var(--mint); }
+    footer { padding: 38px 0 70px; color: var(--muted); }
+    .hidden { display: none !important; }
+    @media (max-width: 900px) {
+      .grid.three, .grid.two, .calc { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .node { min-height: auto; }
+      .node:not(:last-child)::after { content: "↓"; right: 50%; top: auto; bottom: -18px; }
+      .section-head { align-items: start; flex-direction: column; }
+    }
+    @media (max-width: 560px) {
+      .wrap { width: min(100% - 20px, 1180px); }
+      .hero { padding-top: 46px; }
+      .card { padding: 16px; }
+      .state-row { grid-template-columns: repeat(2, 1fr); }
+      .metric-line { grid-template-columns: 82px 1fr; }
+      .metric-value { grid-column: 2; text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="eyebrow">Architecture explainer · dev snapshot · 12 Aug 2026</div>
+      <h1>One frame, too many owners.</h1>
+      <p class="lede">The three-slot render pool is an ownership protocol: rlottie renders directly into a slot that cannot be reused until the render thread has finished uploading it. It removes the current publication copy and makes overlap explicit.</p>
+      <div class="chips">
+        <span class="chip"><strong>Current:</strong> 1 render buffer + 1 unsafe staging buffer</span>
+        <span class="chip"><strong>Proposed:</strong> 3 stateful slots</span>
+        <span class="chip"><strong>Native paths:</strong> 1 fewer full-frame CPU copy</span>
+        <span class="chip"><strong>Managed/WebGL:</strong> stay on their existing model</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">The short answer</div><h2>What “three slots” buys us</h2></div>
+          <p>At peak overlap, one slot can be written by rlottie, one can hold the newest completed frame, and one can be owned by the render-thread upload.</p>
+        </div>
+        <div class="grid three">
+          <article class="card"><div class="number">0</div><div class="label">publication copies after the change</div><p>Completion changes slot state; it does not copy the pixels into a second CPU vector.</p></article>
+          <article class="card"><div class="number">3</div><div class="label">preallocated ownership slots</div><p>Enough for <code>Rendering</code>, <code>Ready</code>, and <code>Uploading</code> to coexist without sharing writable memory.</p></article>
+          <article class="card"><div class="number">+1F</div><div class="label">generic native-path CPU delta</div><p>D3D11, OpenGL, and Metal move from two frame-sized CPU buffers to three. D3D12/Vulkan can reuse mapped upload memory and differ.</p></article>
+        </div>
+        <div class="callout" style="margin-top:14px"><strong>Important:</strong> this is not the same as <code>Texture2D.Apply()</code>. “Apply the change” means adopting the render pool; <code>Apply()</code> is Unity’s managed upload route and remains the fallback.</div>
+      </div>
+    </section>
+
+    <section id="flow">
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Frame journey</div><h2>Current vs proposed</h2></div>
+          <div class="toggle" role="group" aria-label="Architecture view">
+            <button id="showCurrent" class="active" type="button">Current</button>
+            <button id="showProposed" type="button">Three-slot</button>
+          </div>
+        </div>
+
+        <div id="currentFlow" class="card">
+          <div class="flow">
+            <div class="node render"><b>Managed buffer</b><small>A persistent <code>NativeArray</code> or Unity raw texture view.</small></div>
+            <div class="node render"><b>rlottie renders</b><small>Sync or worker-thread render writes BGRA pixels.</small></div>
+            <div class="node copy"><b>PublishUpload</b><small>Copies the entire completed frame under <code>uploadMutex</code>.</small><span class="copy-badge">full-frame copy</span></div>
+            <div class="node own"><b>Single vector</b><small><code>stagingBuffer</code> is resized once, then overwritten by every publication.</small></div>
+            <div class="node gpu"><b>Render callback</b><small>Copies only the pointer under lock, then backend upload usually reads after unlock.</small></div>
+            <div class="node copy"><b>API transfer</b><small>D3D12/Vulkan copy again into mapped upload memory; other APIs consume the pointer.</small></div>
+            <div class="node gpu"><b>Sampled texture</b><small>Unity displays the latest GPU-visible frame.</small></div>
+          </div>
+          <p class="fine" style="margin-top:14px">The race: publication may overwrite or resize the single vector while D3D11, OpenGL, or Metal is reading it. Vulkan re-locks for its copy, but that local behavior does not repair the shared design.</p>
+        </div>
+
+        <div id="proposedFlow" class="card hidden">
+          <div class="flow" style="grid-template-columns: repeat(6, minmax(100px, 1fr))">
+            <div class="node own"><b>Acquire Free</b><small>Native code selects a slot and marks it <code>Rendering</code>.</small></div>
+            <div class="node render"><b>rlottie renders</b><small>The <code>Surface</code> points directly at the acquired slot.</small></div>
+            <div class="node own"><b>Publish state</b><small><code>Rendering → Ready</code>; no pixel copy.</small></div>
+            <div class="node own"><b>Claim newest</b><small>The callback marks the newest ready slot <code>Uploading</code>; stale ready work may be dropped.</small></div>
+            <div class="node gpu"><b>API transfer</b><small>Backend consumes stable slot memory. D3D12/Vulkan can use the mapped slot directly.</small></div>
+            <div class="node own"><b>Release</b><small><code>Uploading → Free</code> only when CPU/API/GPU ownership allows reuse.</small></div>
+          </div>
+          <div class="state-row"><div class="state">Free</div><div class="state">Rendering</div><div class="state">Ready</div><div class="state">Uploading</div></div>
+          <p class="fine" style="margin-top:14px">A slot never has two owners. GPU-backed D3D12/Vulkan slots also need fence or safe-frame retirement before returning to <code>Free</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="memory">
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Memory model</div><h2>Calculate the persistent frame storage</h2></div>
+          <p>Values below count frame-sized CPU-visible buffers and explicit upload heaps per active animation. The sampled GPU texture, allocator overhead, driver-private copies, mipmaps, and compressed animation data are excluded.</p>
+        </div>
+        <div class="calc">
+          <div class="card controls">
+            <label>Platform path
+              <select id="platform">
+                <option value="generic">D3D11 / OpenGL / Metal native</option>
+                <option value="d3d12">D3D12 native</option>
+                <option value="vulkan1">Vulkan native (1 current GPU slot)</option>
+                <option value="vulkan3">Vulkan native (3 current GPU slots)</option>
+                <option value="managed">Managed Apply fallback</option>
+                <option value="webgl">WebGL managed / shader</option>
+              </select>
+            </label>
+            <div class="dimensions">
+              <label>Width <input id="width" type="number" min="1" max="16384" value="1024"></label>
+              <label>Height <input id="height" type="number" min="1" max="16384" value="1024"></label>
+            </div>
+            <label>Active animations <input id="instances" type="number" min="1" max="10000" value="1"></label>
+            <label>D3D12 row alignment
+              <select id="alignment"><option value="256">256 bytes</option><option value="512">512 bytes</option></select>
+            </label>
+            <p class="fine">F = width × height × 4 bytes. D3D12 uses aligned row pitch; Vulkan allocation can exceed F due to device requirements.</p>
+          </div>
+          <div class="card">
+            <div class="memory-bars">
+              <div class="metric-line"><strong>Current</strong><div class="track"><div id="currentBar" class="bar current"></div></div><div id="currentValue" class="metric-value"></div></div>
+              <div class="metric-line"><strong>Three-slot</strong><div class="track"><div id="proposedBar" class="bar proposed"></div></div><div id="proposedValue" class="metric-value"></div></div>
+            </div>
+            <p id="delta" class="delta"></p>
+            <div id="formula" class="callout" style="margin-top:16px"></div>
+          </div>
+        </div>
+        <div class="grid three" style="margin-top:14px">
+          <div class="card"><h3>512 × 512</h3><p><strong>F = 1 MiB.</strong> Generic native: current 2 MiB → pool 3 MiB.</p></div>
+          <div class="card"><h3>1024 × 1024</h3><p><strong>F = 4 MiB.</strong> Generic native: current 8 MiB → pool 12 MiB.</p></div>
+          <div class="card"><h3>1920 × 1080</h3><p><strong>F = 7.91 MiB.</strong> Generic native: current 15.82 MiB → pool 23.73 MiB.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="platforms">
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Platform differences</div><h2>Same protocol, different storage</h2></div>
+          <p>The slot state machine should be shared. The memory backing and the point at which a slot becomes reusable must be backend-specific.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Path</th><th>Current upload</th><th>Best three-slot backing</th><th>Persistent CPU-visible memory*</th><th>Implementation impact</th></tr></thead>
+            <tbody>
+              <tr><td><strong>D3D11</strong><br>Windows</td><td>Single publication vector → map dynamic texture → row copies → unmap.</td><td>Three native byte buffers. Uploading slot remains stable through <code>Map/Unmap</code>.</td><td>2F → 3F <span class="tag special">+F</span></td><td>Shared pool plus D3D11 consumer. GPU/driver staging remains opaque.</td></tr>
+              <tr><td><strong>D3D12</strong><br>Windows</td><td>Single publication vector → one mapped upload heap split into 3 padded slots → command-list copy.</td><td>Render directly into the three mapped heap regions using the D3D12 row pitch.</td><td>2F + 3P → 3P <span class="tag same">−2F</span></td><td>Largest win, but each region must be fence-safe before rlottie reuses it. Current round-robin alone is not proof.</td></tr>
+              <tr><td><strong>OpenGL</strong><br>Windows/Linux/Android</td><td>Single vector → <code>glTexSubImage2D</code>. If BGRA is absent, another RGBA scratch buffer is used.</td><td>Three native byte buffers; upload-owned until the GL call has consumed the pointer.</td><td>2F → 3F <span class="tag special">+F</span><br><small>add F scratch when conversion is required</small></td><td>Common pool. Conversion should target slot-owned or persistent scratch memory without reintroducing overlap.</td></tr>
+              <tr><td><strong>Metal</strong><br>macOS/iOS</td><td>Single vector → <code>replaceRegion</code>; Metal handles storage synchronization.</td><td>Three native byte buffers; release after <code>replaceRegion</code> has consumed the bytes.</td><td>2F → 3F <span class="tag special">+F</span></td><td>Common pool with a simple Metal consumer. Driver-private transfer memory is not measurable here.</td></tr>
+              <tr><td><strong>Vulkan</strong><br>Windows/Linux/Android</td><td>Single vector → dynamically allocated mapped <code>VkBuffer</code> slots → <code>vkCmdCopyBufferToImage</code>. Slots retire by Unity safe-frame numbers.</td><td>Exactly three mapped Vulkan buffers used directly as rlottie surfaces and upload sources.</td><td>2F + N·V → 3V <span class="tag same">depends on N</span></td><td>Native async API must acquire a Vulkan slot before rendering. Preserve non-coherent flush and safe-frame retirement.</td></tr>
+              <tr><td><strong>Managed Apply</strong><br>fallback/forced</td><td>rlottie writes Unity raw texture memory → <code>Texture2D.Apply()</code>. Native publication currently also creates an unused F-sized vector.</td><td>No native pool. Keep Unity’s buffer; skip native publication for this route.</td><td>2F → F <span class="tag same">−F cleanup</span></td><td>Pass upload mode into native calls or use separate managed/native render entry points.</td></tr>
+              <tr><td><strong>WebGL</strong></td><td>Single-thread rlottie writes a Unity texture; <code>Apply()</code>, then optional shader blit.</td><td>Unchanged. Emscripten build excludes the native queue and instance staging pipeline.</td><td>F → F <span class="tag none">unchanged</span></td><td>No pool in this phase. Shader mode also owns a GPU render target.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fine" style="margin-top:10px">*F = tightly packed frame bytes. P = D3D12 footprint bytes per slot. V = Vulkan allocation bytes per slot. Sampled textures are excluded. Vulkan’s current N is dynamic: <code>reserve(3)</code> reserves vector metadata capacity, not three GPU buffers.</p>
+      </div>
+    </section>
+
+    <section id="impact">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Engineering impact</div><h2>What must change</h2></div><p>This is an API and lifecycle refactor, not a local replacement of <code>stagingBuffer</code>.</p></div>
+        <div class="grid two">
+          <div class="card">
+            <h3>Shared core</h3>
+            <div class="steps">
+              <div class="step"><p>Add per-slot metadata: storage, dimensions, stride, version, and <code>Free / Rendering / Ready / Uploading</code>.</p></div>
+              <div class="step"><p>Add native acquire/start/complete semantics. Async futures must capture a slot, not the persistent managed pointer in today’s <code>lottie_render_data</code>.</p></div>
+              <div class="step"><p>Claim the newest ready slot on the render thread and coalesce older ready frames. Recheck after clearing the queued flag to close the lost-wakeup window.</p></div>
+              <div class="step"><p>Make instance removal wait for rendering/upload ownership; no raw queued pointer may outlive its registry entry.</p></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Behavioral contracts</h3>
+            <ul>
+              <li><strong>Async:</strong> if all slots are busy, return backpressure and let the scheduler try later; do not allocate a fourth slot per frame.</li>
+              <li><strong>Sync:</strong> wait for a slot to become free unless the public API explicitly adopts frame skipping.</li>
+              <li><strong>Newest frame wins:</strong> a ready frame may be replaced before upload, but rendering and uploading slots are immutable.</li>
+              <li><strong>Managed/WebGL:</strong> keep external Unity buffer behavior and do not retain <code>GetRawTextureData()</code> views for native pool paths.</li>
+              <li><strong>Resize/restart:</strong> create a new pool, retire the old one only after workers and GPU references are safe.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="grid three" style="margin-top:14px">
+          <div class="card"><h3 class="gain">Rendering upside</h3><p>Removes one F-byte copy per published native frame, lowers publication lock time, and enables render/upload overlap without data corruption.</p></div>
+          <div class="card"><h3>Expected visual result</h3><p>No intentional image-quality change. Same BGRA pixels, same sampled texture, and same frame-coalescing policy—only ownership and transfer staging change.</p></div>
+          <div class="card"><h3 class="risk">Main risks</h3><p>Backpressure deadlocks, stale slot reuse, D3D12/Vulkan GPU lifetime mistakes, resize/dispose races, and route confusion between native and managed upload.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="decision">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Recommended rollout</div><h2>Safety first, then zero-copy publication</h2></div></div>
+        <div class="grid two">
+          <article class="card"><h3>Phase 1 · two-slot mailbox</h3><p>Replace the unsafe single publication vector with two preallocated CPU slots. Keep the current one publication copy. This adds F persistent bytes to native paths, prevents overwrite during upload, and is the smallest correctness fix.</p><span class="tag special">recommended prerequisite</span></article>
+          <article class="card"><h3>Phase 2 · three-slot direct render pool</h3><p>Move slot acquisition ahead of rendering and point rlottie at slot storage. Remove the publication copy. Specialize D3D12/Vulkan storage so their mapped upload regions can be the render slots.</p><span class="tag same">performance end state</span></article>
+        </div>
+        <div class="callout" style="margin-top:14px"><strong>Why not jump blindly?</strong> The direct pool touches sync and async rendering, native ABI, scheduling, disposal, resize, graphics restart, every native backend, and GPU retirement. The two-slot mailbox isolates the existing correctness bug and provides stress tests that remain useful during phase 2.</div>
+      </div>
+    </section>
+
+    <section id="validation">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Acceptance</div><h2>How we know it works</h2></div></div>
+        <div class="grid three">
+          <div class="card"><h3>Concurrency</h3><p>Stress concurrent publish/upload, queue saturation, newest-frame coalescing, all-slots-busy backpressure, and the lost-wakeup boundary under ThreadSanitizer where possible.</p></div>
+          <div class="card"><h3>Lifecycle</h3><p>Dispose during render and queued upload, resize while busy, pause/resume, domain reload, graphics-device restart, and multiple simultaneous animations.</p></div>
+          <div class="card"><h3>GPU correctness</h3><p>D3D12 fences, Vulkan validation and safe frames, OpenGL without BGRA, Metal devices, Gamma/Linear color, and rendered-player pixel changes with managed fallback rejected on native smoke jobs.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">Source snapshot: <a href="texture-upload-platform-matrix.md">platform matrix and audit</a> · <a href="../src/UploadPipeline.cpp">current publication pipeline</a> · <a href="../src/InstanceRegistry.h">instance storage</a> · <a href="../src/VulkanBackend.cpp">Vulkan slots</a> · <a href="../src/D3D12Backend_win.cpp">D3D12 upload ring</a></div>
+  </footer>
+
+  <script>
+    const currentButton = document.getElementById('showCurrent');
+    const proposedButton = document.getElementById('showProposed');
+    const currentFlow = document.getElementById('currentFlow');
+    const proposedFlow = document.getElementById('proposedFlow');
+
+    function showFlow(proposed) {
+      currentFlow.classList.toggle('hidden', proposed);
+      proposedFlow.classList.toggle('hidden', !proposed);
+      currentButton.classList.toggle('active', !proposed);
+      proposedButton.classList.toggle('active', proposed);
+      currentButton.setAttribute('aria-pressed', String(!proposed));
+      proposedButton.setAttribute('aria-pressed', String(proposed));
+    }
+    currentButton.addEventListener('click', () => showFlow(false));
+    proposedButton.addEventListener('click', () => showFlow(true));
+    showFlow(false);
+
+    const fields = ['platform', 'width', 'height', 'instances', 'alignment'].map(id => document.getElementById(id));
+    const platform = fields[0];
+    const alignmentControl = fields[4];
+
+    function mib(bytes) { return `${(bytes / 1048576).toFixed(bytes < 10485760 ? 2 : 1)} MiB`; }
+    function updateMemory() {
+      const width = Math.max(1, Number(fields[1].value) || 1);
+      const height = Math.max(1, Number(fields[2].value) || 1);
+      const count = Math.max(1, Number(fields[3].value) || 1);
+      const alignment = Number(fields[4].value);
+      const F = width * height * 4;
+      const pitch = Math.ceil((width * 4) / alignment) * alignment;
+      const P = pitch * height;
+      let current = 2 * F;
+      let proposed = 3 * F;
+      let explanation = '<strong>Generic native:</strong> current render buffer + staging vector = 2F. Proposed three render slots = 3F.';
+      alignmentControl.disabled = platform.value !== 'd3d12';
+
+      if (platform.value === 'd3d12') {
+        current = 2 * F + 3 * P;
+        proposed = 3 * P;
+        explanation = `<strong>D3D12:</strong> current 2F plus a three-region upload heap (3P). Proposed renders directly into that heap, leaving 3P. P uses ${pitch}-byte row pitch × ${height} rows.`;
+      } else if (platform.value === 'vulkan1' || platform.value === 'vulkan3') {
+        const slots = platform.value === 'vulkan1' ? 1 : 3;
+        current = 2 * F + slots * F;
+        proposed = 3 * F;
+        explanation = `<strong>Vulkan estimate:</strong> current 2F plus ${slots} mapped slot${slots === 1 ? '' : 's'}. Proposed uses exactly three mapped render/upload slots. Real VkDeviceMemory allocation may be larger.`;
+      } else if (platform.value === 'managed') {
+        current = 2 * F;
+        proposed = F;
+        explanation = '<strong>Managed fallback:</strong> today native publication still creates an unused staging vector. The target route keeps only Unity raw texture memory and skips native publication; it does not use the render pool.';
+      } else if (platform.value === 'webgl') {
+        current = F;
+        proposed = F;
+        explanation = '<strong>WebGL:</strong> unchanged CPU frame storage. Shader mode additionally owns GPU texture/render-target storage, excluded from this calculator.';
+      }
+
+      current *= count;
+      proposed *= count;
+      const max = Math.max(current, proposed, 1);
+      document.getElementById('currentBar').style.width = `${current / max * 100}%`;
+      document.getElementById('proposedBar').style.width = `${proposed / max * 100}%`;
+      document.getElementById('currentValue').textContent = mib(current);
+      document.getElementById('proposedValue').textContent = mib(proposed);
+      const difference = proposed - current;
+      const word = difference > 0 ? 'increase' : difference < 0 ? 'decrease' : 'change';
+      document.getElementById('delta').innerHTML = `<strong>${mib(Math.abs(difference))} ${word}</strong> across ${count} active animation${count === 1 ? '' : 's'}; one tightly packed frame is ${mib(F)}.`;
+      document.getElementById('formula').innerHTML = explanation;
+    }
+    fields.forEach(field => field.addEventListener('input', updateMemory));
+    updateMemory();
+  </script>
+</body>
+</html>
