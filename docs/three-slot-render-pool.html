@@ -134,8 +134,8 @@
       <h1>One frame, too many owners.</h1>
       <p class="lede">The three-slot render pool is an ownership protocol: rlottie renders directly into a slot that cannot be reused until the render thread has finished uploading it. It removes the current publication copy and makes overlap explicit.</p>
       <div class="chips">
-        <span class="chip"><strong>Current:</strong> 1 render buffer + 1 unsafe staging buffer</span>
-        <span class="chip"><strong>Proposed:</strong> 3 stateful slots</span>
+        <span class="chip"><strong>Before:</strong> 1 render buffer + 1 unsafe staging buffer</span>
+        <span class="chip"><strong>Implemented:</strong> 3 stateful slots</span>
         <span class="chip"><strong>Native paths:</strong> 1 fewer full-frame CPU copy</span>
         <span class="chip"><strong>Managed/WebGL:</strong> stay on their existing model</span>
       </div>
@@ -161,10 +161,10 @@
     <section id="flow">
       <div class="wrap">
         <div class="section-head">
-          <div><div class="eyebrow">Frame journey</div><h2>Current vs proposed</h2></div>
+          <div><div class="eyebrow">Frame journey</div><h2>Before vs implemented</h2></div>
           <div class="toggle" role="group" aria-label="Architecture view">
-            <button id="showCurrent" class="active" type="button">Current</button>
-            <button id="showProposed" type="button">Three-slot</button>
+            <button id="showCurrent" class="active" type="button">Before</button>
+            <button id="showProposed" type="button">Implemented three-slot</button>
           </div>
         </div>
 
