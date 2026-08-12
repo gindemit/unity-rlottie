@@ -60,6 +60,8 @@ struct InstanceState
 #if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
         unsigned int glTex = 0;
         std::vector<uint8_t> rgbaScratch;
+        bool unityOwnedTexture = false;
+        std::atomic<bool> uploadAvailable{false};
 #endif
     } gl;
 

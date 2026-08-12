@@ -188,12 +188,19 @@ namespace RLottie.CI
                 return default(GraphicsApiState);
             }
 
-            if (!string.Equals(requestedGraphicsApi, "Vulkan", StringComparison.OrdinalIgnoreCase))
+            bool isVulkan = string.Equals(requestedGraphicsApi, "Vulkan", StringComparison.OrdinalIgnoreCase);
+            bool isOpenGles3 = string.Equals(requestedGraphicsApi, "OpenGLES3", StringComparison.OrdinalIgnoreCase);
+            if (!isVulkan && !isOpenGles3)
             {
                 throw new ArgumentException("Unsupported -ciGraphicsApi value: " + requestedGraphicsApi);
             }
 
-            if (target != BuildTarget.Android && target != BuildTarget.StandaloneLinux64 &&
+            if (isOpenGles3 && target != BuildTarget.Android)
+            {
+                throw new InvalidOperationException("OpenGLES3 is only supported by the Android CI target.");
+            }
+
+            if (isVulkan && target != BuildTarget.Android && target != BuildTarget.StandaloneLinux64 &&
                 target != BuildTarget.StandaloneWindows64)
             {
                 throw new InvalidOperationException("Vulkan is not supported by this CI target: " + target);
@@ -208,8 +215,13 @@ namespace RLottie.CI
             };
 
             PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
-            PlayerSettings.SetGraphicsAPIs(target, new[] { GraphicsDeviceType.Vulkan });
-            Debug.Log("RLottie CI graphics API forced to Vulkan for " + target + ".");
+            GraphicsDeviceType graphicsApi = isVulkan ? GraphicsDeviceType.Vulkan : GraphicsDeviceType.OpenGLES3;
+            GraphicsDeviceType[] graphicsApis = isVulkan && target == BuildTarget.StandaloneLinux64
+                ? new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLCore }
+                : new[] { graphicsApi };
+            PlayerSettings.SetGraphicsAPIs(target, graphicsApis);
+            Debug.Log("RLottie CI graphics APIs configured as " + string.Join(", ", graphicsApis) +
+                " for " + target + ".");
             return state;
         }
 

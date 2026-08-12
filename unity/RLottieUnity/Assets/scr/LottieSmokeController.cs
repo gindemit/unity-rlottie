@@ -7,6 +7,7 @@ using LottiePlugin;
 using LottiePlugin.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Rendering;
 
 [DefaultExecutionOrder(10000)]
 public sealed class LottieSmokeController : MonoBehaviour
@@ -14,6 +15,7 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const string ResultArgument = "-lottieSmokeResult";
     private const string QuitArgument = "-lottieSmokeQuit";
     private const string DefaultResultFileName = "lottie-smoke-result.json";
+    private const string AndroidRequestExtra = "lottieSmoke";
     private const float AnimationTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
 
@@ -45,6 +47,13 @@ public sealed class LottieSmokeController : MonoBehaviour
         public int VisiblePixels;
     }
 
+    private sealed class PixelCapture
+    {
+        public bool Succeeded;
+        public PixelSignature Signature;
+        public string Error;
+    }
+
     private SmokeResult _result;
     private string _resultPath;
     private bool _quitWhenComplete;
@@ -60,6 +69,10 @@ public sealed class LottieSmokeController : MonoBehaviour
         _resultPath = GetArgument(arguments, ResultArgument, string.Empty);
         if (string.IsNullOrEmpty(_resultPath) && Application.platform == RuntimePlatform.Android)
         {
+            if (!IsAndroidSmokeRequested())
+            {
+                yield break;
+            }
             _resultPath = Path.Combine(Application.persistentDataPath, DefaultResultFileName);
         }
         if (string.IsNullOrEmpty(_resultPath))
@@ -107,15 +120,16 @@ public sealed class LottieSmokeController : MonoBehaviour
         yield return new WaitForEndOfFrame();
 
         PixelSignature buttonInitial;
-        PixelSignature imageInitial;
         bool buttonInitialCaptured = TryCapture(animatedButton.Animation.OutputTexture, out buttonInitial, out string buttonCaptureError);
-        bool imageInitialCaptured = TryCapture(animatedImage.Animation.OutputTexture, out imageInitial, out string imageCaptureError);
-        if (!buttonInitialCaptured || !imageInitialCaptured)
+        var imageInitialCapture = new PixelCapture();
+        yield return CaptureTexture(imageAnimation.OutputTexture, imageAnimation.TextureUploadBackend, imageInitialCapture);
+        if (!buttonInitialCaptured || !imageInitialCapture.Succeeded)
         {
-            Record("initialPixelsReadable", false, buttonCaptureError ?? imageCaptureError);
+            Record("initialPixelsReadable", false, buttonCaptureError ?? imageInitialCapture.Error);
             Complete("Could not read the initial rendered textures.");
             yield break;
         }
+        PixelSignature imageInitial = imageInitialCapture.Signature;
 
         Record("animatedButtonFirstFrameVisible", buttonInitial.VisiblePixels > 4,
             DescribeSignature(buttonInitial));
@@ -130,8 +144,26 @@ public sealed class LottieSmokeController : MonoBehaviour
             yield return new WaitForEndOfFrame();
         }
 
-        PixelSignature imageLater;
-        bool imageCaptured = TryCapture(imageAnimation.OutputTexture, out imageLater, out string imageLaterError);
+        PixelSignature imageLater = default;
+        string imageLaterError = null;
+        bool imageCaptured = false;
+        float imagePixelDeadline = Time.realtimeSinceStartup + AnimationTimeoutSeconds;
+        do
+        {
+            var capture = new PixelCapture();
+            yield return CaptureTexture(imageAnimation.OutputTexture, imageAnimation.TextureUploadBackend, capture);
+            imageCaptured = capture.Succeeded;
+            imageLater = capture.Signature;
+            imageLaterError = capture.Error;
+            if (imageCaptured && imageInitial.Hash != imageLater.Hash)
+            {
+                break;
+            }
+
+            yield return new WaitForEndOfFrame();
+        }
+        while (Time.realtimeSinceStartup < imagePixelDeadline);
+
         Record("animatedImageAdvances", imageAnimation.CurrentFrame != imageStartFrame,
             "from=" + imageStartFrame.ToString(CultureInfo.InvariantCulture) +
             ", to=" + imageAnimation.CurrentFrame.ToString(CultureInfo.InvariantCulture));
@@ -286,6 +318,68 @@ public sealed class LottieSmokeController : MonoBehaviour
         }
     }
 
+    private static IEnumerator CaptureTexture(
+        Texture source,
+        LottieTextureUploadBackend backend,
+        PixelCapture capture)
+    {
+        if (backend == LottieTextureUploadBackend.NativeVulkan)
+        {
+            yield return CaptureTextureAsync(source, capture);
+            yield break;
+        }
+
+        capture.Succeeded = TryCapture(source, out capture.Signature, out capture.Error);
+    }
+
+    private static IEnumerator CaptureTextureAsync(Texture source, PixelCapture capture)
+    {
+        if (source == null)
+        {
+            capture.Error = "OutputTexture is null.";
+            yield break;
+        }
+
+        AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(source, 0, TextureFormat.RGBA32);
+        while (!request.done)
+        {
+            yield return null;
+        }
+        if (request.hasError)
+        {
+            capture.Error = "Async GPU texture readback failed.";
+            yield break;
+        }
+
+        var pixels = request.GetData<Color32>();
+        ulong hash = 14695981039346656037UL;
+        int visiblePixels = 0;
+        for (int sampleY = 0; sampleY < 64; sampleY++)
+        {
+            int y = sampleY * (source.height - 1) / 63;
+            for (int sampleX = 0; sampleX < 64; sampleX++)
+            {
+                int x = sampleX * (source.width - 1) / 63;
+                Color32 pixel = pixels[y * source.width + x];
+                if (pixel.a > 8)
+                {
+                    visiblePixels++;
+                }
+                hash = HashByte(hash, pixel.r);
+                hash = HashByte(hash, pixel.g);
+                hash = HashByte(hash, pixel.b);
+                hash = HashByte(hash, pixel.a);
+            }
+        }
+
+        capture.Signature = new PixelSignature
+        {
+            Hash = hash.ToString("x16", CultureInfo.InvariantCulture),
+            VisiblePixels = visiblePixels
+        };
+        capture.Succeeded = true;
+    }
+
     private static bool TryCaptureManagedTexture(Texture2D texture, out PixelSignature signature, out string error)
     {
         signature = default;
@@ -405,6 +499,26 @@ public sealed class LottieSmokeController : MonoBehaviour
                 return true;
             }
         }
+        return false;
+    }
+
+    private static bool IsAndroidSmokeRequested()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (AndroidJavaObject intent = activity.Call<AndroidJavaObject>("getIntent"))
+            {
+                return intent.Call<bool>("getBooleanExtra", AndroidRequestExtra, false);
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning("Could not read the Android smoke request: " + exception.Message);
+        }
+#endif
         return false;
     }
 

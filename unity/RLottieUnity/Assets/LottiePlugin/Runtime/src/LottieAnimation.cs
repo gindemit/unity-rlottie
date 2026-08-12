@@ -15,7 +15,8 @@ namespace LottiePlugin
         NativeVulkan,
         NativeExternalTexture,
         WebGLManagedTextureUpload,
-        WebGLShaderConversion
+        WebGLShaderConversion,
+        NativeOpenGL
     }
 
     public sealed class LottieAnimationOptions
@@ -103,10 +104,14 @@ namespace LottiePlugin
         private bool _ownsPixelData;
         private bool _usesCPURendering;
         private bool _usesUnityOwnedNativeTexture;
+        private bool _usesUnityOwnedOpenGLTexture;
         private bool _useManagedTextureUpload;
         private bool _vulkanReregisterAttempted;
+        private bool _openGLReregisterAttempted;
         private static bool sVulkanNativeUploadLogged;
         private static bool sVulkanFallbackLogged;
+        private static bool sOpenGLNativeUploadLogged;
+        private static bool sOpenGLFallbackLogged;
         private float _timeSinceLastRenderCall;
         private double _frameDelta;
         private double _clipFrameDelta;
