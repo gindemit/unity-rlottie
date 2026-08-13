@@ -103,17 +103,17 @@ bool EnsureTextureD3D11(lottie_animation_wrapper* animation, InstanceState* stat
     return true;
 }
 
-void UploadD3D11(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadD3D11(InstanceState* state, const UploadContext& ctx)
 {
     if (state == nullptr || gD3DContext == nullptr || state->d3d11.tex == nullptr || ctx.data == nullptr)
     {
-        return;
+        return UploadResult::Failed;
     }
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if (FAILED(gD3DContext->Map(state->d3d11.tex, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
     {
-        return;
+        return UploadResult::Retry;
     }
 
     const uint8_t* src = ctx.data;
@@ -124,6 +124,7 @@ void UploadD3D11(InstanceState* state, const UploadContext& ctx)
     }
 
     gD3DContext->Unmap(state->d3d11.tex, 0);
+    return UploadResult::Submitted;
 }
 
 #endif // defined(_WIN32)
