@@ -17,6 +17,7 @@
 namespace
 {
 constexpr int kLottieUploadEventId = 1;
+constexpr size_t kVulkanUploadSlotCount = 3;
 
 IUnityGraphicsVulkan* gVulkan = nullptr;
 IUnityGraphicsVulkanV2* gVulkanV2 = nullptr;
@@ -54,6 +55,8 @@ struct UploadSlot
 struct VulkanTextureData
 {
     std::vector<UploadSlot> slots;
+    size_t nextUploadSlot = 0;
+    uint64_t poolExhaustionCount = 0;
     bool copyConfigurationLogged = false;
 };
 
@@ -461,36 +464,12 @@ bool PrepareRenderSlotVulkan(
         return false;
     }
 
-    VulkanTextureData* backend = static_cast<VulkanTextureData*>(state->vulkan.backend);
-    if (backend == nullptr)
-    {
-        backend = new VulkanTextureData();
-        backend->slots.resize(InstanceState::kRenderSlotCount);
-        state->vulkan.backend = backend;
-    }
-    else if (backend->slots.size() != InstanceState::kRenderSlotCount)
-    {
-        MarkUnavailable(state, "render pool slot count");
-        return false;
-    }
-
+    // rlottie performs read/modify/write blending and must render into normal
+    // host-cacheable memory. Leave data null so InstanceRegistry supplies its
+    // persistent CPU mailbox storage. UploadVulkan performs one sequential copy
+    // into a separate safe-frame-tracked mapped upload slot.
     stride = width * 4;
-    const VkDeviceSize bytes = static_cast<VkDeviceSize>(stride) * height;
-    for (UploadSlot& poolSlot : backend->slots)
-    {
-        if (poolSlot.mapped == nullptr && !CreateUploadSlot(bytes, poolSlot))
-        {
-            MarkUnavailable(state, "render pool allocation");
-            return false;
-        }
-        if (poolSlot.size < bytes)
-        {
-            MarkUnavailable(state, "render pool dimensions changed");
-            return false;
-        }
-    }
-    UploadSlot& slot = backend->slots[slotIndex];
-    data = static_cast<uint8_t*>(slot.mapped);
+    data = nullptr;
     return true;
 }
 
@@ -506,17 +485,11 @@ void RefreshCompletedRenderSlotsVulkan(InstanceState* state)
         return;
     }
     const uint64_t safeFrame = gLastSafeFrame.load(std::memory_order_acquire);
-    std::lock_guard<std::mutex> lock(state->renderPoolMutex);
-    const size_t count = std::min(backend->slots.size(), state->renderSlots.size());
-    for (size_t i = 0; i < count; ++i)
+    for (UploadSlot& backendSlot : backend->slots)
     {
-        UploadSlot& backendSlot = backend->slots[i];
-        InstanceState::RenderSlot& renderSlot = state->renderSlots[i];
-        if (renderSlot.owner == InstanceState::SlotOwner::Uploading && backendSlot.used &&
-            backendSlot.lastUsedFrame <= safeFrame)
+        if (backendSlot.used && backendSlot.lastUsedFrame <= safeFrame)
         {
             backendSlot.used = false;
-            renderSlot.owner = InstanceState::SlotOwner::Free;
         }
     }
 }
@@ -535,7 +508,7 @@ void BeginUploadEventVulkan(InstanceState*)
     }
 }
 
-void UploadVulkan(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadVulkan(InstanceState* state, const UploadContext& ctx)
 {
     if (state == nullptr || ctx.data == nullptr || ctx.width == 0 || ctx.height == 0 ||
         ctx.stride < ctx.width * 4 || (ctx.stride % 4) != 0 || !EnsureDeviceFunctions())
@@ -543,65 +516,99 @@ void UploadVulkan(InstanceState* state, const UploadContext& ctx)
         if (state != nullptr)
         {
             MarkUnavailable(state, "invalid upload context");
-            ReleaseUploadSlot(state, ctx.slotIndex);
         }
-        return;
+        return UploadResult::Failed;
     }
 
     // PerformUploadFor holds state->lifetimeMutex from the atomic registry lookup
     // through command recording, preventing reset/removal from retiring this
     // data while it is in use.
 
+    VulkanTextureData* data = static_cast<VulkanTextureData*>(state->vulkan.backend);
+    if (data == nullptr)
+    {
+        data = new VulkanTextureData();
+        data->slots.resize(kVulkanUploadSlotCount);
+        state->vulkan.backend = data;
+    }
+
+    const VkDeviceSize bytes = static_cast<VkDeviceSize>(ctx.stride) * ctx.height;
+    if (data->slots.size() != kVulkanUploadSlotCount)
+    {
+        MarkUnavailable(state, "upload ring slot count");
+        return UploadResult::Failed;
+    }
+
+    for (UploadSlot& uploadSlot : data->slots)
+    {
+        if (uploadSlot.mapped == nullptr && !CreateUploadSlot(bytes, uploadSlot))
+        {
+            MarkUnavailable(state, "upload ring allocation");
+            return UploadResult::Failed;
+        }
+        if (uploadSlot.size < bytes)
+        {
+            MarkUnavailable(state, "upload ring dimensions changed");
+            return UploadResult::Failed;
+        }
+    }
+
+    // Select capacity before AccessTexture records a TRANSFER_DST transition.
+    // A retry must not leave Unity's image in an upload-only layout.
+    RefreshCompletedRenderSlotsVulkan(state);
+    UploadSlot* slot = nullptr;
+    for (size_t offset = 0; offset < data->slots.size(); ++offset)
+    {
+        const size_t candidate = (data->nextUploadSlot + offset) % data->slots.size();
+        if (!data->slots[candidate].used)
+        {
+            slot = &data->slots[candidate];
+            data->nextUploadSlot = (candidate + 1) % data->slots.size();
+            break;
+        }
+    }
+    if (slot == nullptr)
+    {
+        ++data->poolExhaustionCount;
+        if (data->poolExhaustionCount == 1 || data->poolExhaustionCount % 120 == 0)
+        {
+            LottieLogWarning(nullptr,
+                "[Lottie] Vulkan upload ring exhausted; frame deferred (count=%llu)",
+                static_cast<unsigned long long>(data->poolExhaustionCount));
+        }
+        return UploadResult::Retry;
+    }
+
     UnityVulkanImage image{};
     if (!AccessTexture(state->nativeTex, &image))
     {
         MarkUnavailable(state, "AccessTexture");
-        ReleaseUploadSlot(state, ctx.slotIndex);
-        return;
+        return UploadResult::Failed;
     }
 
     const bool bgra = image.format == VK_FORMAT_B8G8R8A8_UNORM || image.format == VK_FORMAT_B8G8R8A8_SRGB;
     if (!bgra || (image.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0 || image.samples != VK_SAMPLE_COUNT_1_BIT ||
         image.extent.width != ctx.width || image.extent.height != ctx.height)
     {
+        FinishTextureUpload(state->nativeTex);
         MarkUnavailable(state, "unsupported Unity image format or usage");
-        ReleaseUploadSlot(state, ctx.slotIndex);
-        return;
+        return UploadResult::Failed;
     }
 
     UnityVulkanRecordingState recording{};
     if (!GetRecordingState(&recording) || recording.commandBuffer == VK_NULL_HANDLE || recording.renderPass != VK_NULL_HANDLE)
     {
+        FinishTextureUpload(state->nativeTex);
         MarkUnavailable(state, "command recording state");
-        ReleaseUploadSlot(state, ctx.slotIndex);
-        return;
+        return UploadResult::Failed;
     }
     CollectRetiredTextures(recording.safeFrameNumber, false);
     gLastSafeFrame.store(recording.safeFrameNumber, std::memory_order_release);
-    RefreshCompletedRenderSlotsVulkan(state);
 
-    VulkanTextureData* data = static_cast<VulkanTextureData*>(state->vulkan.backend);
-    if (data == nullptr)
-    {
-        data = new VulkanTextureData();
-        data->slots.resize(InstanceState::kRenderSlotCount);
-        state->vulkan.backend = data;
-    }
-
-    const VkDeviceSize bytes = static_cast<VkDeviceSize>(ctx.stride) * ctx.height;
-    if (ctx.slotIndex < 0 || ctx.slotIndex >= static_cast<int>(data->slots.size()))
-    {
-        MarkUnavailable(state, "render slot index");
-        ReleaseUploadSlot(state, ctx.slotIndex);
-        return;
-    }
-    UploadSlot* slot = &data->slots[ctx.slotIndex];
-    if (slot->mapped != ctx.data || slot->size < bytes)
-    {
-        MarkUnavailable(state, "render slot storage");
-        ReleaseUploadSlot(state, ctx.slotIndex);
-        return;
-    }
+    // This is the only post-render frame copy. The source is cacheable CPU
+    // mailbox memory; the destination stays GPU-owned until safeFrame retires
+    // this upload slot.
+    std::memcpy(slot->mapped, ctx.data, static_cast<size_t>(bytes));
     if (!slot->coherent)
     {
         VkMappedMemoryRange range{};
@@ -611,9 +618,13 @@ void UploadVulkan(InstanceState* state, const UploadContext& ctx)
         range.size = VK_WHOLE_SIZE;
         if (pfnFlushMappedMemoryRanges(gInstance.device, 1, &range) != VK_SUCCESS)
         {
+            // AccessTexture already transitioned Unity's image to
+            // TRANSFER_DST. Restore the state tracker even though no copy will
+            // be recorded, otherwise managed fallback may sample an image left
+            // in an upload-only layout.
+            FinishTextureUpload(state->nativeTex);
             MarkUnavailable(state, "non-coherent memory flush");
-            ReleaseUploadSlot(state, ctx.slotIndex);
-            return;
+            return UploadResult::Failed;
         }
     }
 
@@ -651,8 +662,9 @@ void UploadVulkan(InstanceState* state, const UploadContext& ctx)
     if (!FinishTextureUpload(state->nativeTex))
     {
         MarkUnavailable(state, "post-upload shader-read transition");
-        return;
+        return UploadResult::Failed;
     }
+    return UploadResult::Submitted;
 }
 
 #else
@@ -675,7 +687,7 @@ void ResetTextureVulkan(lottie_animation_wrapper*, InstanceState* state)
 }
 
 bool EnsureTextureVulkan(lottie_animation_wrapper*, InstanceState*, int, int) { return false; }
-void UploadVulkan(InstanceState*, const UploadContext&) {}
+UploadResult UploadVulkan(InstanceState*, const UploadContext&) { return UploadResult::Failed; }
 bool PrepareRenderSlotVulkan(InstanceState*, int, uint32_t, uint32_t, uint8_t*&, uint32_t&) { return false; }
 void RefreshCompletedRenderSlotsVulkan(InstanceState*) {}
 void BeginUploadEventVulkan(InstanceState*) {}
