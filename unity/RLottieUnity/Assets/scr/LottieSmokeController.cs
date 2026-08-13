@@ -17,6 +17,7 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const string DefaultResultFileName = "lottie-smoke-result.json";
     private const string AndroidRequestExtra = "lottieSmoke";
     private const float AnimationTimeoutSeconds = 5f;
+    private const float ReadbackTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
 
     [Serializable]
@@ -54,9 +55,44 @@ public sealed class LottieSmokeController : MonoBehaviour
         public string Error;
     }
 
+    private sealed class PendingReadbackCleanup
+    {
+        public AsyncGPUReadbackRequest Request;
+        public RenderTexture Texture;
+    }
+
     private SmokeResult _result;
     private string _resultPath;
     private bool _quitWhenComplete;
+    private static readonly List<PendingReadbackCleanup> sPendingReadbackCleanup =
+        new List<PendingReadbackCleanup>();
+
+    private void Update()
+    {
+        for (int i = sPendingReadbackCleanup.Count - 1; i >= 0; i--)
+        {
+            PendingReadbackCleanup pending = sPendingReadbackCleanup[i];
+            bool done;
+            try
+            {
+                done = pending.Request.done;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("[LottieSmoke] Pending readback cleanup failed: " + exception.Message);
+                done = true;
+            }
+            if (!done)
+            {
+                continue;
+            }
+            if (pending.Texture != null)
+            {
+                Destroy(pending.Texture);
+            }
+            sPendingReadbackCleanup.RemoveAt(i);
+        }
+    }
 
     private IEnumerator Start()
     {
@@ -119,16 +155,18 @@ public sealed class LottieSmokeController : MonoBehaviour
 
         yield return new WaitForEndOfFrame();
 
-        PixelSignature buttonInitial;
-        bool buttonInitialCaptured = TryCapture(animatedButton.Animation.OutputTexture, out buttonInitial, out string buttonCaptureError);
+        Debug.Log("[LottieSmoke] Capturing initial textures.");
+        var buttonInitialCapture = new PixelCapture();
+        yield return CaptureTexture(buttonAnimation.OutputTexture, buttonAnimation.TextureUploadBackend, buttonInitialCapture);
         var imageInitialCapture = new PixelCapture();
         yield return CaptureTexture(imageAnimation.OutputTexture, imageAnimation.TextureUploadBackend, imageInitialCapture);
-        if (!buttonInitialCaptured || !imageInitialCapture.Succeeded)
+        if (!buttonInitialCapture.Succeeded || !imageInitialCapture.Succeeded)
         {
-            Record("initialPixelsReadable", false, buttonCaptureError ?? imageInitialCapture.Error);
+            Record("initialPixelsReadable", false, buttonInitialCapture.Error ?? imageInitialCapture.Error);
             Complete("Could not read the initial rendered textures.");
             yield break;
         }
+        PixelSignature buttonInitial = buttonInitialCapture.Signature;
         PixelSignature imageInitial = imageInitialCapture.Signature;
 
         Record("animatedButtonFirstFrameVisible", buttonInitial.VisiblePixels > 4,
@@ -185,15 +223,18 @@ public sealed class LottieSmokeController : MonoBehaviour
             yield return new WaitForEndOfFrame();
         }
 
-        PixelSignature buttonLater;
-        bool buttonCaptured = TryCapture(buttonAnimation.OutputTexture, out buttonLater, out string buttonLaterError);
+        Debug.Log("[LottieSmoke] Capturing post-click button texture.");
+        var buttonLaterCapture = new PixelCapture();
+        yield return CaptureTexture(buttonAnimation.OutputTexture, buttonAnimation.TextureUploadBackend, buttonLaterCapture);
+        PixelSignature buttonLater = buttonLaterCapture.Signature;
         Record("animatedButtonAcceptsPress", clickReceived, "onClickInvoked=" + clickReceived.ToString(CultureInfo.InvariantCulture));
         Record("animatedButtonAdvancesAfterPress", buttonAnimation.CurrentFrame != buttonStartFrame,
             "from=" + buttonStartFrame.ToString(CultureInfo.InvariantCulture) +
             ", to=" + buttonAnimation.CurrentFrame.ToString(CultureInfo.InvariantCulture));
-        Record("animatedButtonPixelsChangeAfterPress", buttonCaptured && buttonInitial.Hash != buttonLater.Hash,
-            buttonCaptured ? DescribeTransition(buttonInitial, buttonLater) : buttonLaterError);
+        Record("animatedButtonPixelsChangeAfterPress", buttonLaterCapture.Succeeded && buttonInitial.Hash != buttonLater.Hash,
+            buttonLaterCapture.Succeeded ? DescribeTransition(buttonInitial, buttonLater) : buttonLaterCapture.Error);
 
+        Debug.Log("[LottieSmoke] Smoke checks complete; writing result.");
         Complete(null);
     }
 
@@ -323,7 +364,10 @@ public sealed class LottieSmokeController : MonoBehaviour
         LottieTextureUploadBackend backend,
         PixelCapture capture)
     {
-        if (backend == LottieTextureUploadBackend.NativeVulkan)
+        bool nativeWritten = backend == LottieTextureUploadBackend.NativeVulkan ||
+            backend == LottieTextureUploadBackend.NativeExternalTexture ||
+            backend == LottieTextureUploadBackend.NativeOpenGL;
+        if (nativeWritten && SystemInfo.supportsAsyncGPUReadback)
         {
             yield return CaptureTextureAsync(source, capture);
             yield break;
@@ -332,7 +376,9 @@ public sealed class LottieSmokeController : MonoBehaviour
         capture.Succeeded = TryCapture(source, out capture.Signature, out capture.Error);
     }
 
-    private static IEnumerator CaptureTextureAsync(Texture source, PixelCapture capture)
+    private static IEnumerator CaptureTextureAsync(
+        Texture source,
+        PixelCapture capture)
     {
         if (source == null)
         {
@@ -340,27 +386,109 @@ public sealed class LottieSmokeController : MonoBehaviour
             yield break;
         }
 
-        AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(source, 0, TextureFormat.RGBA32);
-        while (!request.done)
+        const int readbackSize = 64;
+        if (!TryBeginReadback(source, readbackSize, out RenderTexture intermediate,
+                out AsyncGPUReadbackRequest request, out string beginError))
         {
-            yield return null;
-        }
-        if (request.hasError)
-        {
-            capture.Error = "Async GPU texture readback failed.";
+            capture.Error = beginError;
             yield break;
         }
-
-        var pixels = request.GetData<Color32>();
-        ulong hash = 14695981039346656037UL;
-        int visiblePixels = 0;
-        for (int sampleY = 0; sampleY < 64; sampleY++)
+        float deadline = Time.realtimeSinceStartup + ReadbackTimeoutSeconds;
+        while (!request.done)
         {
-            int y = sampleY * (source.height - 1) / 63;
-            for (int sampleX = 0; sampleX < 64; sampleX++)
+            if (Time.realtimeSinceStartup >= deadline)
             {
-                int x = sampleX * (source.width - 1) / 63;
-                Color32 pixel = pixels[y * source.width + x];
+                // Keep the dedicated RT alive until the outstanding request
+                // completes, then release it from Update without blocking JSON.
+                sPendingReadbackCleanup.Add(new PendingReadbackCleanup
+                {
+                    Request = request,
+                    Texture = intermediate
+                });
+                capture.Error = "Async GPU texture readback timed out after " +
+                    ReadbackTimeoutSeconds.ToString(CultureInfo.InvariantCulture) + " seconds.";
+                yield break;
+            }
+            yield return null;
+        }
+        if (!TryBuildSignature(request, readbackSize, readbackSize,
+                out PixelSignature signature, out string signatureError))
+        {
+            Destroy(intermediate);
+            capture.Error = signatureError;
+            yield break;
+        }
+        capture.Signature = signature;
+        capture.Succeeded = true;
+        Destroy(intermediate);
+    }
+
+    private static bool TryBeginReadback(
+        Texture source,
+        int readbackSize,
+        out RenderTexture intermediate,
+        out AsyncGPUReadbackRequest request,
+        out string error)
+    {
+        intermediate = null;
+        request = default;
+        error = null;
+        try
+        {
+            // Normalize native-written BGRA/external textures through a small
+            // RGBA render target shared by every native graphics API.
+            intermediate = new RenderTexture(
+                readbackSize, readbackSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            intermediate.hideFlags = HideFlags.HideAndDontSave;
+            intermediate.Create();
+            Graphics.Blit(source, intermediate);
+            request = AsyncGPUReadback.Request(intermediate, 0, TextureFormat.RGBA32);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            if (intermediate != null)
+            {
+                Destroy(intermediate);
+                intermediate = null;
+            }
+            error = "Could not start async GPU texture readback: " +
+                exception.GetType().Name + ": " + exception.Message;
+            return false;
+        }
+    }
+
+    private static bool TryBuildSignature(
+        AsyncGPUReadbackRequest request,
+        int width,
+        int height,
+        out PixelSignature signature,
+        out string error)
+    {
+        signature = default;
+        error = null;
+        try
+        {
+            if (request.hasError)
+            {
+                error = "Async GPU texture readback failed.";
+                return false;
+            }
+            var pixels = request.GetData<Color32>();
+            int requiredPixels = width * height;
+            if (pixels.Length < requiredPixels)
+            {
+                error = "Async GPU texture readback returned " +
+                    pixels.Length.ToString(CultureInfo.InvariantCulture) +
+                    " pixels; expected at least " +
+                    requiredPixels.ToString(CultureInfo.InvariantCulture) + ".";
+                return false;
+            }
+            ulong hash = 14695981039346656037UL;
+            int visiblePixels = 0;
+            for (int i = 0; i < requiredPixels; i++)
+            {
+                Color32 pixel = pixels[i];
                 if (pixel.a > 8)
                 {
                     visiblePixels++;
@@ -370,14 +498,19 @@ public sealed class LottieSmokeController : MonoBehaviour
                 hash = HashByte(hash, pixel.b);
                 hash = HashByte(hash, pixel.a);
             }
+            signature = new PixelSignature
+            {
+                Hash = hash.ToString("x16", CultureInfo.InvariantCulture),
+                VisiblePixels = visiblePixels
+            };
+            return true;
         }
-
-        capture.Signature = new PixelSignature
+        catch (Exception exception)
         {
-            Hash = hash.ToString("x16", CultureInfo.InvariantCulture),
-            VisiblePixels = visiblePixels
-        };
-        capture.Succeeded = true;
+            error = "Could not consume async GPU texture readback: " +
+                exception.GetType().Name + ": " + exception.Message;
+            return false;
+        }
     }
 
     private static bool TryCaptureManagedTexture(Texture2D texture, out PixelSignature signature, out string error)
