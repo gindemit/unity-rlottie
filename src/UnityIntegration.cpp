@@ -111,6 +111,12 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEventInternal(UnityGfxDeviceEven
             {
                 ConfigureVulkanUploadEvent();
             }
+#if defined(_WIN32)
+            else if (GetCurrentRenderer() == Renderer::D3D12)
+            {
+                ConfigureD3D12UploadEvent();
+            }
+#endif
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
             if (GetCurrentRenderer() == Renderer::Metal)

@@ -40,6 +40,14 @@ namespace LottiePlugin
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
         private unsafe void UseManagedTextureUploadFallback(uint width, uint height, string reason)
         {
+            // A Unity-owned Android GLES texture is RGBA32, while rlottie's
+            // managed output is BGRA. Preserve any frame already rendered into
+            // the raw bytes, but replace the texture so Texture2D.Apply uses the
+            // correct channel layout.
+            Texture2D previousTexture = Texture;
+            NativeArray<byte> previousPixelData = !_ownsPixelData && _pixelData.IsCreated
+                ? _pixelData
+                : default;
             if (_ownsPixelData && _pixelData.IsCreated)
             {
                 _pixelData.Dispose();
@@ -57,6 +65,14 @@ namespace LottiePlugin
             ConfigureRuntimeTexture(Texture);
             _pixelData = Texture.GetRawTextureData<byte>();
             _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+            if (previousPixelData.IsCreated && previousPixelData.Length == _pixelData.Length)
+            {
+                NativeArray<byte>.Copy(previousPixelData, _pixelData);
+            }
+            if (previousTexture != null)
+            {
+                UnityEngine.Object.Destroy(previousTexture);
+            }
 
             Debug.LogWarning($"[LottiePlugin] Native texture upload unavailable ({reason}); using Texture2D.Apply fallback");
         }
@@ -110,7 +126,7 @@ namespace LottiePlugin
             }
 
             sOpenGLFallbackLogged = true;
-            Debug.LogWarning("[LottiePlugin] Linux OpenGL native upload unavailable; using Texture2D.Apply fallback");
+            Debug.LogWarning("[LottiePlugin] OpenGL native upload unavailable; using Texture2D.Apply fallback");
         }
 
         private bool TryRegisterUnityOwnedTexture(uint width, uint height)
@@ -133,7 +149,7 @@ namespace LottiePlugin
                     if (registered && !sOpenGLNativeUploadLogged)
                     {
                         sOpenGLNativeUploadLogged = true;
-                        Debug.Log("[LottiePlugin] Linux OpenGL native upload enabled");
+                        Debug.Log("[LottiePlugin] Unity-owned OpenGL native upload enabled");
                     }
                     return registered;
                 }
@@ -306,8 +322,10 @@ namespace LottiePlugin
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
             _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload();
-#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
-            _usesUnityOwnedOpenGLTexture = deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore &&
+#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || (UNITY_ANDROID && !UNITY_EDITOR)
+            _usesUnityOwnedOpenGLTexture =
+                (deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore ||
+                 deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3) &&
                 !_useManagedTextureUpload;
 #else
             _usesUnityOwnedOpenGLTexture = false;
@@ -356,7 +374,18 @@ namespace LottiePlugin
             {
                 // Native uploads update mip level 0 only. A single-level texture
                 // prevents minified sampling from reading stale generated mips.
-                Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 1, false);
+#if UNITY_ANDROID && !UNITY_EDITOR
+                // Unity owns the GLES texture from the beginning, so the native
+                // plug-in never exposes its deferred dummy GL name. GLES uploads
+                // BGRA directly when supported and otherwise reuses a persistent
+                // conversion buffer for RGBA.
+                TextureFormat nativeTextureFormat = _usesUnityOwnedOpenGLTexture
+                    ? TextureFormat.RGBA32
+                    : TextureFormat.BGRA32;
+#else
+                TextureFormat nativeTextureFormat = TextureFormat.BGRA32;
+#endif
+                Texture = new Texture2D((int)width, (int)height, nativeTextureFormat, 1, false);
                 ConfigureRuntimeTexture(Texture);
                 _pixelData = Texture.GetRawTextureData<byte>();
                 _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
@@ -366,24 +395,14 @@ namespace LottiePlugin
                 {
                     _nativeTexturePtr = IntPtr.Zero;
                     bool wasOpenGL = _usesUnityOwnedOpenGLTexture;
-                    _usesUnityOwnedNativeTexture = false;
-                    _usesUnityOwnedOpenGLTexture = false;
-                    _usesCPURendering = true;
-                    TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
-                    if (wasOpenGL)
-                    {
-                        LogOpenGLApplyFallback();
-                    }
-                    else
-                    {
-                        LogVulkanApplyFallback();
-                    }
+                    UseManagedTextureUploadFallback(width, height,
+                        wasOpenGL ? "OpenGL texture registration" : "Vulkan texture registration");
                 }
             }
             else
             {
-                // Plugin-owned native textures render into the native three-slot
-                // pool. Do not retain an otherwise unused managed frame buffer.
+                // Plugin-owned native textures render through the native CPU
+                // mailbox. Do not retain an otherwise unused managed frame buffer.
                 _pixelData = default;
                 _ownsPixelData = false;
                 _lottieRenderData.buffer = null;
@@ -470,10 +489,9 @@ namespace LottiePlugin
                         }
                     }
 
-                    _usesUnityOwnedOpenGLTexture = false;
-                    _usesCPURendering = true;
-                    TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
-                    LogOpenGLApplyFallback();
+                    uint width = (uint)Texture.width;
+                    uint height = (uint)Texture.height;
+                    UseManagedTextureUploadFallback(width, height, "OpenGL native upload failure");
                     Texture.Apply();
                     return;
                 }
@@ -481,8 +499,12 @@ namespace LottiePlugin
                 _openGLReregisterAttempted = false;
                 NativeBridge.LottieUpdateTexture(_animationWrapperIntPtr);
                 // The render-thread plug-in updates this Unity-owned texture on
-                // the GPU, so notify Unity's texture caches without calling Apply.
+                // the GPU. Linux needs its texture update count advanced; doing
+                // that on Android GLES can make Unity recreate/rebind the texture
+                // while the native render event still owns the registered name.
+#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
                 Texture.IncrementUpdateCount();
+#endif
                 return;
             }
 
