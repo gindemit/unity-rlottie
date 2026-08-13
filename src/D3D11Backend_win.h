@@ -20,7 +20,7 @@ void ReleaseD3D11Context();
 
 // D3D11 texture operations
 bool EnsureTextureD3D11(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
-void UploadD3D11(InstanceState* state, const UploadContext& ctx);
+UploadResult UploadD3D11(InstanceState* state, const UploadContext& ctx);
 void ResetTextureD3D11(lottie_animation_wrapper* animation, InstanceState* state);
 
 #endif // defined(_WIN32)

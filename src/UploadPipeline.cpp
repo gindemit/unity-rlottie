@@ -9,14 +9,26 @@
 
 namespace
 {
-void FinishQueueTurn(lottie_animation_wrapper* animation, InstanceState* state)
+lottie_animation_wrapper* FinishQueueTurn(lottie_animation_wrapper* animation, InstanceState* state)
 {
     state->uploadQueued.store(false, std::memory_order_release);
     if (state->uploadVersion.load(std::memory_order_acquire) >
         state->uploadedVersion.load(std::memory_order_acquire))
     {
-        EnqueueUpload(animation);
+        // PerformUploadFor already owns state->lifetimeMutex. Requeue directly
+        // instead of recursively acquiring the same non-recursive mutex.
+        return EnqueueUploadWithLifetimeLocked(animation, state);
     }
+    return nullptr;
+}
+
+void FinishQueueTurnAfterUnlock(
+    std::unique_lock<std::mutex>& lifetimeLock,
+    lottie_animation_wrapper* dropped,
+    lottie_animation_wrapper* current)
+{
+    lifetimeLock.unlock();
+    FinishDroppedUpload(dropped, current);
 }
 }
 
@@ -47,7 +59,8 @@ void PerformUploadFor(lottie_animation_wrapper* animation)
         state->uploadedVersion.store(
             state->uploadVersion.load(std::memory_order_acquire),
             std::memory_order_release);
-        FinishQueueTurn(animation, state);
+        lottie_animation_wrapper* dropped = FinishQueueTurn(animation, state);
+        FinishQueueTurnAfterUnlock(stateLifetimeLock, dropped, animation);
         return;
     }
 
@@ -56,7 +69,8 @@ void PerformUploadFor(lottie_animation_wrapper* animation)
         LottieLogWarning(animation, "[Lottie] PerformUploadFor: upload context data is null");
         ReleaseUploadSlot(state, ctx.slotIndex);
         state->uploadedVersion.store(requested, std::memory_order_release);
-        FinishQueueTurn(animation, state);
+        lottie_animation_wrapper* dropped = FinishQueueTurn(animation, state);
+        FinishQueueTurnAfterUnlock(stateLifetimeLock, dropped, animation);
         return;
     }
 
@@ -65,26 +79,49 @@ void PerformUploadFor(lottie_animation_wrapper* animation)
         LottieLogError(animation, "[Lottie] PerformUploadFor: EnsureTexture failed");
         ReleaseUploadSlot(state, ctx.slotIndex);
         state->uploadedVersion.store(requested, std::memory_order_release);
-        FinishQueueTurn(animation, state);
+        lottie_animation_wrapper* dropped = FinishQueueTurn(animation, state);
+        FinishQueueTurnAfterUnlock(stateLifetimeLock, dropped, animation);
         return;
     }
 
     LottieLogInfo(animation, "[Lottie] PerformUploadFor: uploading texture data");
-    UploadForRenderer(state, ctx);
+    const UploadResult uploadResult = UploadForRenderer(state, ctx);
 
-    // D3D12 and Vulkan keep Uploading ownership until their frame completion
-    // signal says mapped memory is safe. Immediate APIs have consumed the CPU
-    // pointer before returning.
-    if (renderer != Renderer::D3D12 && renderer != Renderer::Vulkan)
+    if (uploadResult == UploadResult::Retry)
     {
-        ReleaseUploadSlot(state, ctx.slotIndex);
+        // The render event did not have a usable command context/upload-ring
+        // slot. Keep the immutable CPU frame ready and schedule another bounded
+        // pump turn; do not report the version as uploaded.
+        RestoreUploadSlotToReady(state, ctx.slotIndex);
+        lottie_animation_wrapper* dropped = FinishQueueTurn(animation, state);
+        FinishQueueTurnAfterUnlock(stateLifetimeLock, dropped, animation);
+        return;
     }
+
+    if (uploadResult == UploadResult::Failed)
+    {
+        // A terminal backend failure did not submit this frame. Backends that
+        // can fall back mark native upload unavailable; consume this mailbox
+        // version without claiming success or retry-spinning indefinitely.
+        ReleaseUploadSlot(state, ctx.slotIndex);
+        state->uploadedVersion.store(requested, std::memory_order_release);
+        lottie_animation_wrapper* dropped = FinishQueueTurn(animation, state);
+        LottieLogError(animation, "[Lottie] PerformUploadFor: upload failed");
+        FinishQueueTurnAfterUnlock(stateLifetimeLock, dropped, animation);
+        return;
+    }
+
+    // Every backend has consumed or copied the cacheable CPU mailbox pointer
+    // before returning. Explicit APIs retain their independently-owned mapped
+    // upload slots until their fence/safe-frame completion signals.
+    ReleaseUploadSlot(state, ctx.slotIndex);
 
     state->uploadedVersion.store(requested, std::memory_order_release);
     // Close the clear-vs-publish lost-wakeup window. A publisher racing the
     // upload tail either observes uploadQueued=true, or is re-enqueued here.
-    FinishQueueTurn(animation, state);
+    lottie_animation_wrapper* dropped = FinishQueueTurn(animation, state);
     LottieLogInfo(animation, "[Lottie] PerformUploadFor: upload completed successfully");
+    FinishQueueTurnAfterUnlock(stateLifetimeLock, dropped, animation);
 }
 
 void PublishUpload(lottie_animation_wrapper* animation, const lottie_render_data* render_data)
