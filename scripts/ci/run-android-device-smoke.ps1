@@ -83,6 +83,8 @@ do {
 } while (-not $resultReady -and [DateTime]::UtcNow -lt $deadline)
 
 if (-not $resultReady) {
+    $timeoutLog = (& $Adb @adbPrefix logcat -d -v threadtime 2>&1 | Out-String)
+    $timeoutLog | Set-Content -LiteralPath $LogFile -Encoding UTF8
     throw "Android smoke result was not produced within $RunSeconds seconds: $remoteResult"
 }
 Invoke-Adb -Arguments @('pull', $remoteResult, $ResultFile) | Out-Host
