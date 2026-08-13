@@ -43,7 +43,10 @@ struct InstanceState
         uint64_t gpuUseToken = 0;
     };
 
-    static constexpr int kRenderSlotCount = 3;
+    // Cacheable CPU mailbox: one slot may be rendering while the other is
+    // ready for (or being copied by) the render-thread upload. Explicit GPU
+    // backends own their independently-sized upload rings.
+    static constexpr int kRenderSlotCount = 2;
     std::mutex renderPoolMutex;
     std::condition_variable renderPoolChanged;
     std::array<RenderSlot, kRenderSlotCount> renderSlots{};
@@ -67,11 +70,13 @@ struct InstanceState
     struct D3D12Data
     {
 #if defined(_WIN32)
+        static constexpr unsigned int kUploadSlotCount = 3;
         ID3D12Resource* tex = nullptr;
         ID3D12Resource* upload = nullptr;
         void* uploadMapped = nullptr;
-        unsigned int uploadSlotCount = 3;
         unsigned long long uploadSlotBytes = 0;
+        std::array<unsigned long long, kUploadSlotCount> uploadSlotFenceValues{};
+        unsigned int nextUploadSlot = 0;
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT* footprint = nullptr;
         int texState = 0; // D3D12_RESOURCE_STATE_COMMON
         ID3D12Fence* frameFence = nullptr;
@@ -135,6 +140,7 @@ bool AcquireNewestReadySlot(InstanceState* state, UploadContext& context, uint64
 
 // Return a slot after CPU consumption, or after a backend completion signal.
 void ReleaseUploadSlot(InstanceState* state, int slotIndex);
+void RestoreUploadSlotToReady(InstanceState* state, int slotIndex);
 
 // Wait until no rlottie Surface can still reference pool storage.
 void WaitForActiveRenders(InstanceState* state);

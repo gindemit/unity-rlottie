@@ -13,7 +13,7 @@ struct InstanceState;
 bool EnsureTextureForRenderer(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
 
 // Upload texture data for the current renderer (dispatches to backend-specific implementation)
-void UploadForRenderer(InstanceState* state, const UploadContext& ctx);
+UploadResult UploadForRenderer(InstanceState* state, const UploadContext& ctx);
 
 // Reset texture state for the current renderer (dispatches to backend-specific implementation)
 void ResetTextureForRenderer(lottie_animation_wrapper* animation, InstanceState* state);
