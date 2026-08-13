@@ -196,8 +196,9 @@ jobs:
           set +e
           # CPU-only hosted runners can spend about 40 seconds rejecting
           # llvmpipe Vulkan before Unity falls back to OpenGL. Leave enough
-          # time for the rendered smoke itself after that initialization.
-          timeout 90s xvfb-run -a artifacts/linux/RLottieSmoke.x86_64 \
+          # time for the rendered smoke and bounded GPU-readback diagnostics
+          # after that initialization on slow software-rendered runners.
+          timeout 150s xvfb-run -a artifacts/linux/RLottieSmoke.x86_64 \
             -force-vulkan \
             -screen-width 1280 \
             -screen-height 720 \
