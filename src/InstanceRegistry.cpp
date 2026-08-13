@@ -110,7 +110,14 @@ RenderSlotAcquireResult AcquireRenderSlot(
     }
     if (selected < 0)
     {
-        LottieLogWarning(animation, "[Lottie] Render pool exhausted; frame skipped");
+        const uint64_t exhaustionCount =
+            state->renderPoolExhaustionCount.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (exhaustionCount == 1 || exhaustionCount % 120 == 0)
+        {
+            LottieLogWarning(animation,
+                "[Lottie] Render pool exhausted; frame skipped (count=%llu)",
+                static_cast<unsigned long long>(exhaustionCount));
+        }
         state->uploadVersion.fetch_add(1, std::memory_order_acq_rel);
         std::lock_guard<std::mutex> renderLifetimeLock(state->renderLifetimeMutex);
         --state->activeRenders;
@@ -366,6 +373,7 @@ void ResetTextureState(lottie_animation_wrapper* animation, InstanceState* state
     state->uploadVersion.store(0, std::memory_order_relaxed);
     state->requestedVersion.store(0, std::memory_order_relaxed);
     state->uploadedVersion.store(0, std::memory_order_relaxed);
+    state->renderPoolExhaustionCount.store(0, std::memory_order_relaxed);
     state->uploadQueued.store(false, std::memory_order_release);
     {
         std::lock_guard<std::mutex> poolLock(state->renderPoolMutex);
