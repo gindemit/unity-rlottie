@@ -56,6 +56,7 @@ struct InstanceState
     std::atomic<uint64_t> uploadVersion{0};
     std::atomic<uint64_t> requestedVersion{0};
     std::atomic<uint64_t> uploadedVersion{0};
+    std::atomic<uint64_t> renderPoolExhaustionCount{0};
     std::atomic<bool> uploadQueued{false};
     int texW = 0;
     int texH = 0;
