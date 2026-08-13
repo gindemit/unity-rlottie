@@ -1,39 +1,53 @@
 # Texture upload paths and Vulkan native-upload analysis
 
-## Three-slot native render pool (implemented)
+## Two-slot CPU render mailbox and explicit-API upload rings (implemented)
 
-Native texture paths now use a fixed three-slot ownership protocol. Each slot
-moves through `Free -> Rendering -> Ready -> Uploading -> Free`; rlottie renders
-directly into slot-owned memory, and publication changes only metadata. This
-removes the former full-frame `PublishUpload` copy and prevents a renderer from
-overwriting pixels that the render thread or GPU still owns.
+Native texture paths use two preallocated, cacheable CPU render slots. Each
+slot moves through `Free -> Rendering -> Ready -> Uploading -> Free`; rlottie
+always rasterizes into normal CPU memory. Publication changes only metadata,
+so no completed frame is copied into a separate publication vector and no
+publisher can overwrite bytes still owned by an upload.
 
-- D3D11, OpenGL, and Metal preallocate three tightly packed CPU buffers. Their
-  upload calls consume a stable slot synchronously, so it becomes free when the
-  API call returns. OpenGL's BGRA-to-RGBA scratch conversion remains necessary
-  on devices without a BGRA extension.
-- D3D12 renders directly into one of the three persistently mapped, row-pitch
-  aligned upload regions. A region remains `Uploading` until Unity's frame
-  fence completes its recorded value. Texture destruction waits for the last
-  referenced frame-fence value before unmapping the upload resource.
-- Vulkan renders directly into exactly three persistently mapped transfer
-  buffers. Non-coherent allocations are flushed before command recording, and
-  Unity's `safeFrameNumber` is the only signal that returns an uploading slot
-  to `Free`.
-- Managed `Texture2D.Apply` fallback and WebGL still render into their external
-  Unity-owned buffers. They do not allocate or publish native pool slots.
+- D3D11, OpenGL, and Metal consume the selected CPU slot synchronously. The
+  slot becomes free after `Map`/row copy/`Unmap`, `glTexSubImage2D`, or
+  `replaceRegion` returns.
+- D3D12 owns a separate three-region, persistently mapped upload heap. The
+  render thread performs one sequential row copy from the selected cacheable
+  CPU slot into a fence-available region, releases the CPU slot immediately,
+  and retires the upload region with Unity's frame fence.
+- Vulkan owns a separate three-slot mapped transfer-buffer ring. The render
+  thread performs one sequential copy from the selected cacheable CPU slot,
+  flushes non-coherent memory when required, releases the CPU slot immediately,
+  and retires the transfer slot using Unity's `safeFrameNumber`.
+- Android OpenGL ES uses a Unity-owned RGBA texture. rlottie still produces
+  BGRA, so the render-thread upload converts into one persistent RGBA scratch
+  buffer before `glTexSubImage2D`. This avoids both the former dummy external
+  texture handle and Mali's rejected BGRA upload into a Unity RGBA texture.
+- Managed `Texture2D.Apply` fallback and WebGL continue rendering into their
+  external Unity-owned buffers and do not acquire native mailbox slots.
 
-When all slots are GPU-owned, a frame is skipped instead of allocating or
+When both CPU slots are busy, a frame is skipped instead of allocating or
 blocking. When multiple completed frames are ready, the newest is uploaded and
-older ready frames are coalesced. The queue tail clears `uploadQueued` and then
-rechecks the published version, closing the former lost-wakeup window. Registry
-removal first prevents new lookups, then waits for any active upload before
-resetting backend resources.
+older ready frames are coalesced. If an explicit API has no available upload
+region or command context, the CPU slot returns to `Ready`; its version is not
+reported as uploaded, and a later render event retries it. The queue tail clears
+`uploadQueued` and then rechecks the published version, closing the former
+lost-wakeup window. Registry removal first prevents new lookups, then waits for
+active render/upload ownership before resetting backend resources.
+
+The rejected three-slot design rasterized rlottie directly into persistently
+mapped D3D12/Vulkan upload memory. On the tested systems that memory is
+write-combined or otherwise uncached for CPU read-modify-write access. rlottie's
+rasterizer performs destination reads and blends, so performance collapsed:
+Android Vulkan 1024 x 1024 rose from roughly 11-15 ms to 165-200 ms per frame,
+and Windows D3D12 fell from about 1393 FPS to about 1.2 FPS. The implemented
+architecture restores cacheable rasterization and pays one predictable,
+sequential CPU-to-upload-ring copy on explicit APIs.
 
 ## Scope and snapshot
 
 This document describes the implementation on the canonical `dev` branch as
-audited on 2026-08-12.
+audited and validated on 2026-08-13.
 
 In this document, **Apply** specifically means a call to `Texture2D.Apply()`.
 The synchronous and asynchronous draw paths make the same upload choice.
@@ -51,7 +65,7 @@ The synchronous and asynchronous draw paths make the same upload choice.
 | macOS | Metal | No | Native external Metal texture and native upload |
 | macOS | OpenGL Core | Yes | No Apple OpenGL native backend; automatic managed-upload fallback |
 | iOS | Metal | No | Native external Metal texture and native upload |
-| Android | OpenGL ES 2 or 3 | No | Native external GL texture and render-thread upload |
+| Android | OpenGL ES 2 or 3 | No | Unity-owned RGBA texture; native render-thread BGRA-to-RGBA conversion and upload |
 | Android | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
 | WebGL | Shader conversion (default) | Yes | Apply to the source `Texture2D`, then blit into the exposed `RenderTexture` |
 | WebGL | Native conversion | Yes | Apply converted pixels to the exposed `Texture2D` |
@@ -75,7 +89,8 @@ The relevant managed decisions are:
 2. Vulkan creates a Unity-owned `Texture2D`, registers its cached native handle,
    and selects native upload only when the native capability check succeeds.
 3. Linux OpenGL and Vulkan use Unity-owned textures with native render-thread
-   uploads when their capability checks succeed.
+   uploads when their capability checks succeed. Android OpenGL ES also uses a
+   Unity-owned RGBA texture and a persistent native conversion scratch buffer.
 4. Managed-upload branches call Apply after a synchronous result or a completed
    asynchronous result.
 5. Other branches call `RequestTextureUpload()`, which queues a native upload
@@ -187,15 +202,18 @@ The intended frame flow is:
    `GetNativeTexturePtr()` once during initialization.
 2. Managed code registers that opaque texture handle with the native animation
    state. It does not call Apply and does not reacquire the pointer every frame.
-3. rlottie continues rendering BGRA pixels into the existing native/managed
-   CPU buffer.
-4. `PublishUpload()` copies the completed frame into the instance staging data
-   and queues an upload, as it already does for other native backends.
+3. Native rendering acquires one of two cacheable CPU mailbox slots and rlottie
+   produces BGRA pixels there. Publication changes the slot from `Rendering`
+   to `Ready` without copying its pixels.
+4. The render thread claims the newest ready CPU slot and selects one of three
+   safe mapped Vulkan transfer slots. It performs one sequential memory copy,
+   then releases the CPU mailbox slot immediately.
 5. A Unity plugin event runs on the render thread outside a render pass.
 6. The Vulkan backend calls `AccessTexture()` for transfer-destination access,
-   obtains Unity's current command buffer, copies a mapped staging buffer into
-   the Unity image with `vkCmdCopyBufferToImage`, and leaves the resource in a
-   state Unity can transition for shader sampling.
+   obtains Unity's current command buffer, copies the selected mapped transfer
+   slot into the Unity image with `vkCmdCopyBufferToImage`, and leaves the
+   resource in a state Unity can transition for shader sampling. The transfer
+   slot remains unavailable until Unity's safe-frame number retires it.
 7. Unity samples the same `Texture2D`; no `Texture2D.Apply()` occurs per frame.
 
 Unity documents that `Texture.GetNativeTexturePtr()` returns the underlying
@@ -217,8 +235,9 @@ Vulkan. Relevant primary references:
   produces CPU pixels, but Vulkan should use a native GPU upload.
 - Add a Vulkan initialization path that creates a Unity-owned BGRA `Texture2D`,
   obtains its native handle once, and registers it with the plugin.
-- Keep the existing render buffer allocation so rlottie has writable CPU
-  memory, but route completed Vulkan frames through `RequestTextureUpload()`.
+- Retain the Unity raw-data view for runtime managed-fallback continuity, but
+  redirect native Vulkan rasterization into the two-slot cacheable CPU mailbox
+  and route completed frames through `RequestTextureUpload()`.
 - Track whether the output texture is Unity-owned or plugin-owned. Do not call
   `UpdateExternalTexture()` for a Unity-owned Vulkan texture.
 - Keep the Vulkan and Linux OpenGL capability checks independent so either
@@ -254,9 +273,8 @@ Vulkan. Relevant primary references:
 
 #### Vulkan staging resources
 
-- Add per-instance mapped `VkBuffer`/`VkDeviceMemory` upload slots. At least
-  double buffering is required; three slots match the existing D3D12 strategy
-  and reduce reuse hazards.
+- Keep exactly three per-instance mapped `VkBuffer`/`VkDeviceMemory` upload
+  slots, independent of the two cacheable CPU render-mailbox slots.
 - Select host-visible memory and prefer host-coherent memory. If coherent memory
   is unavailable, flush the written range with the required non-coherent atom
   alignment.
@@ -288,7 +306,7 @@ Vulkan. Relevant primary references:
 | Copy recorded inside an active render pass | Configure a stable plugin event to require outside-render-pass execution |
 | Unity image layout or synchronization corruption | Use `AccessTexture` and Unity's current command buffer; do not submit independently to Unity's queue |
 | Texture handle changes | Cache after initialization, re-register after resize/recreation, and never fetch it per frame |
-| CPU overwrites staging data still used by GPU | Use multiple upload slots and frame-safe retirement |
+| CPU overwrites data still used by GPU | Copy from an owned CPU mailbox slot into a free upload-ring slot and retire the ring slot by fence/safe frame |
 | Wrong red/blue channels or color space | Validate Unity's Vulkan format and run Gamma/Linear image comparisons |
 | Android device-specific memory behavior | Handle non-coherent memory correctly and test physical ARM64 devices |
 | Old Unity interface compatibility | Query supported Vulkan interface versions and retain Apply as a guarded fallback where native upload is unavailable |
@@ -361,23 +379,47 @@ longer has a known sampled-texture update failure.
 
 ## Follow-up engineering audit
 
-### Staging-buffer ownership and optimized fix
+### Staging-buffer ownership and the cacheable-mailbox fix
 
-The optimized three-slot design described by the original audit is now the
-implementation. The intermediate two-slot mailbox was intentionally skipped.
+The final implementation is a bounded two-slot cacheable CPU render mailbox.
 Native `lottie_render_data` temporarily redirects its surface to an acquired
-slot and restores the managed pointer at publication, preserving the existing
-ABI and the managed/WebGL external-buffer behavior.
+CPU slot and restores the managed pointer at publication, preserving the ABI
+and managed/WebGL external-buffer behavior. Publication is metadata-only.
 
-The pool is bounded: it replaces an older `Ready` frame when possible and skips
-a render when all three slots are `Rendering` or `Uploading`. It never grows in
-response to backpressure. Generic native paths allocate all three frame buffers
-together on first use; D3D12 and Vulkan use the backend's three mapped regions
-directly, eliminating both the publication copy and their former second copy.
+The mailbox replaces an older `Ready` frame when possible and skips a render
+when both slots are `Rendering` or `Uploading`. It never grows in response to
+backpressure. D3D11, OpenGL, and Metal consume this storage immediately.
+D3D12 and Vulkan copy it once, sequentially, into separate three-slot mapped
+GPU upload rings. This deliberately restores the second explicit-API copy: it
+is cheap compared with asking rlottie's blending rasterizer to work in uncached
+or write-combined mapped memory.
 
-No pool mutex is held during backend upload. Ownership prevents publication or
-rendering from touching the selected slot until synchronous consumption ends or
-the explicit API's completion signal releases it.
+No mailbox mutex is held during backend upload. Ownership prevents publication
+or rendering from touching the selected CPU slot until the immediate API has
+consumed it or the explicit backend has finished its CPU copy. D3D12/Vulkan GPU
+lifetime belongs only to the independent upload-ring slot, not the CPU mailbox.
+
+### Persistent frame-memory formulas
+
+Let `F = width * height * 4`, `P = Align(width * 4, 256) * height` for one
+D3D12 footprint, and `V` be one Vulkan transfer allocation (at least the copied
+frame bytes, possibly larger because of Vulkan allocation requirements).
+Sampled GPU texture storage, driver-private copies, mipmaps, and allocator
+metadata are excluded.
+
+| Path | Before direct rendering | Rejected direct-mapped pool | Implemented cacheable mailbox |
+|---|---:|---:|---:|
+| D3D11 / plugin-owned OpenGL / Metal | `2F` | `3F` | `2F` |
+| D3D12 | `2F + 3P` | `3P` | `2F + 3P` |
+| Unity-owned Vulkan | `2F + 3V` | `F + 3V` | `3F + 3V` |
+| Linux Unity-owned OpenGL | `2F` plus optional conversion scratch | `4F` plus optional conversion scratch | `3F` plus optional conversion scratch |
+| Android OpenGL ES | `2F` | `3F` | `4F` (`F` Unity raw view + `2F` mailbox + `F` RGBA scratch) |
+| Managed Apply / WebGL CPU frame | `F` | `F` | `F` |
+
+The Unity-owned Vulkan formulas include the readable Unity raw-data view kept
+for live fallback continuity. The rejected direct-mapped column therefore has
+`F + 3V`, not merely `3V`. If a platform can later recreate the texture when
+falling back, that retained `F` could be removed independently of this design.
 
 ### Related correctness work
 
@@ -385,16 +427,28 @@ The pool change includes these adjacent fixes:
 
 - close the upload-queue lost-wakeup window by rechecking for a newer ready
   version after an upload clears its queued flag and requeueing when necessary;
-- make `uploadedVersion` atomic or keep every version comparison and transition
-  under the mailbox mutex;
-- protect publication and removal with instance lifetime ownership. The current
-  registry and upload queue pass raw animation/state pointers, while removal
-  can reset and erase state without acquiring the upload lifetime lock;
+- keep version comparisons and state transitions synchronized so a retry never
+  advances `uploadedVersion` before a backend has accepted the frame;
+- protect publication, queued work, rendering, and removal with explicit
+  instance lifetime ownership;
 - D3D12 mapped-region reuse is gated by Unity's frame fence, and Vulkan mapped
   buffer reuse is gated by `safeFrameNumber`;
 - plugin-owned native texture paths no longer allocate a managed frame buffer.
   Unity-owned OpenGL/Vulkan paths retain their raw-data view only for live
   fallback continuity, but native rendering redirects away from it.
+
+### Validation of the final architecture
+
+- Windows Unity 2022.3 rendered-player smoke passed all 14 checks on D3D11,
+  D3D12, OpenGL Core, and real native Vulkan. Both controls used native upload.
+- Sustained uncapped Windows runs had post-warmup median FPS of 3065.7 (D3D11),
+  1515.3 (D3D12), 965.3 (OpenGL Core), and 9155.8 (Vulkan). These are stall
+  indicators from a hidden uncapped player, not display-refresh benchmarks.
+- Android Vulkan on the Samsung SM-N975F passed all 14 checks at a sustained
+  29-30 FPS (about 33.4-34.5 ms), with no mailbox or upload-ring exhaustion.
+- Unity 2022.3 PlayMode tests passed 8/8.
+- OpenGL Core's one startup `GL_INVALID_ENUM` and first-button readback anomaly
+  reproduce with the pre-change native binary and are not mailbox regressions.
 
 ### Additional improvements and validation
 
