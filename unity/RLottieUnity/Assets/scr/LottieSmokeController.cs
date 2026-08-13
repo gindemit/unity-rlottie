@@ -64,11 +64,45 @@ public sealed class LottieSmokeController : MonoBehaviour
     private SmokeResult _result;
     private string _resultPath;
     private bool _quitWhenComplete;
+    private bool _showFps;
+    private float _fpsElapsed;
+    private float _fpsLogElapsed;
+    private float _fpsFrameTime;
+    private int _fpsFrameCount;
+    private float _displayFps;
+    private float _displayFrameMilliseconds;
+    private GUIStyle _fpsBoxStyle;
+    private GUIStyle _fpsLabelStyle;
     private static readonly List<PendingReadbackCleanup> sPendingReadbackCleanup =
         new List<PendingReadbackCleanup>();
 
     private void Update()
     {
+        if (_showFps)
+        {
+            float deltaTime = Time.unscaledDeltaTime;
+            _fpsElapsed += deltaTime;
+            _fpsLogElapsed += deltaTime;
+            _fpsFrameTime += deltaTime;
+            _fpsFrameCount++;
+            if (_fpsElapsed >= 0.5f)
+            {
+                _displayFps = _fpsFrameCount / _fpsFrameTime;
+                _displayFrameMilliseconds = 1000f * _fpsFrameTime / _fpsFrameCount;
+                _fpsElapsed = 0f;
+                _fpsFrameTime = 0f;
+                _fpsFrameCount = 0;
+            }
+            if (_fpsLogElapsed >= 2f)
+            {
+                Debug.Log(string.Format(CultureInfo.InvariantCulture,
+                    "[LottieSmoke] FPS {0:F1}, frame time {1:F1} ms",
+                    _displayFps,
+                    _displayFrameMilliseconds));
+                _fpsLogElapsed = 0f;
+            }
+        }
+
         for (int i = sPendingReadbackCleanup.Count - 1; i >= 0; i--)
         {
             PendingReadbackCleanup pending = sPendingReadbackCleanup[i];
@@ -94,6 +128,39 @@ public sealed class LottieSmokeController : MonoBehaviour
         }
     }
 
+    private void OnGUI()
+    {
+        if (!_showFps)
+        {
+            return;
+        }
+
+        int fontSize = Mathf.Clamp(Screen.height / 48, 22, 48);
+        if (_fpsBoxStyle == null || _fpsBoxStyle.fontSize != fontSize)
+        {
+            _fpsBoxStyle = new GUIStyle(GUI.skin.box)
+            {
+                fontSize = fontSize,
+                alignment = TextAnchor.MiddleCenter
+            };
+            _fpsLabelStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = fontSize,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            _fpsLabelStyle.normal.textColor = Color.white;
+        }
+
+        float width = Mathf.Clamp(Screen.width * 0.3f, 260f, 520f);
+        float height = fontSize * 2.2f;
+        var rect = new Rect(Screen.width - width - 16f, 16f, width, height);
+        GUI.Box(rect, GUIContent.none, _fpsBoxStyle);
+        GUI.Label(rect,
+            string.Format(CultureInfo.InvariantCulture, "FPS {0:F1}  |  {1:F1} ms", _displayFps, _displayFrameMilliseconds),
+            _fpsLabelStyle);
+    }
+
     private IEnumerator Start()
     {
         string[] arguments = Environment.GetCommandLineArgs();
@@ -116,6 +183,7 @@ public sealed class LottieSmokeController : MonoBehaviour
             yield break;
         }
 
+        _showFps = true;
         _quitWhenComplete = HasArgument(arguments, QuitArgument);
         _result = new SmokeResult
         {

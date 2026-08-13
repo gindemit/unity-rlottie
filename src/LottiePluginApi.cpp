@@ -197,7 +197,6 @@ extern "C"
         RenderSlotAcquireResult acquireResult = AcquireRenderSlot(animation_wrapper, render_data, /*waitForSlot=*/true);
         if (acquireResult == RenderSlotAcquireResult::NativeBackpressure)
         {
-            LottieLogWarning(animation_wrapper, "[Lottie] Sync render skipped: native render pool unavailable");
             return 1;
         }
 #endif
@@ -311,7 +310,6 @@ extern "C"
             // async state machine instead of allocating or touching GPU-owned
             // memory.
             render_data->render_skipped = true;
-            LottieLogWarning(animation_wrapper, "[Lottie] Async render skipped: native render pool unavailable");
             return 0;
         }
         if (!CreateRenderFuture(animation_wrapper, render_data, frame_number, keep_aspect_ratio))
