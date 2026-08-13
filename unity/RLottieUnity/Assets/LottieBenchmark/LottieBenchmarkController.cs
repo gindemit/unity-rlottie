@@ -250,6 +250,13 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         _showPreviews = GUILayout.Toggle(_showPreviews, "Show previews (max 12)");
         GUILayout.EndHorizontal();
 
+        bool showFpsOverlay = LottieSmokeController.FpsOverlayEnabled;
+        bool updatedShowFpsOverlay = GUILayout.Toggle(showFpsOverlay, "Show FPS overlay");
+        if (updatedShowFpsOverlay != showFpsOverlay)
+        {
+            LottieSmokeController.FpsOverlayEnabled = updatedShowFpsOverlay;
+        }
+
         GUILayout.Space(8f);
         GUILayout.BeginHorizontal();
         GUI.enabled = !_benchmarkRunning;
