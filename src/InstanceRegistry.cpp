@@ -62,6 +62,10 @@ RenderSlotAcquireResult AcquireRenderSlot(
             return RenderSlotAcquireResult::ExternalBuffer;
         }
         state = it->second.get();
+        // Serialize the active-render handoff with reset/disposal. Once the
+        // count is incremented, reset waits before mutating texture or pool
+        // state; acquiring this lock first closes the reset-passed-zero race.
+        std::lock_guard<std::mutex> stateLifetimeLock(state->lifetimeMutex);
         std::lock_guard<std::mutex> renderLifetimeLock(state->renderLifetimeMutex);
         ++state->activeRenders;
     }
@@ -279,6 +283,21 @@ void ReleaseUploadSlot(InstanceState* state, int slotIndex)
     {
         slot.owner = InstanceState::SlotOwner::Free;
         slot.gpuUseToken = 0;
+        state->renderPoolChanged.notify_all();
+    }
+}
+
+void RestoreUploadSlotToReady(InstanceState* state, int slotIndex)
+{
+    if (state == nullptr || slotIndex < 0 || slotIndex >= InstanceState::kRenderSlotCount)
+    {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(state->renderPoolMutex);
+    InstanceState::RenderSlot& slot = state->renderSlots[slotIndex];
+    if (slot.owner == InstanceState::SlotOwner::Uploading)
+    {
+        slot.owner = InstanceState::SlotOwner::Ready;
         state->renderPoolChanged.notify_all();
     }
 }
