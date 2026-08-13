@@ -18,7 +18,7 @@ void ResetGLExtensionState();
 
 // OpenGL texture operations
 bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
-void UploadOpenGL(InstanceState* state, const UploadContext& ctx);
+UploadResult UploadOpenGL(InstanceState* state, const UploadContext& ctx);
 void ResetTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state);
 bool RegisterUnityTextureOpenGL(
     lottie_animation_wrapper* animation,
