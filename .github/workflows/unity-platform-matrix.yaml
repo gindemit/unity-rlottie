@@ -194,7 +194,10 @@ jobs:
           chmod +x artifacts/linux/RLottieSmoke.x86_64
           vulkaninfo --summary
           set +e
-          timeout 45s xvfb-run -a artifacts/linux/RLottieSmoke.x86_64 \
+          # CPU-only hosted runners can spend about 40 seconds rejecting
+          # llvmpipe Vulkan before Unity falls back to OpenGL. Leave enough
+          # time for the rendered smoke itself after that initialization.
+          timeout 90s xvfb-run -a artifacts/linux/RLottieSmoke.x86_64 \
             -force-vulkan \
             -screen-width 1280 \
             -screen-height 720 \
