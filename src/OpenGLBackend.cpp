@@ -214,13 +214,13 @@ bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* sta
     return true;
 }
 
-void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadOpenGL(InstanceState* state, const UploadContext& ctx)
 {
     if (state == nullptr || state->gl.glTex == 0 || ctx.data == nullptr)
     {
         LottieLogWarning(nullptr, "[Lottie] UploadOpenGL: Invalid parameters (state=%p, glTex=%u, data=%p)",
                        state, state ? state->gl.glTex : 0, ctx.data);
-        return;
+        return UploadResult::Failed;
     }
 
     LottieLogInfo(nullptr, "[Lottie] UploadOpenGL: Uploading to texture %u, size=%ux%u, stride=%u",
@@ -246,7 +246,14 @@ void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     succeeded = CheckGLError(nullptr, "glPixelStorei in UploadOpenGL") && succeeded;
 
-    if (gHasBGRAExt)
+    // Unity creates Android GLES textures as RGBA. Although Mali advertises
+    // EXT_texture_format_BGRA8888, GL_BGRA uploads into Unity's RGBA storage
+    // fail with GL_INVALID_OPERATION on the tested device. Convert into the
+    // persistent per-instance scratch buffer instead. Plug-in-owned GLES
+    // textures keep their matching BGRA allocation and can use the extension.
+    const bool requiresUnityOwnedGlesConversion =
+        gIsOpenGLES && state->gl.unityOwnedTexture;
+    if (gHasBGRAExt && !requiresUnityOwnedGlesConversion)
     {
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA, GL_UNSIGNED_BYTE, ctx.data);
     }
@@ -276,6 +283,7 @@ void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
     {
         LottieLogWarning(nullptr, "[Lottie] UploadOpenGL: Upload failed; managed fallback required");
     }
+    return succeeded ? UploadResult::Submitted : UploadResult::Failed;
 }
 
 bool RegisterUnityTextureOpenGL(
@@ -312,8 +320,9 @@ bool RegisterUnityTextureOpenGL(
         state->renderPoolChanged.notify_all();
     }
 
-    // Linux passes a Unity-owned texture name. Registration deliberately does
-    // not issue GL calls because it runs on Unity's scripting thread.
+    // Unity passes an existing texture name on Linux and Android. Registration
+    // deliberately does not issue GL calls because it runs on Unity's scripting
+    // thread; all GL access remains inside the render-event callback.
     if (state->gl.glTex != 0 && !state->gl.unityOwnedTexture)
     {
         LottieLogWarning(animation, "[Lottie] OpenGL: cannot replace a plugin-owned texture off the render thread");

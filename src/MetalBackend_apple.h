@@ -26,7 +26,7 @@ void ShutdownMetal();
 
 // Metal texture operations
 bool EnsureTextureMetal(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
-void UploadMetal(InstanceState* state, const UploadContext& ctx);
+UploadResult UploadMetal(InstanceState* state, const UploadContext& ctx);
 void ResetTextureMetal(lottie_animation_wrapper* animation, InstanceState* state);
 
 #endif // defined(__APPLE__) && !defined(__EMSCRIPTEN__)
