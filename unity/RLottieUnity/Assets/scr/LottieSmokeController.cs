@@ -441,8 +441,14 @@ public sealed class LottieSmokeController : MonoBehaviour
         LottieTextureUploadBackend backend,
         PixelCapture capture)
     {
+        // Native OpenGL is GPU-written just like Vulkan and external textures.
+        // A synchronous ReadPixels stalls badly on CPU-only hosted llvmpipe, so
+        // normalize through the existing bounded 64x64 async readback whenever
+        // the platform supports it. Keep TryCapture as the compatibility path
+        // for graphics stacks without async readback support.
         bool nativeWritten = backend == LottieTextureUploadBackend.NativeVulkan ||
-            backend == LottieTextureUploadBackend.NativeExternalTexture;
+            backend == LottieTextureUploadBackend.NativeExternalTexture ||
+            backend == LottieTextureUploadBackend.NativeOpenGL;
         if (nativeWritten && SystemInfo.supportsAsyncGPUReadback)
         {
             yield return CaptureTextureAsync(source, capture);
