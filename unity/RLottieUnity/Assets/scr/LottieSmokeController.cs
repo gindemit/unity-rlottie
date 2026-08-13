@@ -16,6 +16,8 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const string QuitArgument = "-lottieSmokeQuit";
     private const string DefaultResultFileName = "lottie-smoke-result.json";
     private const string AndroidRequestExtra = "lottieSmoke";
+    private const string FpsOnlyArgument = "-lottieFpsOnly";
+    private const string AndroidFpsOnlyExtra = "lottieFpsOnly";
     private const float AnimationTimeoutSeconds = 5f;
     private const float ReadbackTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
@@ -166,6 +168,13 @@ public sealed class LottieSmokeController : MonoBehaviour
         string[] arguments = Environment.GetCommandLineArgs();
         if (HasArgument(arguments, "-lottieBenchmarkMatrix"))
         {
+            yield break;
+        }
+
+        bool fpsOnly = HasArgument(arguments, FpsOnlyArgument) || IsAndroidFpsOnlyRequested();
+        if (fpsOnly)
+        {
+            _showFps = true;
             yield break;
         }
 
@@ -704,6 +713,16 @@ public sealed class LottieSmokeController : MonoBehaviour
 
     private static bool IsAndroidSmokeRequested()
     {
+        return GetAndroidBooleanExtra(AndroidRequestExtra);
+    }
+
+    private static bool IsAndroidFpsOnlyRequested()
+    {
+        return GetAndroidBooleanExtra(AndroidFpsOnlyExtra);
+    }
+
+    private static bool GetAndroidBooleanExtra(string name)
+    {
 #if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
@@ -711,12 +730,12 @@ public sealed class LottieSmokeController : MonoBehaviour
             using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
             using (AndroidJavaObject intent = activity.Call<AndroidJavaObject>("getIntent"))
             {
-                return intent.Call<bool>("getBooleanExtra", AndroidRequestExtra, false);
+                return intent.Call<bool>("getBooleanExtra", name, false);
             }
         }
         catch (Exception exception)
         {
-            Debug.LogWarning("Could not read the Android smoke request: " + exception.Message);
+            Debug.LogWarning("Could not read Android launch extra '" + name + "': " + exception.Message);
         }
 #endif
         return false;
