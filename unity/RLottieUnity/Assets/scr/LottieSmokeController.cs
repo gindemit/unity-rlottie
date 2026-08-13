@@ -365,8 +365,7 @@ public sealed class LottieSmokeController : MonoBehaviour
         PixelCapture capture)
     {
         bool nativeWritten = backend == LottieTextureUploadBackend.NativeVulkan ||
-            backend == LottieTextureUploadBackend.NativeExternalTexture ||
-            backend == LottieTextureUploadBackend.NativeOpenGL;
+            backend == LottieTextureUploadBackend.NativeExternalTexture;
         if (nativeWritten && SystemInfo.supportsAsyncGPUReadback)
         {
             yield return CaptureTextureAsync(source, capture);
