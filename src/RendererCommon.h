@@ -32,6 +32,13 @@ struct UploadContext
     uint32_t stride = 0;
     int slotIndex = -1;
 };
+
+enum class UploadResult
+{
+    Submitted,
+    Retry,
+    Failed,
+};
 #endif
 
 // Global renderer state accessors

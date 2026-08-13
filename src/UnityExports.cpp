@@ -40,7 +40,8 @@ static void UNITY_INTERFACE_API OnRenderEvent(int /*eventID*/)
 
     if (animation != nullptr)
     {
-        LottieLogInfo(animation, "[Lottie] Performing GPU upload on render thread");
+        // Treat the dequeued address as an opaque registry key until
+        // PerformUploadFor acquires the instance lifetime lock.
         ProfBegin(GetProfilerMarkerUpload());
         PerformUploadFor(animation);
         ProfEnd(GetProfilerMarkerUpload());

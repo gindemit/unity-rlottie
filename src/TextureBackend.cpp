@@ -127,7 +127,7 @@ bool EnsureTextureForRenderer(lottie_animation_wrapper* animation, InstanceState
     }
 }
 
-void UploadForRenderer(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadForRenderer(InstanceState* state, const UploadContext& ctx)
 {
     Renderer renderer = GetCurrentRenderer();
 
@@ -135,30 +135,33 @@ void UploadForRenderer(InstanceState* state, const UploadContext& ctx)
     {
         case Renderer::D3D12:
 #if defined(_WIN32)
-            UploadD3D12(state, ctx);
+            return UploadD3D12(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::D3D11:
 #if defined(_WIN32)
-            UploadD3D11(state, ctx);
+            return UploadD3D11(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::Metal:
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-            UploadMetal(state, ctx);
+            return UploadMetal(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::OpenGL:
 #if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
-            UploadOpenGL(state, ctx);
+            return UploadOpenGL(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::Vulkan:
-            UploadVulkan(state, ctx);
-            break;
+            return UploadVulkan(state, ctx);
         case Renderer::Unknown:
         default:
-            break;
+            return UploadResult::Failed;
     }
 }
 
