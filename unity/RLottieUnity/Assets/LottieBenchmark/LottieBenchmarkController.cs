@@ -59,6 +59,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
     private bool _validationFailed;
     private bool _holdAfterWarmup;
     private bool _useManagedUpload;
+    private bool _panelOpen = true;
     private int[] _matrixResolutions = DefaultMatrixResolutions;
     private int _liveFrame;
     private double _liveBatchMs;
@@ -161,6 +162,31 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             safeArea.width / scale,
             safeArea.height / scale);
         const float margin = 12f;
+        if (!_panelOpen)
+        {
+            // Draw the launcher in screen coordinates. Keeping the scaled IMGUI
+            // matrix here can place this small control outside some mobile safe
+            // areas even though the full logical panel remains visible.
+            GUI.matrix = oldMatrix;
+            float screenMargin = margin * scale;
+            Rect openButtonArea = new Rect(
+                safeArea.xMin + screenMargin,
+                Screen.height - safeArea.yMax + screenMargin,
+                Mathf.Min(190f * scale, safeArea.width - screenMargin * 2f),
+                42f * scale);
+            GUI.Box(openButtonArea, GUIContent.none, _panelStyle);
+            Rect openButton = new Rect(
+                openButtonArea.x + 4f,
+                openButtonArea.y + 4f,
+                openButtonArea.width - 8f,
+                openButtonArea.height - 8f);
+            if (GUI.Button(openButton, "Open performance lab"))
+            {
+                _panelOpen = true;
+            }
+            return;
+        }
+
         float panelWidth = Mathf.Min(610f, logicalSafeArea.width - margin * 2f);
         Rect panelArea = new Rect(
             logicalSafeArea.xMin + margin,
@@ -173,7 +199,14 @@ public sealed class LottieBenchmarkController : MonoBehaviour
 
         GUILayout.BeginArea(panelArea, _panelStyle);
         _controlScroll = GUILayout.BeginScrollView(_controlScroll);
+        GUILayout.BeginHorizontal();
         GUILayout.Label("rlottie performance lab", _headingStyle);
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("Close", GUILayout.Width(72f), GUILayout.Height(26f)))
+        {
+            _panelOpen = false;
+        }
+        GUILayout.EndHorizontal();
         GUILayout.Label("Deterministic render batches plus observed Unity frame timing. Runs unchanged in Editor, Windows, iOS, and other device players.", _smallStyle);
 
         GUILayout.Space(8f);
