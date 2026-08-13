@@ -16,6 +16,8 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const string QuitArgument = "-lottieSmokeQuit";
     private const string DefaultResultFileName = "lottie-smoke-result.json";
     private const string AndroidRequestExtra = "lottieSmoke";
+    private const string FpsOnlyArgument = "-lottieFpsOnly";
+    private const string AndroidFpsOnlyExtra = "lottieFpsOnly";
     private const float AnimationTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
 
@@ -57,12 +59,90 @@ public sealed class LottieSmokeController : MonoBehaviour
     private SmokeResult _result;
     private string _resultPath;
     private bool _quitWhenComplete;
+    private bool _showFps;
+    private float _fpsElapsed;
+    private float _fpsLogElapsed;
+    private float _fpsFrameTime;
+    private int _fpsFrameCount;
+    private float _displayFps;
+    private float _displayFrameMilliseconds;
+    private GUIStyle _fpsBoxStyle;
+    private GUIStyle _fpsLabelStyle;
+
+    private void Update()
+    {
+        if (!_showFps)
+        {
+            return;
+        }
+
+        float deltaTime = Time.unscaledDeltaTime;
+        _fpsElapsed += deltaTime;
+        _fpsLogElapsed += deltaTime;
+        _fpsFrameTime += deltaTime;
+        _fpsFrameCount++;
+        if (_fpsElapsed >= 0.5f)
+        {
+            _displayFps = _fpsFrameCount / _fpsFrameTime;
+            _displayFrameMilliseconds = 1000f * _fpsFrameTime / _fpsFrameCount;
+            _fpsElapsed = 0f;
+            _fpsFrameTime = 0f;
+            _fpsFrameCount = 0;
+        }
+        if (_fpsLogElapsed >= 2f)
+        {
+            Debug.Log(string.Format(CultureInfo.InvariantCulture,
+                "[LottieSmoke] FPS {0:F1}, frame time {1:F1} ms",
+                _displayFps,
+                _displayFrameMilliseconds));
+            _fpsLogElapsed = 0f;
+        }
+    }
+
+    private void OnGUI()
+    {
+        if (!_showFps)
+        {
+            return;
+        }
+
+        int fontSize = Mathf.Clamp(Screen.height / 48, 22, 48);
+        if (_fpsBoxStyle == null || _fpsBoxStyle.fontSize != fontSize)
+        {
+            _fpsBoxStyle = new GUIStyle(GUI.skin.box)
+            {
+                fontSize = fontSize,
+                alignment = TextAnchor.MiddleCenter
+            };
+            _fpsLabelStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = fontSize,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            _fpsLabelStyle.normal.textColor = Color.white;
+        }
+
+        float width = Mathf.Clamp(Screen.width * 0.3f, 260f, 520f);
+        float height = fontSize * 2.2f;
+        var rect = new Rect(Screen.width - width - 16f, 16f, width, height);
+        GUI.Box(rect, GUIContent.none, _fpsBoxStyle);
+        GUI.Label(rect,
+            string.Format(CultureInfo.InvariantCulture, "FPS {0:F1}  |  {1:F1} ms", _displayFps, _displayFrameMilliseconds),
+            _fpsLabelStyle);
+    }
 
     private IEnumerator Start()
     {
         string[] arguments = Environment.GetCommandLineArgs();
         if (HasArgument(arguments, "-lottieBenchmarkMatrix"))
         {
+            yield break;
+        }
+
+        if (HasArgument(arguments, FpsOnlyArgument) || IsAndroidFpsOnlyRequested())
+        {
+            _showFps = true;
             yield break;
         }
 
@@ -504,6 +584,16 @@ public sealed class LottieSmokeController : MonoBehaviour
 
     private static bool IsAndroidSmokeRequested()
     {
+        return GetAndroidBooleanExtra(AndroidRequestExtra);
+    }
+
+    private static bool IsAndroidFpsOnlyRequested()
+    {
+        return GetAndroidBooleanExtra(AndroidFpsOnlyExtra);
+    }
+
+    private static bool GetAndroidBooleanExtra(string name)
+    {
 #if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
@@ -511,12 +601,12 @@ public sealed class LottieSmokeController : MonoBehaviour
             using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
             using (AndroidJavaObject intent = activity.Call<AndroidJavaObject>("getIntent"))
             {
-                return intent.Call<bool>("getBooleanExtra", AndroidRequestExtra, false);
+                return intent.Call<bool>("getBooleanExtra", name, false);
             }
         }
         catch (Exception exception)
         {
-            Debug.LogWarning("Could not read the Android smoke request: " + exception.Message);
+            Debug.LogWarning("Could not read Android launch extra '" + name + "': " + exception.Message);
         }
 #endif
         return false;
