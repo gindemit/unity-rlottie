@@ -147,13 +147,13 @@ bool EnsureTextureMetal(lottie_animation_wrapper* animation, InstanceState* stat
     return true;
 }
 
-void UploadMetal(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadMetal(InstanceState* state, const UploadContext& ctx)
 {
     if (state == nullptr || state->metal.metalTex == nil || ctx.data == nullptr)
     {
         LottieLogWarning(nullptr, "[Lottie] UploadMetal: Invalid parameters (state=%p, metalTex=%p, data=%p)",
                        state, state ? state->metal.metalTex : nullptr, ctx.data);
-        return;
+        return UploadResult::Failed;
     }
 
     LottieLogInfo(nullptr, "[Lottie] UploadMetal: Uploading to texture, size=%ux%u, stride=%u",
@@ -178,6 +178,7 @@ void UploadMetal(InstanceState* state, const UploadContext& ctx)
     [metalTex replaceRegion:region mipmapLevel:0 withBytes:ctx.data bytesPerRow:ctx.stride];
 
     LottieLogInfo(nullptr, "[Lottie] UploadMetal: Upload completed successfully");
+    return UploadResult::Submitted;
 }
 
 #endif // defined(__APPLE__) && !defined(__EMSCRIPTEN__)
