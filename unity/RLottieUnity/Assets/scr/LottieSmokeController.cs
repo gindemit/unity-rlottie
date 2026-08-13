@@ -18,6 +18,7 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const string AndroidRequestExtra = "lottieSmoke";
     private const string FpsOnlyArgument = "-lottieFpsOnly";
     private const string AndroidFpsOnlyExtra = "lottieFpsOnly";
+    private const string FpsOverlayPlayerPrefsKey = "RLottie.ShowFpsOverlay";
     private const float AnimationTimeoutSeconds = 5f;
     private const float ReadbackTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
@@ -66,6 +67,7 @@ public sealed class LottieSmokeController : MonoBehaviour
     private SmokeResult _result;
     private string _resultPath;
     private bool _quitWhenComplete;
+    private bool _forceShowFps;
     private bool _showFps;
     private float _fpsElapsed;
     private float _fpsLogElapsed;
@@ -77,9 +79,34 @@ public sealed class LottieSmokeController : MonoBehaviour
     private GUIStyle _fpsLabelStyle;
     private static readonly List<PendingReadbackCleanup> sPendingReadbackCleanup =
         new List<PendingReadbackCleanup>();
+    private static int sFpsOverlayEnabled = -1;
+
+    public static bool FpsOverlayEnabled
+    {
+        get
+        {
+            if (sFpsOverlayEnabled < 0)
+            {
+                sFpsOverlayEnabled = PlayerPrefs.GetInt(FpsOverlayPlayerPrefsKey, 1);
+            }
+            return sFpsOverlayEnabled != 0;
+        }
+        set
+        {
+            sFpsOverlayEnabled = value ? 1 : 0;
+            PlayerPrefs.SetInt(FpsOverlayPlayerPrefsKey, sFpsOverlayEnabled);
+            PlayerPrefs.Save();
+        }
+    }
+
+    private void Awake()
+    {
+        _showFps = FpsOverlayEnabled;
+    }
 
     private void Update()
     {
+        _showFps = _forceShowFps || FpsOverlayEnabled;
         if (_showFps)
         {
             float deltaTime = Time.unscaledDeltaTime;
@@ -95,7 +122,9 @@ public sealed class LottieSmokeController : MonoBehaviour
                 _fpsFrameTime = 0f;
                 _fpsFrameCount = 0;
             }
-            if (_fpsLogElapsed >= 2f)
+            // Keep periodic logcat/player-log telemetry for explicit diagnostic
+            // runs only. The default on-screen overlay must not spam logs.
+            if (_forceShowFps && _fpsLogElapsed >= 2f)
             {
                 Debug.Log(string.Format(CultureInfo.InvariantCulture,
                     "[LottieSmoke] FPS {0:F1}, frame time {1:F1} ms",
@@ -174,6 +203,7 @@ public sealed class LottieSmokeController : MonoBehaviour
         bool fpsOnly = HasArgument(arguments, FpsOnlyArgument) || IsAndroidFpsOnlyRequested();
         if (fpsOnly)
         {
+            _forceShowFps = true;
             _showFps = true;
             yield break;
         }
@@ -192,6 +222,7 @@ public sealed class LottieSmokeController : MonoBehaviour
             yield break;
         }
 
+        _forceShowFps = true;
         _showFps = true;
         _quitWhenComplete = HasArgument(arguments, QuitArgument);
         _result = new SmokeResult
