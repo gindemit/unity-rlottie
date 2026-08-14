@@ -115,6 +115,13 @@ namespace
                "short async-render stride rejected");
 
         renderData.bytesPerLine = 4;
+        renderData.buffer = nullptr;
+        Expect(lottie_render_immediately(animation, &renderData, 0, false, false) == -1,
+               "missing external render buffer rejected after slot acquisition");
+        Expect(lottie_render_create_future_async(animation, &renderData, 0, false, false) == -1,
+               "missing external async buffer rejected after slot acquisition");
+
+        renderData.buffer = &pixel;
         renderData.height = 0;
         Expect(lottie_render_immediately(animation, &renderData, 0, false, false) == -1,
                "zero-height render rejected");
