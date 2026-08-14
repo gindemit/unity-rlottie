@@ -269,8 +269,16 @@ namespace LottiePlugin
                 return;
             if (_usesCPURendering)
             {
+                int result = NativeBridge.LottieRenderGetFutureResult(
+                    _animationWrapperIntPtr,
+                    _lottieRenderDataIntPtr);
+                _asyncDrawWasCalled = false;
+                if (result != 0)
+                {
+                    return;
+                }
+
 #if UNITY_WEBGL && !UNITY_EDITOR
-                NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
                 if (_useShaderConversion)
                 {
                     _sourceTexture.Apply();
@@ -283,7 +291,6 @@ namespace LottiePlugin
 #else
                 Texture.Apply();
 #endif
-                _asyncDrawWasCalled = false;
             }
             else
             {

@@ -8,6 +8,7 @@
 #pragma comment(lib, "dxgi.lib")
 
 #include "D3D12Backend_win.h"
+#include "ImageBufferUtils.h"
 #include "InstanceRegistry.h"
 #include "LottieLogger.h"
 #include <algorithm>
@@ -468,12 +469,15 @@ UploadResult UploadD3D12(InstanceState* state, const UploadContext& ctx)
         + state->d3d12.uploadSlotBytes * static_cast<UINT64>(uploadSlot)
         + state->d3d12.footprint->Offset;
     const UINT uploadStride = state->d3d12.footprint->Footprint.RowPitch;
-    const size_t rowBytes = static_cast<size_t>(ctx.width) * 4;
-    for (uint32_t row = 0; row < ctx.height; ++row)
+    if (!CopyImageRows(
+            uploadData,
+            uploadStride,
+            ctx.data,
+            ctx.stride,
+            ctx.width,
+            ctx.height))
     {
-        std::memcpy(uploadData + static_cast<size_t>(row) * uploadStride,
-                    ctx.data + static_cast<size_t>(row) * ctx.stride,
-                    rowBytes);
+        return UploadResult::Failed;
     }
     if (sD3D12v8 != nullptr)
     {

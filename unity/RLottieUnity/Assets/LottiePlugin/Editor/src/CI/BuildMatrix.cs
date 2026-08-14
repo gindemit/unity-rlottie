@@ -188,23 +188,8 @@ namespace RLottie.CI
                 return default(GraphicsApiState);
             }
 
-            bool isVulkan = string.Equals(requestedGraphicsApi, "Vulkan", StringComparison.OrdinalIgnoreCase);
-            bool isOpenGles3 = string.Equals(requestedGraphicsApi, "OpenGLES3", StringComparison.OrdinalIgnoreCase);
-            if (!isVulkan && !isOpenGles3)
-            {
-                throw new ArgumentException("Unsupported -ciGraphicsApi value: " + requestedGraphicsApi);
-            }
-
-            if (isOpenGles3 && target != BuildTarget.Android)
-            {
-                throw new InvalidOperationException("OpenGLES3 is only supported by the Android CI target.");
-            }
-
-            if (isVulkan && target != BuildTarget.Android && target != BuildTarget.StandaloneLinux64 &&
-                target != BuildTarget.StandaloneWindows64)
-            {
-                throw new InvalidOperationException("Vulkan is not supported by this CI target: " + target);
-            }
+            GraphicsDeviceType graphicsApi = ParseGraphicsApi(requestedGraphicsApi);
+            ValidateGraphicsApiTarget(graphicsApi, target);
 
             GraphicsApiState state = new GraphicsApiState
             {
@@ -215,14 +200,59 @@ namespace RLottie.CI
             };
 
             PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
-            GraphicsDeviceType graphicsApi = isVulkan ? GraphicsDeviceType.Vulkan : GraphicsDeviceType.OpenGLES3;
-            GraphicsDeviceType[] graphicsApis = isVulkan && target == BuildTarget.StandaloneLinux64
+            GraphicsDeviceType[] graphicsApis = graphicsApi == GraphicsDeviceType.Vulkan &&
+                target == BuildTarget.StandaloneLinux64
                 ? new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLCore }
                 : new[] { graphicsApi };
             PlayerSettings.SetGraphicsAPIs(target, graphicsApis);
             Debug.Log("RLottie CI graphics APIs configured as " + string.Join(", ", graphicsApis) +
                 " for " + target + ".");
             return state;
+        }
+
+        private static GraphicsDeviceType ParseGraphicsApi(string requestedGraphicsApi)
+        {
+            switch (requestedGraphicsApi.ToLowerInvariant())
+            {
+                case "direct3d11":
+                    return GraphicsDeviceType.Direct3D11;
+                case "direct3d12":
+                    return GraphicsDeviceType.Direct3D12;
+                case "openglcore":
+                    return GraphicsDeviceType.OpenGLCore;
+                case "vulkan":
+                    return GraphicsDeviceType.Vulkan;
+                case "opengles3":
+                    return GraphicsDeviceType.OpenGLES3;
+                default:
+                    throw new ArgumentException("Unsupported -ciGraphicsApi value: " + requestedGraphicsApi);
+            }
+        }
+
+        private static void ValidateGraphicsApiTarget(GraphicsDeviceType graphicsApi, BuildTarget target)
+        {
+            if (graphicsApi == GraphicsDeviceType.OpenGLES3 && target != BuildTarget.Android)
+            {
+                throw new InvalidOperationException("OpenGLES3 is only supported by the Android CI target.");
+            }
+
+            if ((graphicsApi == GraphicsDeviceType.Direct3D11 || graphicsApi == GraphicsDeviceType.Direct3D12) &&
+                target != BuildTarget.StandaloneWindows64)
+            {
+                throw new InvalidOperationException(graphicsApi + " is only supported by the Windows CI target.");
+            }
+
+            if (graphicsApi == GraphicsDeviceType.OpenGLCore && target != BuildTarget.StandaloneWindows64 &&
+                target != BuildTarget.StandaloneLinux64)
+            {
+                throw new InvalidOperationException("OpenGLCore is only supported by the Windows and Linux CI targets.");
+            }
+
+            if (graphicsApi == GraphicsDeviceType.Vulkan && target != BuildTarget.Android &&
+                target != BuildTarget.StandaloneLinux64 && target != BuildTarget.StandaloneWindows64)
+            {
+                throw new InvalidOperationException("Vulkan is not supported by this CI target: " + target);
+            }
         }
 
         private static void RestoreGraphicsApi(GraphicsApiState state)

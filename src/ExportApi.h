@@ -4,8 +4,12 @@
 #if defined(__EMSCRIPTEN__)
   #include <emscripten/emscripten.h>
   #define EXPORT_API EMSCRIPTEN_KEEPALIVE
-#elif _MSC_VER
-  #define EXPORT_API __declspec(dllexport)
+#elif defined(_MSC_VER)
+  #if defined(LOTTIE_PLUGIN_EXPORTS)
+    #define EXPORT_API __declspec(dllexport)
+  #else
+    #define EXPORT_API __declspec(dllimport)
+  #endif
 #else
   #define EXPORT_API __attribute__((visibility("default")))
 #endif
