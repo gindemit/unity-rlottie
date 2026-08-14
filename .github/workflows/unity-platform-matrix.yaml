@@ -116,6 +116,13 @@ jobs:
             output: artifacts/windows-d3d12/RLottieSmoke.exe
             artifact_path: artifacts/windows-d3d12
             artifact: rlottie-windows-d3d12-${{ github.run_id }}
+          - name: Windows64 Vulkan
+            target_platform: StandaloneWindows64
+            ci_target: Windows64
+            graphics_api: Vulkan
+            output: artifacts/windows-vulkan/RLottieSmoke.exe
+            artifact_path: artifacts/windows-vulkan
+            artifact: rlottie-windows-vulkan-${{ github.run_id }}
           - name: Linux Vulkan
             target_platform: StandaloneLinux64
             ci_target: Linux64
@@ -253,6 +260,10 @@ jobs:
           - graphics_api: Direct3D12
             slug: d3d12
             artifact: rlottie-windows-d3d12-${{ github.run_id }}
+          - graphics_api: Vulkan
+            slug: vulkan
+            artifact: rlottie-windows-vulkan-${{ github.run_id }}
+            upload_backend: NativeVulkan
     steps:
       - uses: actions/checkout@v4
 
@@ -268,7 +279,7 @@ jobs:
           -Player artifacts/windows-${{ matrix.slug }}/RLottieSmoke.exe
           -LogFile artifacts/windows-${{ matrix.slug }}/Player.log
           -ExpectedGraphicsApi ${{ matrix.graphics_api }}
-          -ExpectedUploadBackend NativeExternalTexture
+          -ExpectedUploadBackend ${{ matrix.upload_backend || 'NativeExternalTexture' }}
           -RequireNativeUpload
 
       - name: Upload player smoke artifacts
