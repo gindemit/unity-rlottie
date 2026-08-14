@@ -17,9 +17,18 @@ set(UNITY_PLUGINAPI_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dependency/unity-plugin
 set(BUILD_SHARED_LIBS FALSE)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 
+# iOS (device and simulator, via RLOTTIE_IOS=1) ships static archives that are
+# linked by the *consumer's* Xcode toolchain, not by us. LTO/IPO makes the
+# compiler emit LLVM bitcode objects into those archives instead of machine
+# code; a consumer's linker (using a different, possibly older, LLVM) then
+# fails with "could not parse bitcode object file ... Invalid bitcode
+# version". Every other platform here either produces a dynamic library
+# (Windows/Linux/Android) or an app-local bundle (macOS) whose final link
+# happens with the same toolchain that compiled it, so LTO is safe there.
+# Keep IPO/LTO disabled specifically for the iOS static-lib build.
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
-if (ipo_supported)
+if (ipo_supported AND NOT RLOTTIE_IOS)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
 endif()
 
@@ -31,7 +40,9 @@ if (MSVC)
     add_link_options("$<$<CONFIG:Release>:/LTCG>")
 else()
     add_compile_options("$<$<CONFIG:Release>:-O3>")
-    add_link_options("$<$<CONFIG:Release>:-flto>")
+    if (NOT RLOTTIE_IOS)
+        add_link_options("$<$<CONFIG:Release>:-flto>")
+    endif()
 endif()
 
 set (RLOTTIE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../dependency/rlottie)
@@ -241,7 +252,7 @@ if (NOT APPLE AND NOT WIN32)
     endif()
 endif()
 
-if (ipo_supported)
+if (ipo_supported AND NOT RLOTTIE_IOS)
     set_property(TARGET rlottie PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     set_property(TARGET LottiePlugin PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 endif()
