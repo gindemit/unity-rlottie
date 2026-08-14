@@ -40,12 +40,13 @@ namespace
         const lottie_animation_wrapper* animation,
         const lottie_render_data* renderData) noexcept
     {
+        ImageBufferSize size{};
         return IsValidAnimation(animation) && renderData != nullptr &&
-            IsValidImageBuffer(
-                renderData->buffer,
+            TryGetImageBufferSize(
                 renderData->width,
                 renderData->height,
-                renderData->bytesPerLine);
+                renderData->bytesPerLine,
+                size);
     }
 
     template <typename Function>
@@ -271,6 +272,18 @@ extern "C"
             return 1;
         }
 #endif
+        if (!IsValidImageBuffer(
+                render_data->buffer,
+                render_data->width,
+                render_data->height,
+                render_data->bytesPerLine))
+        {
+#if !defined(__EMSCRIPTEN__)
+            CancelRenderSlot(render_data);
+#endif
+            LottieLogWarning(animation_wrapper, "[Lottie] render buffer was unavailable after slot acquisition");
+            return -1;
+        }
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
@@ -396,6 +409,16 @@ extern "C"
             // memory.
             render_data->render_skipped = true;
             return 0;
+        }
+        if (!IsValidImageBuffer(
+                render_data->buffer,
+                render_data->width,
+                render_data->height,
+                render_data->bytesPerLine))
+        {
+            CancelRenderSlot(render_data);
+            LottieLogWarning(animation_wrapper, "[Lottie] async render buffer was unavailable after slot acquisition");
+            return -1;
         }
         if (!CreateRenderFuture(animation_wrapper, render_data, frame_number, keep_aspect_ratio))
         {
