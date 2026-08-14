@@ -137,7 +137,7 @@ namespace LottiePlugin.UI
                 width,
                 height,
                 CreateOptions());
-            _rawImage.texture = _lottieAnimation.Texture;
+            _rawImage.texture = _lottieAnimation.OutputTexture;
             _lottieAnimation.Started += OnAnimationStarted;
             _lottieAnimation.Paused += OnAnimationPaused;
             _lottieAnimation.Stopped += OnAnimationStopped;
@@ -164,7 +164,7 @@ namespace LottiePlugin.UI
                 width,
                 height,
                 CreateOptions());
-            _rawImage.texture = _lottieAnimation.Texture;
+            _rawImage.texture = _lottieAnimation.OutputTexture;
             _lottieAnimation.Started += OnAnimationStarted;
             _lottieAnimation.Paused += OnAnimationPaused;
             _lottieAnimation.Stopped += OnAnimationStopped;
@@ -203,7 +203,7 @@ namespace LottiePlugin.UI
                         _textureHeight,
                         CreateOptions());
                 }
-                _rawImage.texture = _lottieAnimation.Texture;
+                _rawImage.texture = _lottieAnimation.OutputTexture;
                 _lottieAnimation.Started += OnAnimationStarted;
                 _lottieAnimation.Paused += OnAnimationPaused;
                 _lottieAnimation.Stopped += OnAnimationStopped;

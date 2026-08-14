@@ -138,7 +138,7 @@ namespace LottiePlugin.UI
             {
                 return;
             }
-            _rawImage.texture = _lottieAnimation.Texture;
+            _rawImage.texture = _lottieAnimation.OutputTexture;
         }
         internal void DisposeLottieAnimation()
         {
