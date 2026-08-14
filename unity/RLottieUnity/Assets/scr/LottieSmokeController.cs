@@ -14,6 +14,8 @@ public sealed class LottieSmokeController : MonoBehaviour
 {
     private const string ResultArgument = "-lottieSmokeResult";
     private const string QuitArgument = "-lottieSmokeQuit";
+    private const string ResultEnvironmentVariable = "LOTTIE_SMOKE_RESULT";
+    private const string QuitEnvironmentVariable = "LOTTIE_SMOKE_QUIT";
     private const string DefaultResultFileName = "lottie-smoke-result.json";
     private const string AndroidRequestExtra = "lottieSmoke";
     private const string FpsOnlyArgument = "-lottieFpsOnly";
@@ -219,6 +221,10 @@ public sealed class LottieSmokeController : MonoBehaviour
         }
         if (string.IsNullOrEmpty(_resultPath))
         {
+            _resultPath = Environment.GetEnvironmentVariable(ResultEnvironmentVariable);
+        }
+        if (string.IsNullOrEmpty(_resultPath))
+        {
             yield break;
         }
         if (!Path.IsPathRooted(_resultPath))
@@ -228,7 +234,7 @@ public sealed class LottieSmokeController : MonoBehaviour
 
         _forceShowFps = true;
         _showFps = true;
-        _quitWhenComplete = HasArgument(arguments, QuitArgument);
+        _quitWhenComplete = HasArgument(arguments, QuitArgument) || IsQuitEnvironmentVariableSet();
         _result = new SmokeResult
         {
             platform = Application.platform.ToString(),
@@ -780,6 +786,13 @@ public sealed class LottieSmokeController : MonoBehaviour
         }
 #endif
         return false;
+    }
+
+    private static bool IsQuitEnvironmentVariableSet()
+    {
+        string value = Environment.GetEnvironmentVariable(QuitEnvironmentVariable);
+        return string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetArgument(string[] arguments, string name, string fallback)
