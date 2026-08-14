@@ -8,7 +8,7 @@ param(
     [string] $Target = 'Windows64',
     [ValidateSet('Auto', 'BuiltIn', 'URP', 'HDRP')]
     [string] $Pipeline = 'Auto',
-    [ValidateSet('Auto', 'Vulkan', 'OpenGLES3')]
+    [ValidateSet('Auto', 'Direct3D11', 'Direct3D12', 'OpenGLCore', 'Vulkan', 'OpenGLES3')]
     [string] $GraphicsApi = 'Auto',
     [Parameter(Mandatory = $true)]
     [string] $OutputPath,

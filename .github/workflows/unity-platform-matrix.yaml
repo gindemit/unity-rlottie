@@ -32,6 +32,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Test smoke-result assertions
+        shell: pwsh
+        run: ./scripts/ci/test-smoke-result-assertions.ps1
+
       - name: Restore Unity Library cache
         uses: actions/cache@v4
         with:
@@ -98,13 +102,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows64
+          - name: Windows64 Direct3D11
             target_platform: StandaloneWindows64
             ci_target: Windows64
-            graphics_api: Auto
-            output: artifacts/windows/RLottieSmoke.exe
-            artifact_path: artifacts/windows
-            artifact: rlottie-windows-${{ github.run_id }}
+            graphics_api: Direct3D11
+            output: artifacts/windows-d3d11/RLottieSmoke.exe
+            artifact_path: artifacts/windows-d3d11
+            artifact: rlottie-windows-d3d11-${{ github.run_id }}
+          - name: Windows64 Direct3D12
+            target_platform: StandaloneWindows64
+            ci_target: Windows64
+            graphics_api: Direct3D12
+            output: artifacts/windows-d3d12/RLottieSmoke.exe
+            artifact_path: artifacts/windows-d3d12
+            artifact: rlottie-windows-d3d12-${{ github.run_id }}
           - name: Linux Vulkan
             target_platform: StandaloneLinux64
             ci_target: Linux64
@@ -194,7 +205,11 @@ jobs:
           chmod +x artifacts/linux/RLottieSmoke.x86_64
           vulkaninfo --summary
           set +e
-          timeout 45s xvfb-run -a artifacts/linux/RLottieSmoke.x86_64 \
+          # CPU-only hosted runners can spend about 40 seconds rejecting
+          # llvmpipe Vulkan before Unity falls back to OpenGL. Leave enough
+          # time for the rendered smoke and bounded GPU-readback diagnostics
+          # after that initialization on slow software-rendered runners.
+          timeout 150s xvfb-run -a artifacts/linux/RLottieSmoke.x86_64 \
             -force-vulkan \
             -screen-width 1280 \
             -screen-height 720 \
@@ -222,6 +237,48 @@ jobs:
           path: |
             artifacts/linux/player.log
             artifacts/linux/smoke-result.json
+          if-no-files-found: warn
+
+  windows_native_smoke:
+    name: Windows ${{ matrix.graphics_api }} native rendered-player smoke
+    needs: build_players
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - graphics_api: Direct3D11
+            slug: d3d11
+            artifact: rlottie-windows-d3d11-${{ github.run_id }}
+          - graphics_api: Direct3D12
+            slug: d3d12
+            artifact: rlottie-windows-d3d12-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/windows-${{ matrix.slug }}
+
+      - name: Run rendered-player smoke test
+        shell: pwsh
+        run: >-
+          ./scripts/ci/run-windows-player-smoke.ps1
+          -Player artifacts/windows-${{ matrix.slug }}/RLottieSmoke.exe
+          -LogFile artifacts/windows-${{ matrix.slug }}/Player.log
+          -ExpectedGraphicsApi ${{ matrix.graphics_api }}
+          -ExpectedUploadBackend NativeExternalTexture
+          -RequireNativeUpload
+
+      - name: Upload player smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rlottie-windows-${{ matrix.slug }}-native-smoke-${{ github.run_id }}
+          path: |
+            artifacts/windows-${{ matrix.slug }}/Player.log
+            artifacts/windows-${{ matrix.slug }}/Player.log.smoke.json
           if-no-files-found: warn
 
   firebase_test_lab:

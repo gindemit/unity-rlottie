@@ -20,7 +20,10 @@ bool IsVulkanUploadAvailable(lottie_animation_wrapper* animation);
 
 // Vulkan texture operations.
 bool EnsureTextureVulkan(lottie_animation_wrapper* animation, InstanceState* state, int width, int height);
-void UploadVulkan(InstanceState* state, const UploadContext& ctx);
+UploadResult UploadVulkan(InstanceState* state, const UploadContext& ctx);
+bool PrepareRenderSlotVulkan(InstanceState* state, int slotIndex, uint32_t width, uint32_t height, uint8_t*& data, uint32_t& stride);
+void RefreshCompletedRenderSlotsVulkan(InstanceState* state);
+void BeginUploadEventVulkan(InstanceState* state);
 void ResetTextureVulkan(lottie_animation_wrapper* animation, InstanceState* state);
 
 #endif // !defined(__EMSCRIPTEN__)
