@@ -233,6 +233,9 @@ if (BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
         ../../src
         "${RLOTTIE_ROOT}/inc"
         "${UNITY_PLUGINAPI_DIR}")
+    if (ANDROID OR RLOTTIE_VULKAN_INCLUDE_DIR)
+        target_compile_definitions(LottiePluginNativeTests PRIVATE LOTTIE_EXPECT_NATIVE_VULKAN_BACKEND=1)
+    endif()
     target_link_libraries(LottiePluginNativeTests PRIVATE LottiePlugin)
     add_test(NAME LottiePlugin.NativeAbi COMMAND LottiePluginNativeTests)
 endif()
