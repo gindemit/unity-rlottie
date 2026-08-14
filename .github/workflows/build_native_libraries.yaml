@@ -26,6 +26,13 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Checkout Vulkan headers
+        uses: actions/checkout@v4
+        with:
+          repository: KhronosGroup/Vulkan-Headers
+          ref: v1.3.296
+          path: dependency/Vulkan-Headers
+
       - name: Build
         run: |
           cd projects/CMake
@@ -443,12 +450,15 @@ jobs:
           git config --global user.email "konstantin.gindemit@gmail.com"
           git config --global user.name "Konstantin Gindemit"
           git remote -v
-          git commit --allow-empty -m "[skip ci] New native libraries version: 0.5.0-dev.${{ github.run_number }}"
-          git tag -a 0.5.0-dev.${{ github.run_number }} -m "[skip ci] New native libraries version: 0.5.0-dev.${{ github.run_number }}"
+          # Let the generated-binary commit trigger the platform matrix. Its
+          # concurrency group cancels the source-commit run that still embeds
+          # the previous native libraries, while this workflow's path filter
+          # prevents a native-build recursion.
+          git commit --allow-empty -m "New native libraries version: 0.5.0-dev.${{ github.run_number }}"
+          git tag -a 0.5.0-dev.${{ github.run_number }} -m "New native libraries version: 0.5.0-dev.${{ github.run_number }}"
           git config -l | grep 'http\..*\.extraheader' | cut -d= -f1 | xargs -L1 git config --unset-all
           echo "Trying to push..."
           git remote set-url origin https://token:$MY_SECRET@github.com/${TARGET_REPOSITORY}.git
           echo "Pushing to ${TARGET_REPOSITORY}:${TARGET_BRANCH}"
           git push origin HEAD:${TARGET_BRANCH}
           git push origin --tags
-
