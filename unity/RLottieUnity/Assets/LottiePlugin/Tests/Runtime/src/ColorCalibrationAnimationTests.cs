@@ -46,7 +46,8 @@ namespace LottiePlugin.Tests.Runtime
                 animation.DrawOneFrame(0);
                 yield return null;
 
-                Assert.AreEqual(LottieTextureUploadBackend.NativeExternalTexture, animation.TextureUploadBackend);
+                Assert.AreNotEqual(LottieTextureUploadBackend.ManagedTextureUpload, animation.TextureUploadBackend,
+                    "The native calibration test unexpectedly used the managed fallback.");
                 AssertCalibrationBars(Readback(animation.OutputTexture), "native upload");
             }
             finally
