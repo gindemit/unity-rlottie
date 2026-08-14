@@ -9,6 +9,8 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 #set (MSVC_RUNTIME_LIBRARY MultiThreadedDebugDLL)
 project(LottiePlugin)
 
+include(CTest)
+
 option(RLOTTIE_ANDROID_PAGE_SIZE_16K "Build Android libraries with 16KB page size" OFF)
 set(UNITY_PLUGINAPI_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dependency/unity-pluginapi" CACHE PATH "Path to Unity PluginAPI headers")
 
@@ -22,6 +24,9 @@ if (ipo_supported)
 endif()
 
 if (MSVC)
+    # Visual Studio can compile translation units concurrently within one
+    # target; serialize writes to each target's program database.
+    add_compile_options(/FS)
     add_compile_options("$<$<CONFIG:Release>:/O2>" "$<$<CONFIG:Release>:/GL>")
     add_link_options("$<$<CONFIG:Release>:/LTCG>")
 else()
@@ -67,6 +72,7 @@ include_directories ($<BUILD_INTERFACE:${RLOTTIE_ROOT}/inc> ${RLOTTIE_ROOT}/src/
 message("Lottie root directory: ${RLOTTIE_ROOT}")
 
 set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
+    ../../src/ImageBufferUtils.cpp
     ../../src/LottieLogger.cpp
     ../../src/LottiePluginApi.cpp
     ../../src/RendererCommon.cpp
@@ -113,6 +119,8 @@ if (RLOTTIE_IOS OR RLOTTIE_WEB_ASSEMBLY)
 else()
   add_library (LottiePlugin SHARED ${RLOTTIE_PLUGIN_LIBRARY_SOURCES})
 endif()
+
+target_compile_definitions(LottiePlugin PRIVATE LOTTIE_PLUGIN_EXPORTS)
 
 # Enable logging support only for non-WebGL builds
 if (NOT RLOTTIE_WEB_ASSEMBLY)
@@ -205,6 +213,19 @@ endif()
 
 add_dependencies(LottiePlugin rlottie)
 target_link_libraries(LottiePlugin rlottie)
+
+if (BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
+    add_executable(LottiePluginNativeTests
+        ../../tests/native/NativeAbiTests.cpp
+        ../../src/ImageBufferUtils.cpp)
+    target_compile_features(LottiePluginNativeTests PRIVATE cxx_std_17)
+    target_include_directories(LottiePluginNativeTests PRIVATE
+        ../../src
+        "${RLOTTIE_ROOT}/inc"
+        "${UNITY_PLUGINAPI_DIR}")
+    target_link_libraries(LottiePluginNativeTests PRIVATE LottiePlugin)
+    add_test(NAME LottiePlugin.NativeAbi COMMAND LottiePluginNativeTests)
+endif()
 
 # rlottie is built as a static library here, but its private ELF version-script
 # linker item is propagated to consumers by CMake. That script only permits

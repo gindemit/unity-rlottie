@@ -32,6 +32,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Test smoke-result assertions
+        shell: pwsh
+        run: ./scripts/ci/test-smoke-result-assertions.ps1
+
       - name: Restore Unity Library cache
         uses: actions/cache@v4
         with:
@@ -98,13 +102,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows64
+          - name: Windows64 Direct3D11
             target_platform: StandaloneWindows64
             ci_target: Windows64
-            graphics_api: Auto
-            output: artifacts/windows/RLottieSmoke.exe
-            artifact_path: artifacts/windows
-            artifact: rlottie-windows-${{ github.run_id }}
+            graphics_api: Direct3D11
+            output: artifacts/windows-d3d11/RLottieSmoke.exe
+            artifact_path: artifacts/windows-d3d11
+            artifact: rlottie-windows-d3d11-${{ github.run_id }}
+          - name: Windows64 Direct3D12
+            target_platform: StandaloneWindows64
+            ci_target: Windows64
+            graphics_api: Direct3D12
+            output: artifacts/windows-d3d12/RLottieSmoke.exe
+            artifact_path: artifacts/windows-d3d12
+            artifact: rlottie-windows-d3d12-${{ github.run_id }}
           - name: Linux Vulkan
             target_platform: StandaloneLinux64
             ci_target: Linux64
@@ -229,33 +240,45 @@ jobs:
           if-no-files-found: warn
 
   windows_native_smoke:
-    name: Windows native rendered-player smoke
+    name: Windows ${{ matrix.graphics_api }} native rendered-player smoke
     needs: build_players
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - graphics_api: Direct3D11
+            slug: d3d11
+            artifact: rlottie-windows-d3d11-${{ github.run_id }}
+          - graphics_api: Direct3D12
+            slug: d3d12
+            artifact: rlottie-windows-d3d12-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: rlottie-windows-${{ github.run_id }}
-          path: artifacts/windows
+          name: ${{ matrix.artifact }}
+          path: artifacts/windows-${{ matrix.slug }}
 
       - name: Run rendered-player smoke test
         shell: pwsh
         run: >-
           ./scripts/ci/run-windows-player-smoke.ps1
-          -Player artifacts/windows/RLottieSmoke.exe
-          -LogFile artifacts/windows/Player.log
+          -Player artifacts/windows-${{ matrix.slug }}/RLottieSmoke.exe
+          -LogFile artifacts/windows-${{ matrix.slug }}/Player.log
+          -ExpectedGraphicsApi ${{ matrix.graphics_api }}
+          -ExpectedUploadBackend NativeExternalTexture
           -RequireNativeUpload
 
       - name: Upload player smoke artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rlottie-windows-native-smoke-${{ github.run_id }}
+          name: rlottie-windows-${{ matrix.slug }}-native-smoke-${{ github.run_id }}
           path: |
-            artifacts/windows/Player.log
-            artifacts/windows/Player.log.smoke.json
+            artifacts/windows-${{ matrix.slug }}/Player.log
+            artifacts/windows-${{ matrix.slug }}/Player.log.smoke.json
           if-no-files-found: warn
 
   firebase_test_lab:
