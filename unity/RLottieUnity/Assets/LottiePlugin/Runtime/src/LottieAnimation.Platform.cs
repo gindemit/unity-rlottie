@@ -381,17 +381,14 @@ namespace LottiePlugin
             {
                 // Native uploads update mip level 0 only. A single-level texture
                 // prevents minified sampling from reading stale generated mips.
-#if UNITY_ANDROID && !UNITY_EDITOR
-                // Unity owns the GLES texture from the beginning, so the native
-                // plug-in never exposes its deferred dummy GL name. GLES uploads
-                // BGRA directly when supported and otherwise reuses a persistent
-                // conversion buffer for RGBA.
+                // Unity-owned OpenGL textures use RGBA storage. Desktop GL can
+                // upload rlottie's BGRA bytes directly with GL_BGRA, while GLES
+                // reuses a persistent conversion buffer when that upload format
+                // is unavailable. Declaring the Unity texture as BGRA would add
+                // a second sampling swizzle and exchange red and blue.
                 TextureFormat nativeTextureFormat = _usesUnityOwnedOpenGLTexture
                     ? TextureFormat.RGBA32
                     : TextureFormat.BGRA32;
-#else
-                TextureFormat nativeTextureFormat = TextureFormat.BGRA32;
-#endif
                 Texture = new Texture2D((int)width, (int)height, nativeTextureFormat, 1, false);
                 ConfigureRuntimeTexture(Texture);
                 _pixelData = Texture.GetRawTextureData<byte>();
