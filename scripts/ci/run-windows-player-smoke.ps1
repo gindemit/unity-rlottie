@@ -5,10 +5,15 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $LogFile,
     [string] $ResultFile,
-    [int] $RunSeconds = 20
+    [int] $RunSeconds = 20,
+    [ValidateSet('Direct3D11', 'Direct3D12', 'OpenGLCore', 'Vulkan')]
+    [string] $ExpectedGraphicsApi,
+    [string] $ExpectedUploadBackend,
+    [switch] $RequireNativeUpload
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'assert-smoke-result.ps1')
 $Player = (Resolve-Path -LiteralPath $Player).Path
 $LogFile = [IO.Path]::GetFullPath($LogFile)
 $ResultFile = if ($ResultFile) { [IO.Path]::GetFullPath($ResultFile) } else { "$LogFile.smoke.json" }
@@ -43,10 +48,7 @@ if (-not (Test-Path -LiteralPath $ResultFile)) {
 }
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
-$failedChecks = @($result.checks | Where-Object { -not $_.passed })
-if (-not $result.passed -or $failedChecks.Count -gt 0) {
-    $details = $failedChecks | ForEach-Object { "$($_.name): $($_.details)" }
-    throw "Windows rendered-player smoke test failed:`n$($details -join "`n")"
-}
+Assert-LottieSmokeResult -Result $result -Platform Windows -ExpectedGraphicsApi $ExpectedGraphicsApi `
+    -ExpectedUploadBackend $ExpectedUploadBackend -RequireNativeUpload:$RequireNativeUpload
 
 Write-Output "Windows rendered-player smoke test passed. Result: $ResultFile; log: $LogFile"

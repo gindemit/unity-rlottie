@@ -1,4 +1,5 @@
 #include "LottiePlugin.h"
+#include "ImageBufferUtils.h"
 #include "LottieLogger.h"
 #include "RendererCommon.h"
 
@@ -9,6 +10,9 @@
 #include "TextureBackend.h"
 #include "UnityIntegration.h"
 #include "VulkanBackend.h"
+#if !defined(__APPLE__)
+#include "OpenGLBackend.h"
+#endif
 #endif
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
@@ -27,6 +31,41 @@
 
 namespace
 {
+    bool IsValidAnimation(const lottie_animation_wrapper* animation) noexcept
+    {
+        return animation != nullptr && animation->animation != nullptr;
+    }
+
+    bool IsValidRenderRequest(
+        const lottie_animation_wrapper* animation,
+        const lottie_render_data* renderData) noexcept
+    {
+        ImageBufferSize size{};
+        return IsValidAnimation(animation) && renderData != nullptr &&
+            TryGetImageBufferSize(
+                renderData->width,
+                renderData->height,
+                renderData->bytesPerLine,
+                size);
+    }
+
+    template <typename Function>
+    int32_t InvokeIntAbi(Function&& function) noexcept
+    {
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+        try
+        {
+            return function();
+        }
+        catch (...)
+        {
+            return -1;
+        }
+#else
+        return function();
+#endif
+    }
+
     static lottie_animation_wrapper* create_animation_wrapper(std::unique_ptr<rlottie::Animation>& animation)
     {
         lottie_animation_wrapper* animation_wrapper = new lottie_animation_wrapper();
@@ -55,6 +94,58 @@ namespace
                      animation_wrapper->duration);
         return animation_wrapper;
     }
+
+#if !defined(__EMSCRIPTEN__)
+    // Android is built with -fno-exceptions. Clang defines __EXCEPTIONS only
+    // when catch syntax and stack unwinding are available; MSVC uses
+    // _CPPUNWIND. rlottie's future is expected not to throw on no-exception
+    // targets, while exception-enabled targets translate failures into the C
+    // ABI's integer error result.
+    bool ConsumeRenderFuture(lottie_render_data* renderData)
+    {
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+        try
+        {
+            renderData->render_future.get();
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+#else
+        renderData->render_future.get();
+        return true;
+#endif
+    }
+
+    bool CreateRenderFuture(
+        lottie_animation_wrapper* animation,
+        lottie_render_data* renderData,
+        uint32_t frameNumber,
+        bool keepAspectRatio)
+    {
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+        try
+        {
+#endif
+            rlottie::Surface surface(
+                renderData->buffer,
+                renderData->width,
+                renderData->height,
+                renderData->bytesPerLine);
+            renderData->render_future = animation->animation->render(
+                frameNumber, surface, keepAspectRatio);
+            return true;
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+        }
+        catch (...)
+        {
+            return false;
+        }
+#endif
+    }
+#endif
 }
 
 extern "C"
@@ -64,26 +155,49 @@ extern "C"
         const char* resource_path,
         lottie_animation_wrapper** animation_wrapper)
     {
-        const char* path_display = (resource_path == nullptr) ? "(null)" : 
-                                    (resource_path[0] == '\0') ? "(empty)" : resource_path;
-        LottieLogInfo(nullptr, "[Lottie] Loading animation from data, resource_path='%s'", path_display);
-        const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
-        auto animation = rlottie::Animation::loadFromData(std::string(json_data), std::string(resource_path), null_func);
-        if (!animation)
+        if (animation_wrapper == nullptr)
         {
-            fprintf(stderr, "Couldnt load from data '%s'.", resource_path);
-            LottieLogError(nullptr, "[Lottie] Failed to load animation from data");
             return -1;
         }
-        *animation_wrapper = create_animation_wrapper(animation);
-        LottieLogInfo(*animation_wrapper, "[Lottie] Successfully loaded animation from data");
-        return *animation_wrapper == nullptr ? -1 : 0;
+        *animation_wrapper = nullptr;
+        if (json_data == nullptr)
+        {
+            return -1;
+        }
+        const char* safe_resource_path = resource_path != nullptr ? resource_path : "";
+        return InvokeIntAbi([&]() -> int32_t {
+            const char* path_display = (resource_path == nullptr) ? "(null)" :
+                                       (resource_path[0] == '\0') ? "(empty)" : resource_path;
+            LottieLogInfo(nullptr, "[Lottie] Loading animation from data, resource_path='%s'", path_display);
+            const std::function<void(float& r, float& g, float& b)>& null_func = nullptr;
+            auto animation = rlottie::Animation::loadFromData(
+                std::string(json_data), std::string(safe_resource_path), null_func);
+            if (!animation)
+            {
+                fprintf(stderr, "Couldnt load from data with resource path '%s'.", safe_resource_path);
+                LottieLogError(nullptr, "[Lottie] Failed to load animation from data");
+                return -1;
+            }
+            *animation_wrapper = create_animation_wrapper(animation);
+            LottieLogInfo(*animation_wrapper, "[Lottie] Successfully loaded animation from data");
+            return *animation_wrapper == nullptr ? -1 : 0;
+        });
     }
 
     EXPORT_API int32_t lottie_load_from_file(
         const char* file_path,
         lottie_animation_wrapper** animation_wrapper)
     {
+        if (animation_wrapper == nullptr)
+        {
+            return -1;
+        }
+        *animation_wrapper = nullptr;
+        if (file_path == nullptr || file_path[0] == '\0')
+        {
+            return -1;
+        }
+        return InvokeIntAbi([&]() -> int32_t {
         LottieLogInfo(nullptr, "[Lottie] Loading animation from file: %s", file_path ? file_path : "(null)");
         auto animation = rlottie::Animation::loadFromFile(std::string(file_path));
 
@@ -96,12 +210,18 @@ extern "C"
 
         *animation_wrapper = create_animation_wrapper(animation);
         LottieLogInfo(*animation_wrapper, "[Lottie] Successfully loaded animation from file");
-        return 0;
+        return *animation_wrapper == nullptr ? -1 : 0;
+        });
     }
 
     EXPORT_API int32_t lottie_dispose_wrapper(lottie_animation_wrapper** animation_wrapper)
     {
         LottieLogInfo(animation_wrapper ? *animation_wrapper : nullptr, "[Lottie] Disposing animation wrapper");
+        if (animation_wrapper == nullptr)
+        {
+            return 0;
+        }
+        return InvokeIntAbi([&]() -> int32_t {
 #if !defined(__EMSCRIPTEN__)
         if (animation_wrapper != nullptr && *animation_wrapper != nullptr)
         {
@@ -113,6 +233,7 @@ extern "C"
         *animation_wrapper = nullptr;
         LottieLogInfo(nullptr, "[Lottie] Animation wrapper disposed successfully");
         return 0;
+        });
     }
 
     EXPORT_API int32_t lottie_render_immediately(
@@ -123,6 +244,12 @@ extern "C"
         bool convert_bgra_to_rgba)
     {
         LottieLogInfo(animation_wrapper, "[Lottie] lottie_render_immediately called for frame %u", frame_number);
+        if (!IsValidRenderRequest(animation_wrapper, render_data))
+        {
+            LottieLogWarning(animation_wrapper, "[Lottie] render_immediately called with invalid parameters");
+            return -1;
+        }
+        return InvokeIntAbi([&]() -> int32_t {
 #if defined(__EMSCRIPTEN__)
         LottieLogInfo(animation_wrapper, "[WebGL] render_data: buffer=%p, width=%u, height=%u, bytesPerLine=%u",
             render_data->buffer, render_data->width, render_data->height, render_data->bytesPerLine);
@@ -138,6 +265,25 @@ extern "C"
             return -1;
         }
 #endif
+#if !defined(__EMSCRIPTEN__)
+        RenderSlotAcquireResult acquireResult = AcquireRenderSlot(animation_wrapper, render_data, /*waitForSlot=*/true);
+        if (acquireResult == RenderSlotAcquireResult::NativeBackpressure)
+        {
+            return 1;
+        }
+#endif
+        if (!IsValidImageBuffer(
+                render_data->buffer,
+                render_data->width,
+                render_data->height,
+                render_data->bytesPerLine))
+        {
+#if !defined(__EMSCRIPTEN__)
+            CancelRenderSlot(render_data);
+#endif
+            LottieLogWarning(animation_wrapper, "[Lottie] render buffer was unavailable after slot acquisition");
+            return -1;
+        }
         rlottie::Surface surface(
             render_data->buffer,
             render_data->width,
@@ -162,6 +308,7 @@ extern "C"
 #endif
         LottieLogInfo(animation_wrapper, "[Lottie] Frame rendered successfully");
         return 0;
+        });
     }
 
 #if defined(__EMSCRIPTEN__)
@@ -174,6 +321,11 @@ extern "C"
         bool convert_bgra_to_rgba)
     {
         LottieLogInfo(animation_wrapper, "[WebGL] lottie_render_create_future_async called for frame %u", frame_number);
+        if (!IsValidRenderRequest(animation_wrapper, render_data))
+        {
+            return -1;
+        }
+        return InvokeIntAbi([&]() -> int32_t {
         LottieLogInfo(animation_wrapper, "[WebGL] render_data: buffer=%p, width=%u, height=%u, bytesPerLine=%u",
             render_data->buffer, render_data->width, render_data->height, render_data->bytesPerLine);
 
@@ -208,6 +360,7 @@ extern "C"
             LottieLogInfo(animation_wrapper, "[WebGL] renderSync completed, skipping BGRA to RGBA conversion (shader mode)");
         }
         return 0;
+        });
     }
 
     EXPORT_API int32_t lottie_render_get_future_result(
@@ -224,10 +377,11 @@ extern "C"
         int32_t* ready)
     {
         // WebGL single-thread fallback: render was done synchronously, always ready
-        if (ready != nullptr)
+        if (ready == nullptr)
         {
-            *ready = 1;
+            return -1;
         }
+        *ready = 1;
         return 0;
     }
 #else
@@ -240,14 +394,41 @@ extern "C"
     {
         (void)convert_bgra_to_rgba; // Unused on non-WebGL platforms
         LottieLogInfo(animation_wrapper, "[Lottie] Creating async render future for frame %u", frame_number);
-        rlottie::Surface surface(
-            render_data->buffer,
-            render_data->width,
-            render_data->height,
-            render_data->bytesPerLine);
-        render_data->render_future = animation_wrapper->animation->render(frame_number, surface, keep_aspect_ratio);
+        if (!IsValidRenderRequest(animation_wrapper, render_data))
+        {
+            LottieLogWarning(animation_wrapper, "[Lottie] create_future_async called with invalid parameters");
+            return -1;
+        }
+        return InvokeIntAbi([&]() -> int32_t {
+        render_data->render_skipped = false;
+        RenderSlotAcquireResult acquireResult = AcquireRenderSlot(animation_wrapper, render_data, /*waitForSlot=*/false);
+        if (acquireResult == RenderSlotAcquireResult::NativeBackpressure)
+        {
+            // Bounded backpressure: report a completed no-op to the managed
+            // async state machine instead of allocating or touching GPU-owned
+            // memory.
+            render_data->render_skipped = true;
+            return 0;
+        }
+        if (!IsValidImageBuffer(
+                render_data->buffer,
+                render_data->width,
+                render_data->height,
+                render_data->bytesPerLine))
+        {
+            CancelRenderSlot(render_data);
+            LottieLogWarning(animation_wrapper, "[Lottie] async render buffer was unavailable after slot acquisition");
+            return -1;
+        }
+        if (!CreateRenderFuture(animation_wrapper, render_data, frame_number, keep_aspect_ratio))
+        {
+            CancelRenderSlot(render_data);
+            LottieLogError(animation_wrapper, "[Lottie] Failed to create async render future");
+            return -1;
+        }
         LottieLogInfo(animation_wrapper, "[Lottie] Async render future created");
         return 0;
+        });
     }
 
     EXPORT_API int32_t lottie_render_try_get_future_result(
@@ -261,7 +442,15 @@ extern "C"
             return -1;
         }
 
+        return InvokeIntAbi([&]() -> int32_t {
         *ready = 0;
+
+        if (render_data->render_skipped)
+        {
+            render_data->render_skipped = false;
+            *ready = 1;
+            return 0;
+        }
 
         if (!render_data->render_future.valid() ||
             render_data->render_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
@@ -270,7 +459,12 @@ extern "C"
         }
 
         LottieLogInfo(animation_wrapper, "[Lottie] Render future ready, getting result");
-        render_data->render_future.get();
+        if (!ConsumeRenderFuture(render_data))
+        {
+            CancelRenderSlot(render_data);
+            LottieLogError(animation_wrapper, "[Lottie] Async render failed");
+            return -1;
+        }
 
         ProfBegin(GetProfilerMarkerPublish());
         PublishUpload(animation_wrapper, render_data);
@@ -279,6 +473,7 @@ extern "C"
         *ready = 1;
         LottieLogInfo(animation_wrapper, "[Lottie] Future result retrieved and published");
         return 0;
+        });
     }
 
     EXPORT_API int32_t lottie_render_get_future_result(
@@ -286,8 +481,24 @@ extern "C"
         lottie_render_data* render_data)
     {
         LottieLogInfo(animation_wrapper, "[Lottie] Waiting for render future result");
+        if (animation_wrapper == nullptr || render_data == nullptr)
+        {
+            return -1;
+        }
+        return InvokeIntAbi([&]() -> int32_t {
+        if (render_data->render_skipped)
+        {
+            render_data->render_skipped = false;
+            return 0;
+        }
         ProfBegin(GetProfilerMarkerGetResult());
-        render_data->render_future.get();
+        if (!ConsumeRenderFuture(render_data))
+        {
+            CancelRenderSlot(render_data);
+            ProfEnd(GetProfilerMarkerGetResult());
+            LottieLogError(animation_wrapper, "[Lottie] Async render failed");
+            return -1;
+        }
         ProfEnd(GetProfilerMarkerGetResult());
 
         ProfBegin(GetProfilerMarkerPublish());
@@ -295,29 +506,55 @@ extern "C"
         ProfEnd(GetProfilerMarkerPublish());
         LottieLogInfo(animation_wrapper, "[Lottie] Future result retrieved and uploaded");
         return 0;
+        });
     }
 #endif
 
     EXPORT_API int32_t lottie_allocate_render_data(lottie_render_data** render_data)
     {
         LottieLogInfo(nullptr, "[Lottie] Allocating render data");
-        *render_data = new lottie_render_data();
-        if (*render_data == nullptr)
+        if (render_data == nullptr)
         {
-            fprintf(stderr, "Couldnt allocate lottie_render_data!");
-            LottieLogError(nullptr, "[Lottie] Failed to allocate render data");
             return -1;
         }
-        LottieLogInfo(nullptr, "[Lottie] Render data allocated successfully");
-        return 0;
+        *render_data = nullptr;
+        return InvokeIntAbi([&]() -> int32_t {
+            *render_data = new lottie_render_data();
+            LottieLogInfo(nullptr, "[Lottie] Render data allocated successfully");
+            return 0;
+        });
     }
 
     EXPORT_API int32_t lottie_dispose_render_data(lottie_render_data** render_data)
     {
         LottieLogInfo(nullptr, "[Lottie] Disposing render data");
+        if (render_data == nullptr || *render_data == nullptr)
+        {
+            return 0;
+        }
+        return InvokeIntAbi([&]() -> int32_t {
+#if !defined(__EMSCRIPTEN__)
+        lottie_render_data* data = *render_data;
+        if (data->render_future.valid())
+        {
+            if (!ConsumeRenderFuture(data))
+            {
+                CancelRenderSlot(data);
+                delete data;
+                *render_data = nullptr;
+                LottieLogError(nullptr, "[Lottie] Async render failed while disposing render data");
+                return -1;
+            }
+        }
+        if (data->render_pool_slot >= 0)
+        {
+            PublishRenderSlot(data->render_pool_owner, data);
+        }
+#endif
         delete (*render_data);
         *render_data = nullptr;
         return 0;
+        });
     }
 
     EXPORT_API int32_t lottie_set_log_level(
@@ -454,14 +691,19 @@ extern "C"
     EXPORT_API void lottie_destroy_texture(lottie_animation_wrapper* animation, void* /*tex*/)
     {
         LottieLogInfo(animation, "[Lottie] Destroying texture");
-        InstanceState* state = GetState(animation, /*create=*/false);
-        ResetTextureState(animation, state);
+        InstanceState* state = nullptr;
+        std::unique_lock<std::mutex> lifetimeLock;
+        if (LockStateForUpload(animation, state, lifetimeLock))
+        {
+            ResetTextureState(animation, state, /*lifetimeAlreadyLocked=*/true);
+        }
     }
 
     EXPORT_API void* lottie_get_native_texture_ptr(lottie_animation_wrapper* animation)
     {
-        InstanceState* state = GetState(animation, /*create=*/false);
-        return state != nullptr ? state->nativeTex : nullptr;
+        InstanceState* state = nullptr;
+        std::unique_lock<std::mutex> lifetimeLock;
+        return LockStateForUpload(animation, state, lifetimeLock) ? state->nativeTex : nullptr;
     }
 
     EXPORT_API void lottie_update_texture(lottie_animation_wrapper* animation)
@@ -492,6 +734,33 @@ extern "C"
     EXPORT_API int32_t lottie_is_vulkan_upload_available(lottie_animation_wrapper* animation)
     {
         return IsVulkanUploadAvailable(animation) ? 1 : 0;
+    }
+
+    EXPORT_API int32_t lottie_register_unity_opengl_texture(
+        lottie_animation_wrapper* animation,
+        void* native_texture,
+        int width,
+        int height)
+    {
+#if !defined(__APPLE__)
+        return RegisterUnityTextureOpenGL(animation, native_texture, width, height) ? 1 : 0;
+#else
+        (void)animation;
+        (void)native_texture;
+        (void)width;
+        (void)height;
+        return 0;
+#endif
+    }
+
+    EXPORT_API int32_t lottie_is_opengl_upload_available(lottie_animation_wrapper* animation)
+    {
+#if !defined(__APPLE__)
+        return IsOpenGLUploadAvailable(animation) ? 1 : 0;
+#else
+        (void)animation;
+        return 0;
+#endif
     }
 #endif // !defined(__EMSCRIPTEN__)
 }

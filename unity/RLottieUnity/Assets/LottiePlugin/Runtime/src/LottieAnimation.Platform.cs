@@ -37,6 +37,48 @@ namespace LottiePlugin
                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
         }
 
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        private unsafe void UseManagedTextureUploadFallback(uint width, uint height, string reason)
+        {
+            // A Unity-owned Android GLES texture is RGBA32, while rlottie's
+            // managed output is BGRA. Preserve any frame already rendered into
+            // the raw bytes, but replace the texture so Texture2D.Apply uses the
+            // correct channel layout.
+            Texture2D previousTexture = Texture;
+            NativeArray<byte> previousPixelData = !_ownsPixelData && _pixelData.IsCreated
+                ? _pixelData
+                : default;
+            if (_ownsPixelData && _pixelData.IsCreated)
+            {
+                _pixelData.Dispose();
+            }
+
+            _pixelData = default;
+            _ownsPixelData = false;
+            _nativeTexturePtr = IntPtr.Zero;
+            _usesUnityOwnedNativeTexture = false;
+            _usesUnityOwnedOpenGLTexture = false;
+            _usesCPURendering = true;
+            TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
+
+            Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 0, false);
+            ConfigureRuntimeTexture(Texture);
+            _pixelData = Texture.GetRawTextureData<byte>();
+            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+            if (previousPixelData.IsCreated && previousPixelData.Length == _pixelData.Length)
+            {
+                NativeArray<byte>.Copy(previousPixelData, _pixelData);
+            }
+            if (previousTexture != null)
+            {
+                UnityEngine.Object.Destroy(previousTexture);
+            }
+
+            Debug.LogWarning($"[LottiePlugin] Native texture upload unavailable ({reason}); using Texture2D.Apply fallback");
+        }
+#endif
+
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
         private bool TryEnableNativeVulkanUpload()
         {
             try
@@ -75,6 +117,59 @@ namespace LottiePlugin
             sVulkanFallbackLogged = true;
             Debug.LogWarning("[LottiePlugin] Vulkan native upload unavailable; using Texture2D.Apply fallback");
         }
+
+        private void LogOpenGLApplyFallback()
+        {
+            if (sOpenGLFallbackLogged)
+            {
+                return;
+            }
+
+            sOpenGLFallbackLogged = true;
+            Debug.LogWarning("[LottiePlugin] OpenGL native upload unavailable; using Texture2D.Apply fallback");
+        }
+
+        private bool TryRegisterUnityOwnedTexture(uint width, uint height)
+        {
+            _nativeTexturePtr = Texture.GetNativeTexturePtr();
+            if (_nativeTexturePtr == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (_usesUnityOwnedOpenGLTexture)
+                {
+                    bool registered = NativeBridge.LottieRegisterUnityOpenGLTexture(
+                        _animationWrapperIntPtr,
+                        _nativeTexturePtr,
+                        (int)width,
+                        (int)height) != 0;
+                    if (registered && !sOpenGLNativeUploadLogged)
+                    {
+                        sOpenGLNativeUploadLogged = true;
+                        Debug.Log("[LottiePlugin] Unity-owned OpenGL native upload enabled");
+                    }
+                    return registered;
+                }
+
+                return NativeBridge.LottieRegisterUnityVulkanTexture(
+                    _animationWrapperIntPtr,
+                    _nativeTexturePtr,
+                    (int)width,
+                    (int)height) != 0;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+#endif
 
         private void PlatformDisposeAsyncDraw()
         {
@@ -174,8 +269,16 @@ namespace LottiePlugin
                 return;
             if (_usesCPURendering)
             {
+                int result = NativeBridge.LottieRenderGetFutureResult(
+                    _animationWrapperIntPtr,
+                    _lottieRenderDataIntPtr);
+                _asyncDrawWasCalled = false;
+                if (result != 0)
+                {
+                    return;
+                }
+
 #if UNITY_WEBGL && !UNITY_EDITOR
-                NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
                 if (_useShaderConversion)
                 {
                     _sourceTexture.Apply();
@@ -188,7 +291,6 @@ namespace LottiePlugin
 #else
                 Texture.Apply();
 #endif
-                _asyncDrawWasCalled = false;
             }
             else
             {
@@ -227,21 +329,22 @@ namespace LottiePlugin
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
             _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload();
-            _usesCPURendering = _useManagedTextureUpload || (isVulkan && !_usesUnityOwnedNativeTexture);
-#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
-            // Unity's Linux OpenGL editor does not guarantee a current context on
-            // the scripting thread. Keep Apply for OpenGL, while Vulkan uses the
-            // native render-thread upload when the interface is available.
-            if (!isVulkan)
-            {
-                _usesCPURendering = true;
-            }
+#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || (UNITY_ANDROID && !UNITY_EDITOR)
+            _usesUnityOwnedOpenGLTexture =
+                (deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore ||
+                 deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3) &&
+                !_useManagedTextureUpload;
+#else
+            _usesUnityOwnedOpenGLTexture = false;
 #endif
+            _usesCPURendering = _useManagedTextureUpload || (isVulkan && !_usesUnityOwnedNativeTexture);
             TextureUploadBackend = _usesCPURendering
                 ? LottieTextureUploadBackend.ManagedTextureUpload
-                : (_usesUnityOwnedNativeTexture
+                : (_usesUnityOwnedOpenGLTexture
+                    ? LottieTextureUploadBackend.NativeOpenGL
+                    : (_usesUnityOwnedNativeTexture
                     ? LottieTextureUploadBackend.NativeVulkan
-                    : LottieTextureUploadBackend.NativeExternalTexture);
+                    : LottieTextureUploadBackend.NativeExternalTexture));
 #endif
             if (_usesCPURendering)
             {
@@ -274,35 +377,42 @@ namespace LottiePlugin
                 _ownsPixelData = false;
             }
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
-            else if (_usesUnityOwnedNativeTexture)
+            else if (_usesUnityOwnedNativeTexture || _usesUnityOwnedOpenGLTexture)
             {
-                Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 0, false);
+                // Native uploads update mip level 0 only. A single-level texture
+                // prevents minified sampling from reading stale generated mips.
+#if UNITY_ANDROID && !UNITY_EDITOR
+                // Unity owns the GLES texture from the beginning, so the native
+                // plug-in never exposes its deferred dummy GL name. GLES uploads
+                // BGRA directly when supported and otherwise reuses a persistent
+                // conversion buffer for RGBA.
+                TextureFormat nativeTextureFormat = _usesUnityOwnedOpenGLTexture
+                    ? TextureFormat.RGBA32
+                    : TextureFormat.BGRA32;
+#else
+                TextureFormat nativeTextureFormat = TextureFormat.BGRA32;
+#endif
+                Texture = new Texture2D((int)width, (int)height, nativeTextureFormat, 1, false);
                 ConfigureRuntimeTexture(Texture);
                 _pixelData = Texture.GetRawTextureData<byte>();
                 _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
                 _ownsPixelData = false;
 
-                _nativeTexturePtr = Texture.GetNativeTexturePtr();
-                if (_nativeTexturePtr == IntPtr.Zero ||
-                    NativeBridge.LottieRegisterUnityVulkanTexture(
-                        _animationWrapperIntPtr,
-                        _nativeTexturePtr,
-                        (int)width,
-                        (int)height) == 0)
+                if (!TryRegisterUnityOwnedTexture(width, height))
                 {
                     _nativeTexturePtr = IntPtr.Zero;
-                    _usesUnityOwnedNativeTexture = false;
-                    _usesCPURendering = true;
-                    TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
-                    LogVulkanApplyFallback();
+                    bool wasOpenGL = _usesUnityOwnedOpenGLTexture;
+                    UseManagedTextureUploadFallback(width, height,
+                        wasOpenGL ? "OpenGL texture registration" : "Vulkan texture registration");
                 }
             }
             else
             {
-                int bufferSize = (int)(width * height * sizeof(uint));
-                _pixelData = new NativeArray<byte>(bufferSize, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-                _ownsPixelData = true;
-                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                // Plugin-owned native textures render through the native CPU
+                // mailbox. Do not retain an otherwise unused managed frame buffer.
+                _pixelData = default;
+                _ownsPixelData = false;
+                _lottieRenderData.buffer = null;
                 bool isDirect3D = IsDirect3DDevice(deviceType);
                 bool preferSrgbSampling = isDirect3D && QualitySettings.activeColorSpace == ColorSpace.Linear;
                 _nativeTexturePtr = NativeBridge.LottieCreateTexture(
@@ -312,21 +422,39 @@ namespace LottiePlugin
                     preferSrgbSampling);
                 if (_nativeTexturePtr == IntPtr.Zero)
                 {
-                    throw new System.Exception("Failed to create native texture. Graphics device may not be initialized yet.");
+                    // A renderer can be supported by Unity without having a native
+                    // backend in this plugin. Clean up any partial native state and
+                    // retain functional rendering through the managed upload path.
+                    NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, IntPtr.Zero);
+                    UseManagedTextureUploadFallback(width, height, deviceType.ToString());
+                    return;
                 }
 
                 // In Linear projects we request sRGB native textures on D3D and expose them as
                 // non-linear external textures so Unity applies sRGB sampling correctly.
                 // In Gamma projects we keep the previous linear external texture path.
                 bool linearExternalTexture = isDirect3D && !preferSrgbSampling;
-                Texture = Texture2D.CreateExternalTexture(
-                    (int)width,
-                    (int)height,
-                    TextureFormat.BGRA32,
-                    false,
-                    linearExternalTexture,
-                    _nativeTexturePtr);
-                ConfigureRuntimeTexture(Texture);
+                try
+                {
+                    Texture = Texture2D.CreateExternalTexture(
+                        (int)width,
+                        (int)height,
+                        TextureFormat.BGRA32,
+                        false,
+                        linearExternalTexture,
+                        _nativeTexturePtr);
+                    if (Texture == null)
+                    {
+                        throw new InvalidOperationException("Unity did not create an external texture wrapper.");
+                    }
+                    ConfigureRuntimeTexture(Texture);
+                }
+                catch (Exception exception)
+                {
+                    NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
+                    UseManagedTextureUploadFallback(width, height,
+                        $"{deviceType}: {exception.GetType().Name}");
+                }
             }
 #endif
         }
@@ -334,6 +462,59 @@ namespace LottiePlugin
         private void RequestTextureUpload()
         {
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
+            // Do not let a one-shot render queue its only upload before the
+            // render-thread event pump exists. Continuous animations used to
+            // hide this startup race by naturally queueing another frame.
+            LottieUploadPump.EnsureInstance();
+
+            if (_usesUnityOwnedOpenGLTexture)
+            {
+                int uploadAvailable;
+                try
+                {
+                    uploadAvailable = NativeBridge.LottieIsOpenGLUploadAvailable(_animationWrapperIntPtr);
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    uploadAvailable = 0;
+                }
+                catch (DllNotFoundException)
+                {
+                    uploadAvailable = 0;
+                }
+
+                if (uploadAvailable == 0)
+                {
+                    if (!_openGLReregisterAttempted)
+                    {
+                        _openGLReregisterAttempted = true;
+                        if (TryRegisterUnityOwnedTexture((uint)Texture.width, (uint)Texture.height))
+                        {
+                            // Keep this frame visible while native upload recovers.
+                            Texture.Apply();
+                            return;
+                        }
+                    }
+
+                    uint width = (uint)Texture.width;
+                    uint height = (uint)Texture.height;
+                    UseManagedTextureUploadFallback(width, height, "OpenGL native upload failure");
+                    Texture.Apply();
+                    return;
+                }
+
+                _openGLReregisterAttempted = false;
+                NativeBridge.LottieUpdateTexture(_animationWrapperIntPtr);
+                // The render-thread plug-in updates this Unity-owned texture on
+                // the GPU. Linux needs its texture update count advanced; doing
+                // that on Android GLES can make Unity recreate/rebind the texture
+                // while the native render event still owns the registered name.
+#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+                Texture.IncrementUpdateCount();
+#endif
+                return;
+            }
+
             if (_usesUnityOwnedNativeTexture)
             {
                 if (NativeBridge.LottieIsVulkanUploadAvailable(_animationWrapperIntPtr) == 0)

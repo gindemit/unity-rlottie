@@ -6,6 +6,7 @@
 #pragma comment(lib, "d3d11.lib")
 
 #include "D3D11Backend_win.h"
+#include "ImageBufferUtils.h"
 #include "InstanceRegistry.h"
 #include "LottieLogger.h"
 #include <cstring>
@@ -103,27 +104,33 @@ bool EnsureTextureD3D11(lottie_animation_wrapper* animation, InstanceState* stat
     return true;
 }
 
-void UploadD3D11(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadD3D11(InstanceState* state, const UploadContext& ctx)
 {
     if (state == nullptr || gD3DContext == nullptr || state->d3d11.tex == nullptr || ctx.data == nullptr)
     {
-        return;
+        return UploadResult::Failed;
     }
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if (FAILED(gD3DContext->Map(state->d3d11.tex, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
     {
-        return;
+        return UploadResult::Retry;
     }
 
-    const uint8_t* src = ctx.data;
-    uint8_t* dst = reinterpret_cast<uint8_t*>(mapped.pData);
-    for (uint32_t y = 0; y < ctx.height; ++y)
+    if (!CopyImageRows(
+            mapped.pData,
+            mapped.RowPitch,
+            ctx.data,
+            ctx.stride,
+            ctx.width,
+            ctx.height))
     {
-        std::memcpy(dst + y * mapped.RowPitch, src + y * ctx.stride, ctx.stride);
+        gD3DContext->Unmap(state->d3d11.tex, 0);
+        return UploadResult::Failed;
     }
 
     gD3DContext->Unmap(state->d3d11.tex, 0);
+    return UploadResult::Submitted;
 }
 
 #endif // defined(_WIN32)

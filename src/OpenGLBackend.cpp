@@ -43,17 +43,20 @@ namespace
 {
     bool gHasBGRAExt = false;
     bool gIsOpenGLES = false;
+    bool gExtensionsDetected = false;
 }
 
 void DetectGLExtensions()
 {
     gHasBGRAExt = false;
     gIsOpenGLES = false;
+    gExtensionsDetected = false;
 
     // Check if we're running OpenGL ES (ANGLE or other ES implementation)
     const char* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     if (version != nullptr)
     {
+        gExtensionsDetected = true;
         gIsOpenGLES = (std::strstr(version, "OpenGL ES") != nullptr);
         LottieLogInfo(nullptr, "[Lottie] OpenGL version: %s, isOpenGLES: %s", version, gIsOpenGLES ? "true" : "false");
     }
@@ -71,7 +74,7 @@ void DetectGLExtensions()
             gHasBGRAExt = true;
         }
     }
-    else if (!gIsOpenGLES)
+    else if (gExtensionsDetected && !gIsOpenGLES)
     {
         // Desktop OpenGL supports BGRA in core
         gHasBGRAExt = true;
@@ -93,9 +96,10 @@ void ResetGLExtensionState()
 {
     gHasBGRAExt = false;
     gIsOpenGLES = false;
+    gExtensionsDetected = false;
 }
 
-void CheckGLError(lottie_animation_wrapper* animation, const char* operation)
+bool CheckGLError(lottie_animation_wrapper* animation, const char* operation)
 {
     GLenum err = glGetError();
     if (err != GL_NO_ERROR)
@@ -103,7 +107,9 @@ void CheckGLError(lottie_animation_wrapper* animation, const char* operation)
         char errorMsg[256];
         snprintf(errorMsg, sizeof(errorMsg), "[Lottie] OpenGL error after %s: 0x%04X", operation, err);
         LottieLogError(animation, errorMsg);
+        return false;
     }
+    return true;
 }
 
 void ResetTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state)
@@ -113,15 +119,24 @@ void ResetTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* stat
         return;
     }
 
-    if (state->gl.glTex != 0)
+    if (state->gl.glTex != 0 && !state->gl.unityOwnedTexture)
     {
         glDeleteTextures(1, &state->gl.glTex);
-        state->gl.glTex = 0;
     }
+    state->gl.glTex = 0;
+    state->gl.unityOwnedTexture = false;
+    state->gl.uploadAvailable.store(false, std::memory_order_release);
 }
 
 bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* state, int width, int height)
 {
+    if (!gExtensionsDetected)
+    {
+        // The render-event callback is the first place Linux reliably has a
+        // current Unity OpenGL context.
+        DetectGLExtensions();
+    }
+
     // Clear any existing OpenGL errors
     while (glGetError() != GL_NO_ERROR) {}
 
@@ -191,34 +206,54 @@ bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* sta
     state->nativeTex = reinterpret_cast<void*>(static_cast<uintptr_t>(state->gl.glTex));
     state->texW = width;
     state->texH = height;
+    state->gl.unityOwnedTexture = false;
+    state->gl.uploadAvailable.store(true, std::memory_order_release);
 
     LottieLogInfo(animation, "[Lottie] EnsureTexture: OpenGL texture created successfully, glTex=%u, nativeTex=%p",
                   state->gl.glTex, state->nativeTex);
     return true;
 }
 
-void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadOpenGL(InstanceState* state, const UploadContext& ctx)
 {
     if (state == nullptr || state->gl.glTex == 0 || ctx.data == nullptr)
     {
         LottieLogWarning(nullptr, "[Lottie] UploadOpenGL: Invalid parameters (state=%p, glTex=%u, data=%p)",
                        state, state ? state->gl.glTex : 0, ctx.data);
-        return;
+        return UploadResult::Failed;
     }
 
     LottieLogInfo(nullptr, "[Lottie] UploadOpenGL: Uploading to texture %u, size=%ux%u, stride=%u",
                   state->gl.glTex, ctx.width, ctx.height, ctx.stride);
 
+    if (!gExtensionsDetected)
+    {
+        DetectGLExtensions();
+    }
+
     // Clear any existing errors
     while (glGetError() != GL_NO_ERROR) {}
 
+    GLint previousTexture = 0;
+    GLint previousUnpackAlignment = 4;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+
+    bool succeeded = CheckGLError(nullptr, "capturing OpenGL upload state");
     glBindTexture(GL_TEXTURE_2D, state->gl.glTex);
-    CheckGLError(nullptr, "glBindTexture in UploadOpenGL");
+    succeeded = CheckGLError(nullptr, "glBindTexture in UploadOpenGL") && succeeded;
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    CheckGLError(nullptr, "glPixelStorei in UploadOpenGL");
+    succeeded = CheckGLError(nullptr, "glPixelStorei in UploadOpenGL") && succeeded;
 
-    if (gHasBGRAExt)
+    // Unity creates Android GLES textures as RGBA. Although Mali advertises
+    // EXT_texture_format_BGRA8888, GL_BGRA uploads into Unity's RGBA storage
+    // fail with GL_INVALID_OPERATION on the tested device. Convert into the
+    // persistent per-instance scratch buffer instead. Plug-in-owned GLES
+    // textures keep their matching BGRA allocation and can use the extension.
+    const bool requiresUnityOwnedGlesConversion =
+        gIsOpenGLES && state->gl.unityOwnedTexture;
+    if (gHasBGRAExt && !requiresUnityOwnedGlesConversion)
     {
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_BGRA, GL_UNSIGNED_BYTE, ctx.data);
     }
@@ -228,13 +263,88 @@ void UploadOpenGL(InstanceState* state, const UploadContext& ctx)
         ConvertBGRAtoRGBA(state->gl.rgbaScratch, ctx);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ctx.width, ctx.height, GL_RGBA, GL_UNSIGNED_BYTE, state->gl.rgbaScratch.data());
     }
-    CheckGLError(nullptr, "glTexSubImage2D in UploadOpenGL");
+    succeeded = CheckGLError(nullptr, "glTexSubImage2D in UploadOpenGL") && succeeded;
 
     // Ensure OpenGL commands are executed
     glFlush();
-    CheckGLError(nullptr, "glFlush in UploadOpenGL");
+    succeeded = CheckGLError(nullptr, "glFlush in UploadOpenGL") && succeeded;
 
-    LottieLogInfo(nullptr, "[Lottie] UploadOpenGL: Upload completed successfully");
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+    succeeded = CheckGLError(nullptr, "restoring OpenGL upload state") && succeeded;
+
+    state->gl.uploadAvailable.store(succeeded, std::memory_order_release);
+
+    if (succeeded)
+    {
+        LottieLogInfo(nullptr, "[Lottie] UploadOpenGL: Upload completed successfully");
+    }
+    else
+    {
+        LottieLogWarning(nullptr, "[Lottie] UploadOpenGL: Upload failed; managed fallback required");
+    }
+    return succeeded ? UploadResult::Submitted : UploadResult::Failed;
+}
+
+bool RegisterUnityTextureOpenGL(
+    lottie_animation_wrapper* animation,
+    void* nativeTexture,
+    int width,
+    int height)
+{
+    if (animation == nullptr || nativeTexture == nullptr || width <= 0 || height <= 0 ||
+        GetCurrentRenderer() != Renderer::OpenGL)
+    {
+        return false;
+    }
+
+    const uintptr_t textureName = reinterpret_cast<uintptr_t>(nativeTexture);
+    if (textureName == 0 || textureName == kDeferredGLTexDummy)
+    {
+        return false;
+    }
+
+    InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> lifetimeLock;
+    if (!LockStateForUpload(animation, state, lifetimeLock, /*create=*/true))
+    {
+        return false;
+    }
+    WaitForActiveRenders(state);
+    {
+        std::lock_guard<std::mutex> poolLock(state->renderPoolMutex);
+        for (InstanceState::RenderSlot& slot : state->renderSlots)
+        {
+            slot = {};
+        }
+        state->renderPoolChanged.notify_all();
+    }
+
+    // Unity passes an existing texture name on Linux and Android. Registration
+    // deliberately does not issue GL calls because it runs on Unity's scripting
+    // thread; all GL access remains inside the render-event callback.
+    if (state->gl.glTex != 0 && !state->gl.unityOwnedTexture)
+    {
+        LottieLogWarning(animation, "[Lottie] OpenGL: cannot replace a plugin-owned texture off the render thread");
+        return false;
+    }
+
+    state->gl.glTex = static_cast<GLuint>(textureName);
+    state->gl.unityOwnedTexture = true;
+    state->gl.uploadAvailable.store(true, std::memory_order_release);
+    state->nativeTex = nativeTexture;
+    state->texW = width;
+    state->texH = height;
+    LottieLogInfo(animation, "[Lottie] Registered Unity-owned OpenGL texture %u", state->gl.glTex);
+    return true;
+}
+
+bool IsOpenGLUploadAvailable(lottie_animation_wrapper* animation)
+{
+    InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> lifetimeLock;
+    return LockStateForUpload(animation, state, lifetimeLock) && state->gl.unityOwnedTexture &&
+        state->gl.glTex != 0 && state->gl.uploadAvailable.load(std::memory_order_acquire);
 }
 
 #endif // !defined(__EMSCRIPTEN__) && !defined(__APPLE__)

@@ -10,6 +10,36 @@ namespace
 {
     std::mutex gPendingUploadsMutex;
     std::queue<lottie_animation_wrapper*> gPendingUploads;
+
+    lottie_animation_wrapper* EnqueueUploadStateLocked(
+        lottie_animation_wrapper* animation,
+        InstanceState* state)
+    {
+        const uint64_t latest = state->uploadVersion.load(std::memory_order_acquire);
+        if (latest == 0 || latest == state->uploadedVersion.load(std::memory_order_acquire))
+        {
+            return nullptr;
+        }
+
+        state->requestedVersion.store(latest, std::memory_order_release);
+        const bool enqueue = !state->uploadQueued.exchange(true, std::memory_order_acq_rel);
+        if (!enqueue)
+        {
+            LottieLogInfo(animation, "[Lottie] Upload already queued, skipping");
+            return nullptr;
+        }
+        LottieLogInfo(animation, "[Lottie] Queueing texture upload");
+
+        lottie_animation_wrapper* dropped = nullptr;
+        std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
+        if (gPendingUploads.size() >= kMaxPendingUploads)
+        {
+            dropped = gPendingUploads.front();
+            gPendingUploads.pop();
+        }
+        gPendingUploads.push(animation);
+        return dropped;
+    }
 }
 
 void EnqueueUpload(lottie_animation_wrapper* animation)
@@ -19,46 +49,48 @@ void EnqueueUpload(lottie_animation_wrapper* animation)
         return;
     }
 
-    InstanceState* state = GetState(animation, /*create=*/false);
-    if (state == nullptr)
+    InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> lifetimeLock;
+    if (!LockStateForUpload(animation, state, lifetimeLock))
     {
         LottieLogWarning(animation, "[Lottie] EnqueueUpload: no instance state");
         return;
     }
 
-    const uint64_t latest = state->uploadVersion.load(std::memory_order_acquire);
-    if (latest == 0 || latest == state->uploadedVersion)
+    lottie_animation_wrapper* dropped = EnqueueUploadStateLocked(animation, state);
+    lifetimeLock.unlock();
+
+    FinishDroppedUpload(dropped, animation);
+}
+
+lottie_animation_wrapper* EnqueueUploadWithLifetimeLocked(
+    lottie_animation_wrapper* animation,
+    InstanceState* state)
+{
+    if (animation == nullptr || state == nullptr)
     {
-        return;
+        return nullptr;
     }
 
-    state->requestedVersion.store(latest, std::memory_order_release);
-    const bool enqueue = !state->uploadQueued.exchange(true, std::memory_order_acq_rel);
-    if (!enqueue)
-    {
-        LottieLogInfo(animation, "[Lottie] Upload already queued, skipping");
-        return;
-    }
-    LottieLogInfo(animation, "[Lottie] Queueing texture upload");
+    // The upload event owns this instance's lifetime lock, so it is safe to
+    // mutate its queue flags directly. Never call LockStateForUpload for the
+    // same instance here: lifetimeMutex is deliberately non-recursive.
+    return EnqueueUploadStateLocked(animation, state);
+}
 
-    lottie_animation_wrapper* dropped = nullptr;
+void FinishDroppedUpload(
+    lottie_animation_wrapper* dropped,
+    lottie_animation_wrapper* current)
+{
+    if (dropped != nullptr && dropped != current)
     {
-        std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
-        if (gPendingUploads.size() >= kMaxPendingUploads)
+        InstanceState* droppedState = nullptr;
+        std::unique_lock<std::mutex> droppedLifetimeLock;
+        if (LockStateForUpload(dropped, droppedState, droppedLifetimeLock))
         {
-            dropped = gPendingUploads.front();
-            gPendingUploads.pop();
-        }
-
-        gPendingUploads.push(animation);
-    }
-
-    if (dropped != nullptr && dropped != animation)
-    {
-        LottieLogWarning(dropped, "[Lottie] Upload queue full, dropping oldest upload");
-        InstanceState* droppedState = GetState(dropped, /*create=*/false);
-        if (droppedState != nullptr)
-        {
+            // Logging dereferences the wrapper to read its log level, so it
+            // must happen only after disposal is excluded by lifetimeMutex.
+            LottieLogWarning(dropped, "[Lottie] Upload queue full, dropping oldest upload");
             droppedState->uploadQueued.store(false, std::memory_order_release);
         }
     }

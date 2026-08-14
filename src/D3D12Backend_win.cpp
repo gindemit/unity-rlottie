@@ -8,8 +8,10 @@
 #pragma comment(lib, "dxgi.lib")
 
 #include "D3D12Backend_win.h"
+#include "ImageBufferUtils.h"
 #include "InstanceRegistry.h"
 #include "LottieLogger.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -28,6 +30,9 @@ namespace
     
     ID3D12CommandAllocator* sD3D12Allocator = nullptr;
     ID3D12GraphicsCommandList* sD3D12CmdList = nullptr;
+
+    ID3D12Fence* GetUnityFrameFence();
+    UINT64 GetUnityNextFrameFenceValue();
 }
 
 void SetD3D12Device(ID3D12Device* device)
@@ -57,6 +62,19 @@ void SetD3D12Interfaces(IUnityGraphicsD3D12v8* v8, IUnityGraphicsD3D12v7* v7,
     sD3D12 = v7;
     sD3D12v6 = v6;
     sD3D12v5 = v5;
+}
+
+void ConfigureD3D12UploadEvent()
+{
+    UnityD3D12PluginEventConfig config{};
+    config.graphicsQueueAccess = kUnityD3D12GraphicsQueueAccess_DontCare;
+    config.flags = kUnityD3D12EventConfigFlag_SyncWorkerThreads |
+        kUnityD3D12EventConfigFlag_ModifiesCommandBuffersState |
+        kUnityD3D12EventConfigFlag_EnsurePreviousFrameSubmission;
+    config.ensureActiveRenderTextureIsBound = false;
+    if (sD3D12v8 != nullptr) sD3D12v8->ConfigureEvent(1, &config);
+    else if (sD3D12 != nullptr) sD3D12->ConfigureEvent(1, &config);
+    else if (sD3D12v6 != nullptr) sD3D12v6->ConfigureEvent(1, &config);
 }
 
 void ReleaseOwnedD3D12CommandList()
@@ -110,49 +128,9 @@ D3D12CommandContext AcquireD3D12CommandContext()
 {
     D3D12CommandContext ctx{};
     ctx.cmd = AcquireUnityD3D12CommandList();
-    if (ctx.cmd != nullptr)
-    {
-        return ctx;
-    }
-
-    if (sD3D12v5 == nullptr || gD3D12Device == nullptr || gD3D12Queue == nullptr)
-    {
-        return ctx;
-    }
-
-    if (sD3D12Allocator == nullptr)
-    {
-        if (FAILED(gD3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sD3D12Allocator))))
-        {
-            ReleaseOwnedD3D12CommandList();
-            return ctx;
-        }
-    }
-    else
-    {
-        sD3D12Allocator->Reset();
-    }
-
-    if (sD3D12CmdList == nullptr)
-    {
-        if (FAILED(gD3D12Device->CreateCommandList(
-                0,
-                D3D12_COMMAND_LIST_TYPE_DIRECT,
-                sD3D12Allocator,
-                nullptr,
-                IID_PPV_ARGS(&sD3D12CmdList))))
-        {
-            ReleaseOwnedD3D12CommandList();
-            return ctx;
-        }
-    }
-    else
-    {
-        sD3D12CmdList->Reset(sD3D12Allocator, nullptr);
-    }
-
-    ctx.cmd = sD3D12CmdList;
-    ctx.ownsCommandList = true;
+    // Never reset/reuse a plugin-owned allocator here: there is no completion
+    // fence proving Unity has finished executing it. Plugin events must record
+    // into Unity's active command list or retry on a later event.
     return ctx;
 }
 
@@ -186,6 +164,37 @@ void ResetTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state
 
     if (state->d3d12.upload)
     {
+        bool safeToRelease = true;
+        UINT64 lastUse = 0;
+        for (const unsigned long long fenceValue : state->d3d12.uploadSlotFenceValues)
+        {
+            lastUse = (std::max)(lastUse, static_cast<UINT64>(fenceValue));
+        }
+        ID3D12Fence* frameFence = state->d3d12.frameFence;
+        if (frameFence != nullptr && lastUse != 0 && frameFence->GetCompletedValue() < lastUse)
+        {
+            HANDLE completionEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+            if (completionEvent != nullptr)
+            {
+                if (SUCCEEDED(frameFence->SetEventOnCompletion(lastUse, completionEvent)))
+                {
+                    safeToRelease = WaitForSingleObject(completionEvent, 2000) == WAIT_OBJECT_0;
+                }
+                CloseHandle(completionEvent);
+            }
+        }
+        if (!safeToRelease)
+        {
+            // Device loss can leave Unity's frame fence permanently unsignaled.
+            // Leaking these device-owned objects is preferable to either hanging
+            // the scripting thread or freeing memory still referenced by a GPU.
+            LottieLogWarning(animation, "[Lottie] D3D12 fence timeout during reset; retaining GPU resources");
+            state->d3d12.upload = nullptr;
+            state->d3d12.uploadMapped = nullptr;
+            state->d3d12.tex = nullptr;
+            state->d3d12.frameFence = nullptr;
+            return;
+        }
         if (state->d3d12.uploadMapped)
         {
             state->d3d12.upload->Unmap(0, nullptr);
@@ -193,6 +202,11 @@ void ResetTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state
         }
         state->d3d12.upload->Release();
         state->d3d12.upload = nullptr;
+    }
+    if (state->d3d12.frameFence != nullptr)
+    {
+        state->d3d12.frameFence->Release();
+        state->d3d12.frameFence = nullptr;
     }
     if (state->d3d12.tex)
     {
@@ -205,12 +219,21 @@ void ResetTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state
         state->d3d12.footprint = nullptr;
     }
     state->d3d12.uploadSlotBytes = 0;
-    state->d3d12.uploadWriteIdx = 0;
+    state->d3d12.uploadSlotFenceValues.fill(0);
+    state->d3d12.nextUploadSlot = 0;
     state->d3d12.texState = D3D12_RESOURCE_STATE_COMMON;
 }
 
 bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state, int width, int height)
 {
+    if (sD3D12v8 == nullptr)
+    {
+        // Older interfaces cannot synchronize Unity's external-texture state
+        // tracker with commands recorded into the active list. Prefer the
+        // managed BGRA path to stale-state barriers or unsafe private queues.
+        LottieLogWarning(animation, "[Lottie] D3D12 v8 interface unavailable; using managed texture upload");
+        return false;
+    }
     if (!gD3D12Device)
     {
         LottieLogError(animation, "[Lottie] D3D12 device is null");
@@ -260,7 +283,7 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
     gD3D12Device->GetCopyableFootprints(&texDesc, 0, 1, 0, footprint, nullptr, nullptr, &totalBytes);
 
     state->d3d12.uploadSlotBytes = totalBytes;
-    const UINT64 uploadBytes = totalBytes * state->d3d12.uploadSlotCount;
+    const UINT64 uploadBytes = totalBytes * InstanceState::D3D12Data::kUploadSlotCount;
 
     D3D12_HEAP_PROPERTIES heapUpload{ D3D12_HEAP_TYPE_UPLOAD };
     heapUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
@@ -322,7 +345,8 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
     state->d3d12.tex = texture;
     state->d3d12.upload = upload;
     state->d3d12.uploadMapped = mapped;
-    state->d3d12.uploadWriteIdx = 0;
+    state->d3d12.uploadSlotFenceValues.fill(0);
+    state->d3d12.nextUploadSlot = 0;
     state->d3d12.texState = D3D12_RESOURCE_STATE_COMMON;
     state->d3d12.footprint = footprint;
     state->nativeTex = texture;
@@ -335,47 +359,134 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
     return true;
 }
 
-static void D3D12StageBGRAUpload(InstanceState* state, const UploadContext& ctx)
+namespace
 {
-    if (!state || !state->d3d12.upload || !state->d3d12.uploadMapped || !ctx.data || !state->d3d12.footprint)
+ID3D12Fence* GetUnityFrameFence()
+{
+    if (sD3D12v8 != nullptr) return sD3D12v8->GetFrameFence();
+    if (sD3D12 != nullptr) return sD3D12->GetFrameFence();
+    if (sD3D12v6 != nullptr) return sD3D12v6->GetFrameFence();
+    if (sD3D12v5 != nullptr) return sD3D12v5->GetFrameFence();
+    return nullptr;
+}
+
+UINT64 GetUnityNextFrameFenceValue()
+{
+    if (sD3D12v8 != nullptr) return sD3D12v8->GetNextFrameFenceValue();
+    if (sD3D12 != nullptr) return sD3D12->GetNextFrameFenceValue();
+    if (sD3D12v6 != nullptr) return sD3D12v6->GetNextFrameFenceValue();
+    if (sD3D12v5 != nullptr) return sD3D12v5->GetNextFrameFenceValue();
+    return 0;
+}
+}
+
+bool PrepareRenderSlotD3D12(
+    InstanceState* state,
+    int slotIndex,
+    uint32_t width,
+    uint32_t height,
+    uint8_t*& data,
+    uint32_t& stride)
+{
+    if (state == nullptr || slotIndex < 0 || slotIndex >= InstanceState::kRenderSlotCount ||
+        state->d3d12.uploadMapped == nullptr || state->d3d12.footprint == nullptr ||
+        state->texW != static_cast<int>(width) || state->texH != static_cast<int>(height))
+    {
+        return false;
+    }
+    // rlottie performs read-modify-write blending and must rasterize into normal
+    // cacheable CPU memory. Upload-heap memory is write-combined on D3D12 and is
+    // prohibitively slow for that access pattern. Leaving data null asks the
+    // common mailbox to provide its cacheable vector.
+    data = nullptr;
+    stride = width * 4;
+    return true;
+}
+
+void RefreshCompletedRenderSlotsD3D12(InstanceState* state)
+{
+    ID3D12Fence* fence = state != nullptr ? state->d3d12.frameFence : nullptr;
+    if (state == nullptr || fence == nullptr)
     {
         return;
     }
-
-    const UINT64 slotBase = state->d3d12.uploadSlotBytes * state->d3d12.uploadWriteIdx;
-    const UINT rowPitch = state->d3d12.footprint->Footprint.RowPitch;
-
-    uint8_t* dstBase = reinterpret_cast<uint8_t*>(state->d3d12.uploadMapped)
-        + slotBase
-        + state->d3d12.footprint->Offset;
-
-    const uint8_t* src = ctx.data;
-    for (uint32_t y = 0; y < ctx.height; ++y)
+    const UINT64 completed = fence->GetCompletedValue();
+    for (unsigned long long& fenceValue : state->d3d12.uploadSlotFenceValues)
     {
-        std::memcpy(
-            dstBase + static_cast<size_t>(y) * rowPitch,
-            src + static_cast<size_t>(y) * ctx.stride,
-            ctx.stride);
+        if (fenceValue != 0 && fenceValue <= completed)
+        {
+            fenceValue = 0;
+        }
     }
 }
 
-void UploadD3D12(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadD3D12(InstanceState* state, const UploadContext& ctx)
 {
     if (!state || !state->d3d12.tex || !state->d3d12.upload || !ctx.data || !state->d3d12.footprint)
     {
-        return;
+        return UploadResult::Failed;
     }
 
-    D3D12StageBGRAUpload(state, ctx);
+    ID3D12Fence* frameFence = GetUnityFrameFence();
+    if (frameFence == nullptr)
+    {
+        return UploadResult::Retry;
+    }
+    if (frameFence != nullptr && state->d3d12.frameFence == nullptr)
+    {
+        frameFence->AddRef();
+        state->d3d12.frameFence = frameFence;
+    }
 
+    const UINT64 completedFence = frameFence != nullptr ? frameFence->GetCompletedValue() : 0;
+    unsigned int uploadSlot = InstanceState::D3D12Data::kUploadSlotCount;
+    for (unsigned int offset = 0; offset < InstanceState::D3D12Data::kUploadSlotCount; ++offset)
+    {
+        const unsigned int candidate =
+            (state->d3d12.nextUploadSlot + offset) % InstanceState::D3D12Data::kUploadSlotCount;
+        const UINT64 useFence = state->d3d12.uploadSlotFenceValues[candidate];
+        if (useFence == 0 || (frameFence != nullptr && useFence <= completedFence))
+        {
+            uploadSlot = candidate;
+            break;
+        }
+    }
+    if (uploadSlot == InstanceState::D3D12Data::kUploadSlotCount)
+    {
+        return UploadResult::Retry;
+    }
+
+    // Retry must not modify mapped upload memory or Unity's resource-state
+    // tracker. Validate the active recording context before either operation.
     D3D12CommandContext ctxWrapper = AcquireD3D12CommandContext();
     ID3D12GraphicsCommandList* cmd = ctxWrapper.cmd;
     if (cmd == nullptr)
     {
-        return;
+        return UploadResult::Retry;
     }
 
-    if (state->d3d12.texState != D3D12_RESOURCE_STATE_COPY_DEST)
+    uint8_t* uploadData = reinterpret_cast<uint8_t*>(state->d3d12.uploadMapped)
+        + state->d3d12.uploadSlotBytes * static_cast<UINT64>(uploadSlot)
+        + state->d3d12.footprint->Offset;
+    const UINT uploadStride = state->d3d12.footprint->Footprint.RowPitch;
+    if (!CopyImageRows(
+            uploadData,
+            uploadStride,
+            ctx.data,
+            ctx.stride,
+            ctx.width,
+            ctx.height))
+    {
+        return UploadResult::Failed;
+    }
+    if (sD3D12v8 != nullptr)
+    {
+        // Unity may have sampled this external texture since our last upload.
+        // Ask its state tracker to make COPY_DEST current on the active list;
+        // the plugin's cached state is not authoritative across frames.
+        sD3D12v8->RequestResourceState(state->d3d12.tex, D3D12_RESOURCE_STATE_COPY_DEST);
+    }
+    if (sD3D12v8 == nullptr && state->d3d12.texState != D3D12_RESOURCE_STATE_COPY_DEST)
     {
         D3D12_RESOURCE_BARRIER b{};
         b.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -395,7 +506,7 @@ void UploadD3D12(InstanceState* state, const UploadContext& ctx)
     src.pResource = state->d3d12.upload;
     src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     src.PlacedFootprint = *state->d3d12.footprint;
-    src.PlacedFootprint.Offset += state->d3d12.uploadSlotBytes * state->d3d12.uploadWriteIdx;
+    src.PlacedFootprint.Offset += state->d3d12.uploadSlotBytes * static_cast<UINT64>(uploadSlot);
 
     cmd->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
 
@@ -414,8 +525,18 @@ void UploadD3D12(InstanceState* state, const UploadContext& ctx)
         sD3D12v8->NotifyResourceState(state->d3d12.tex, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, false);
     }
 
-    state->d3d12.uploadWriteIdx = (state->d3d12.uploadWriteIdx + 1) % state->d3d12.uploadSlotCount;
+    const UINT64 fenceValue = GetUnityNextFrameFenceValue();
+    state->d3d12.uploadSlotFenceValues[uploadSlot] = fenceValue != 0 ? fenceValue : UINT64_MAX;
+    state->d3d12.nextUploadSlot = (uploadSlot + 1) % InstanceState::D3D12Data::kUploadSlotCount;
     SubmitD3D12CommandContext(ctxWrapper);
+    if (fenceValue == 0)
+    {
+        // Without Unity's frame fence there is no safe signal for overwriting
+        // mapped upload memory. Keep the slot owned; the remaining two slots
+        // allow bounded progress without unsafe reuse.
+        LottieLogWarning(nullptr, "[Lottie] D3D12 frame fence unavailable; upload slot retained");
+    }
+    return UploadResult::Submitted;
 }
 
 #endif // defined(_WIN32)

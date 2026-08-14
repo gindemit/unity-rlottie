@@ -19,6 +19,57 @@
 
 #include "VulkanBackend.h"
 
+bool PrepareRenderSlotForRenderer(
+    InstanceState* state,
+    int slotIndex,
+    uint32_t width,
+    uint32_t height,
+    uint8_t*& data,
+    uint32_t& stride)
+{
+    data = nullptr;
+    stride = width * 4;
+    switch (GetCurrentRenderer())
+    {
+        case Renderer::D3D12:
+#if defined(_WIN32)
+            return PrepareRenderSlotD3D12(state, slotIndex, width, height, data, stride);
+#else
+            return false;
+#endif
+        case Renderer::Vulkan:
+            return PrepareRenderSlotVulkan(state, slotIndex, width, height, data, stride);
+        default:
+            return true;
+    }
+}
+
+void RefreshCompletedRenderSlots(InstanceState* state)
+{
+    switch (GetCurrentRenderer())
+    {
+        case Renderer::D3D12:
+#if defined(_WIN32)
+            RefreshCompletedRenderSlotsD3D12(state);
+#endif
+            break;
+        case Renderer::Vulkan:
+            RefreshCompletedRenderSlotsVulkan(state);
+            break;
+        default:
+            break;
+    }
+}
+
+void BeginUploadEventForRenderer(InstanceState* state)
+{
+    if (GetCurrentRenderer() == Renderer::Vulkan)
+    {
+        BeginUploadEventVulkan(state);
+    }
+    RefreshCompletedRenderSlots(state);
+}
+
 bool EnsureTextureForRenderer(lottie_animation_wrapper* animation, InstanceState* state, int width, int height)
 {
     if (state == nullptr || width <= 0 || height <= 0)
@@ -76,7 +127,7 @@ bool EnsureTextureForRenderer(lottie_animation_wrapper* animation, InstanceState
     }
 }
 
-void UploadForRenderer(InstanceState* state, const UploadContext& ctx)
+UploadResult UploadForRenderer(InstanceState* state, const UploadContext& ctx)
 {
     Renderer renderer = GetCurrentRenderer();
 
@@ -84,30 +135,33 @@ void UploadForRenderer(InstanceState* state, const UploadContext& ctx)
     {
         case Renderer::D3D12:
 #if defined(_WIN32)
-            UploadD3D12(state, ctx);
+            return UploadD3D12(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::D3D11:
 #if defined(_WIN32)
-            UploadD3D11(state, ctx);
+            return UploadD3D11(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::Metal:
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
-            UploadMetal(state, ctx);
+            return UploadMetal(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::OpenGL:
 #if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
-            UploadOpenGL(state, ctx);
+            return UploadOpenGL(state, ctx);
+#else
+            return UploadResult::Failed;
 #endif
-            break;
         case Renderer::Vulkan:
-            UploadVulkan(state, ctx);
-            break;
+            return UploadVulkan(state, ctx);
         case Renderer::Unknown:
         default:
-            break;
+            return UploadResult::Failed;
     }
 }
 

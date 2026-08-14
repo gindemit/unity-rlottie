@@ -138,7 +138,7 @@ namespace LottiePlugin.UI
             {
                 return;
             }
-            _rawImage.texture = _lottieAnimation.Texture;
+            _rawImage.texture = _lottieAnimation.OutputTexture;
         }
         internal void DisposeLottieAnimation()
         {
@@ -205,11 +205,6 @@ namespace LottiePlugin.UI
                 ResolutionDivider = Mathf.Max(1, _resolutionDivider),
                 PauseIfCulled = _pauseIfCulled,
                 LogLevel = _logLevel,
-                UseManagedTextureUpload =
-                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan ||
-                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore ||
-                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES2 ||
-                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3,
                 VisibilityEvaluator = () =>
                 {
                     if (_rawImage == null)
