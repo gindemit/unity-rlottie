@@ -1,6 +1,7 @@
 #if !defined(__EMSCRIPTEN__)
 
 #include "VulkanBackend.h"
+#include "ImageBufferUtils.h"
 #include "InstanceRegistry.h"
 #include "LottieLogger.h"
 #include "RendererCommon.h"
@@ -510,8 +511,10 @@ void BeginUploadEventVulkan(InstanceState*)
 
 UploadResult UploadVulkan(InstanceState* state, const UploadContext& ctx)
 {
-    if (state == nullptr || ctx.data == nullptr || ctx.width == 0 || ctx.height == 0 ||
-        ctx.stride < ctx.width * 4 || (ctx.stride % 4) != 0 || !EnsureDeviceFunctions())
+    ImageBufferSize imageSize{};
+    if (state == nullptr || !IsValidImageBuffer(ctx.data, ctx.width, ctx.height, ctx.stride) ||
+        !TryGetImageBufferSize(ctx.width, ctx.height, ctx.stride, imageSize) ||
+        (ctx.stride % 4) != 0 || !EnsureDeviceFunctions())
     {
         if (state != nullptr)
         {
@@ -532,7 +535,7 @@ UploadResult UploadVulkan(InstanceState* state, const UploadContext& ctx)
         state->vulkan.backend = data;
     }
 
-    const VkDeviceSize bytes = static_cast<VkDeviceSize>(ctx.stride) * ctx.height;
+    const VkDeviceSize bytes = static_cast<VkDeviceSize>(imageSize.totalBytes);
     if (data->slots.size() != kVulkanUploadSlotCount)
     {
         MarkUnavailable(state, "upload ring slot count");
