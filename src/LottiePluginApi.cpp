@@ -717,6 +717,15 @@ extern "C"
         EnqueueUpload(animation);
     }
 
+    EXPORT_API int32_t lottie_is_native_vulkan_backend_compiled(void)
+    {
+#if defined(LOTTIE_VULKAN_AVAILABLE)
+        return 1;
+#else
+        return 0;
+#endif
+    }
+
     EXPORT_API int32_t lottie_supports_native_vulkan_upload(void)
     {
         return IsNativeVulkanUploadSupported() ? 1 : 0;
