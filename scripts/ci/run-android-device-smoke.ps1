@@ -11,11 +11,15 @@ param(
     [string] $Screenshot,
     [string] $ResultFile,
     [int] $RunSeconds = 20,
+    [ValidateSet('Vulkan', 'OpenGLES3')]
+    [string] $ExpectedGraphicsApi,
+    [string] $ExpectedUploadBackend,
     [switch] $RequireNativeVulkanUpload,
     [switch] $SkipInstall
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'assert-smoke-result.ps1')
 $Apk = (Resolve-Path -LiteralPath $Apk).Path
 $LogFile = [IO.Path]::GetFullPath($LogFile)
 $Screenshot = [IO.Path]::GetFullPath($Screenshot)
@@ -102,16 +106,8 @@ Invoke-Adb -Arguments @('pull', $remoteScreenshot, $Screenshot) | Out-Host
 Invoke-Adb -Arguments @('shell', 'rm', $remoteScreenshot)
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
-$failedChecks = @($result.checks | Where-Object { -not $_.passed })
-if (-not $result.passed -or $failedChecks.Count -gt 0) {
-    $details = $failedChecks | ForEach-Object { "$($_.name): $($_.details)" }
-    throw "Android rendered-player smoke test failed:`n$($details -join "`n")"
-}
-if ($RequireNativeVulkanUpload) {
-    if ($result.graphicsApi -ne 'Vulkan' -or $result.animatedImageUploadBackend -ne 'NativeVulkan') {
-        throw "The Android player did not use native Vulkan upload for AnimatedImage: graphicsApi=$($result.graphicsApi), backend=$($result.animatedImageUploadBackend)"
-    }
-}
+Assert-LottieSmokeResult -Result $result -Platform Android -ExpectedGraphicsApi $ExpectedGraphicsApi `
+    -ExpectedUploadBackend $ExpectedUploadBackend -RequireNativeVulkanUpload:$RequireNativeVulkanUpload
 if ((Get-Item -LiteralPath $Screenshot).Length -lt 1024) {
     throw "Android screenshot is unexpectedly small: $Screenshot"
 }

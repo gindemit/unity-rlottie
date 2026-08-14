@@ -302,7 +302,14 @@ namespace LottiePlugin
         }
         public void DrawOneFrameAsyncPrepare(int frameNumber)
         {
+            if (_asyncDrawWasCalled)
+            {
+                return;
+            }
+
             PlatformDrawOneFrameAsyncPrepare(frameNumber);
+            CurrentFrame = frameNumber;
+            _asyncDrawWasCalled = true;
         }
         public void DrawOneFrameAsyncGetResult()
         {
