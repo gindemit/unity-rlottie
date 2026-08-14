@@ -74,6 +74,17 @@ namespace
                "null future poll rejected without modifying output");
     }
 
+    void TestCompiledBackendCapabilities()
+    {
+#if defined(LOTTIE_EXPECT_NATIVE_VULKAN_BACKEND)
+        Expect(lottie_is_native_vulkan_backend_compiled() == 1,
+               "native Vulkan backend is compiled into the plugin");
+#else
+        Expect(lottie_is_native_vulkan_backend_compiled() == 0,
+               "native Vulkan backend reports disabled when it is not compiled");
+#endif
+    }
+
     void TestRenderDataLifecycle()
     {
         lottie_render_data* renderData = nullptr;
@@ -135,6 +146,7 @@ int main()
     TestCheckedImageSizing();
     TestBoundedRowCopy();
     TestNullAbiArguments();
+    TestCompiledBackendCapabilities();
     TestRenderDataLifecycle();
     TestInvalidRenderLayouts();
     if (failures == 0)
