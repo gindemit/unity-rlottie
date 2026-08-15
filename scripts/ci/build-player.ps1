@@ -4,7 +4,7 @@ param(
     [string] $Unity,
     [Parameter(Mandatory = $true)]
     [string] $ProjectPath,
-    [ValidateSet('Windows64', 'Linux64', 'Android', 'WebGL')]
+    [ValidateSet('Windows64', 'Linux64', 'Android', 'WebGL', 'macOS', 'iOS')]
     [string] $Target = 'Windows64',
     [ValidateSet('Auto', 'BuiltIn', 'URP', 'HDRP')]
     [string] $Pipeline = 'Auto',
