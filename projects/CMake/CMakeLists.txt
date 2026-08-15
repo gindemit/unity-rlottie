@@ -12,6 +12,7 @@ project(LottiePlugin)
 include(CTest)
 
 option(RLOTTIE_ANDROID_PAGE_SIZE_16K "Build Android libraries with 16KB page size" OFF)
+option(RLOTTIE_REQUIRE_NATIVE_VULKAN "Fail configuration when native Vulkan upload cannot be built" ${WIN32})
 set(UNITY_PLUGINAPI_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dependency/unity-pluginapi" CACHE PATH "Path to Unity PluginAPI headers")
 
 set(BUILD_SHARED_LIBS FALSE)
@@ -211,14 +212,23 @@ if (ANDROID)
 else()
     find_path(RLOTTIE_VULKAN_INCLUDE_DIR
         NAMES vulkan/vulkan.h
-        HINTS "$ENV{VULKAN_SDK}"
+        HINTS
+            "$ENV{VULKAN_SDK}"
+            "${CMAKE_CURRENT_LIST_DIR}/../../dependency/Vulkan-Headers"
         PATH_SUFFIXES Include include)
     if (RLOTTIE_VULKAN_INCLUDE_DIR)
         target_include_directories(LottiePlugin PRIVATE "${RLOTTIE_VULKAN_INCLUDE_DIR}")
         target_compile_definitions(LottiePlugin PRIVATE LOTTIE_VULKAN_AVAILABLE=1)
         message(STATUS "Vulkan native texture upload enabled (${RLOTTIE_VULKAN_INCLUDE_DIR})")
     else()
-        message(WARNING "Vulkan headers not found; native Vulkan texture upload disabled")
+        if (RLOTTIE_REQUIRE_NATIVE_VULKAN)
+            message(FATAL_ERROR
+                "Vulkan headers not found; native Vulkan texture upload is required for this build. "
+                "Install the Vulkan SDK, provide RLOTTIE_VULKAN_INCLUDE_DIR, or explicitly set "
+                "RLOTTIE_REQUIRE_NATIVE_VULKAN=OFF to build with the managed upload fallback.")
+        else()
+            message(WARNING "Vulkan headers not found; native Vulkan texture upload disabled")
+        endif()
     endif()
 endif()
 
@@ -234,6 +244,9 @@ if (BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
         ../../src
         "${RLOTTIE_ROOT}/inc"
         "${UNITY_PLUGINAPI_DIR}")
+    if (ANDROID OR RLOTTIE_VULKAN_INCLUDE_DIR)
+        target_compile_definitions(LottiePluginNativeTests PRIVATE LOTTIE_EXPECT_NATIVE_VULKAN_BACKEND=1)
+    endif()
     target_link_libraries(LottiePluginNativeTests PRIVATE LottiePlugin)
     add_test(NAME LottiePlugin.NativeAbi COMMAND LottiePluginNativeTests)
 endif()

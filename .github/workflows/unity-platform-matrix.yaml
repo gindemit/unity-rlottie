@@ -116,6 +116,13 @@ jobs:
             output: artifacts/windows-d3d12/RLottieSmoke.exe
             artifact_path: artifacts/windows-d3d12
             artifact: rlottie-windows-d3d12-${{ github.run_id }}
+          - name: Windows64 Vulkan
+            target_platform: StandaloneWindows64
+            ci_target: Windows64
+            graphics_api: Vulkan
+            output: artifacts/windows-vulkan/RLottieSmoke.exe
+            artifact_path: artifacts/windows-vulkan
+            artifact: rlottie-windows-vulkan-${{ github.run_id }}
           - name: Linux Vulkan
             target_platform: StandaloneLinux64
             ci_target: Linux64
@@ -280,6 +287,27 @@ jobs:
             artifacts/windows-${{ matrix.slug }}/Player.log
             artifacts/windows-${{ matrix.slug }}/Player.log.smoke.json
           if-no-files-found: warn
+
+  windows_vulkan_package:
+    name: Windows Vulkan native backend packaging
+    needs: build_players
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: rlottie-windows-vulkan-${{ github.run_id }}
+          path: artifacts/windows-vulkan
+
+      - name: Verify packaged DLL contains the native Vulkan backend
+        shell: pwsh
+        run: |
+          $dll = 'artifacts/windows-vulkan/RLottieSmoke_Data/Plugins/x86_64/LottiePlugin.dll'
+          if (-not (Test-Path -LiteralPath $dll)) {
+            throw "Packaged Windows native plugin is missing: $dll"
+          }
+          $env:RLOTTIE_PLUGIN_DLL = (Resolve-Path -LiteralPath $dll).Path
+          python -c "import ctypes, os; plugin = ctypes.CDLL(os.environ['RLOTTIE_PLUGIN_DLL']); probe = plugin.lottie_is_native_vulkan_backend_compiled; probe.restype = ctypes.c_int32; result = probe(); assert result == 1, f'native Vulkan backend compile probe returned {result}'"
+          Write-Output "Packaged Windows native plugin reports that the Vulkan backend is compiled: $dll"
 
   firebase_test_lab:
     name: Firebase Test Lab Android
