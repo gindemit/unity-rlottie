@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using LottiePlugin.UI;
 using System.Collections;
+using System.Reflection;
 
 namespace LottiePlugin.Tests.Runtime
 {
@@ -59,6 +60,34 @@ namespace LottiePlugin.Tests.Runtime
             _animatedImage.Play();
             yield return null;
             Assert.IsTrue(_animatedImage.LottieAnimation.IsPlaying);
+        }
+
+        [UnityTest]
+        public IEnumerator PlaybackCompletesAsyncFrames()
+        {
+            SetField(_animatedImage, "_pauseIfCulled", false);
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 64, 64);
+            _animatedImage.LottieAnimation.Play();
+            int initialFrame = _animatedImage.LottieAnimation.CurrentFrame;
+            IEnumerator playback = InvokeCoroutine(_animatedImage, "RenderLottieAnimationCoroutine");
+            Assert.IsTrue(playback.MoveNext());
+            float deadline = Time.realtimeSinceStartup + 5f;
+
+            while ((_animatedImage.LottieAnimation.CurrentFrame == initialFrame ||
+                    _animatedImage.LottieAnimation.AsyncDrawPending) &&
+                   Time.realtimeSinceStartup < deadline)
+            {
+                if (!_animatedImage.LottieAnimation.AsyncDrawPending)
+                {
+                    SetAnimationField(_animatedImage.LottieAnimation, "_timeSinceLastRenderCall", 0.04f);
+                }
+                Assert.IsTrue(playback.MoveNext());
+                yield return null;
+            }
+
+            Assert.AreNotEqual(initialFrame, _animatedImage.LottieAnimation.CurrentFrame);
+            Assert.IsFalse(_animatedImage.LottieAnimation.AsyncDrawPending);
+            Assert.IsTrue(HasVisibleOutputPixel(_animatedImage.LottieAnimation.OutputTexture));
         }
 
         [UnityTest]
@@ -164,6 +193,37 @@ namespace LottiePlugin.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator SynchronousDrawCompletesPendingAsyncFrameFirst()
+        {
+            LottieAnimation animation = LottieAnimation.LoadFromJsonData(
+                _lottieAnimation.text,
+                string.Empty,
+                64,
+                64,
+                new LottieAnimationOptions
+                {
+                    UseManagedTextureUpload = true
+                });
+
+            try
+            {
+                animation.DrawOneFrameAsyncPrepare(2);
+                Assert.IsTrue(animation.AsyncDrawPending);
+
+                animation.DrawOneFrame(3);
+
+                Assert.IsFalse(animation.AsyncDrawPending);
+                Assert.AreEqual(3, animation.CurrentFrame);
+                Assert.IsTrue(HasVisibleOutputPixel(animation.OutputTexture));
+                yield return null;
+            }
+            finally
+            {
+                animation.Dispose();
+            }
+        }
+
+        [UnityTest]
         public IEnumerator AnimatedImageBindsItsOutputTexture()
         {
             _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
@@ -207,6 +267,33 @@ namespace LottiePlugin.Tests.Runtime
                 RenderTexture.ReleaseTemporary(renderTexture);
                 Object.DestroyImmediate(readback);
             }
+        }
+
+        private static void SetField<T>(AnimatedImage image, string fieldName, T value)
+        {
+            FieldInfo field = typeof(AnimatedImage).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field, $"Could not find AnimatedImage.{fieldName}.");
+            field.SetValue(image, value);
+        }
+
+        private static void SetAnimationField<T>(LottieAnimation animation, string fieldName, T value)
+        {
+            FieldInfo field = typeof(LottieAnimation).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field, $"Could not find LottieAnimation.{fieldName}.");
+            field.SetValue(animation, value);
+        }
+
+        private static IEnumerator InvokeCoroutine(AnimatedImage image, string methodName)
+        {
+            MethodInfo method = typeof(AnimatedImage).GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method, $"Could not find AnimatedImage.{methodName}.");
+            return (IEnumerator)method.Invoke(image, null);
         }
     }
 }
