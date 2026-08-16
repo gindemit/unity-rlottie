@@ -54,6 +54,7 @@ namespace LottiePlugin
         }
         
         public int CurrentFrame { get; private set; }
+        internal bool AsyncDrawPending => _asyncDrawWasCalled;
         public double FrameRate => _animationWrapper.frameRate;
         public long TotalFramesCount => _animationWrapper.totalFrames;
         public double DurationSeconds => _animationWrapper.duration;
@@ -298,6 +299,10 @@ namespace LottiePlugin
         }
         public void DrawOneFrame(int frameNumber)
         {
+            if (_asyncDrawWasCalled)
+            {
+                PlatformDisposeAsyncDraw();
+            }
             PlatformDrawOneFrame(frameNumber);
         }
         public void DrawOneFrameAsyncPrepare(int frameNumber)

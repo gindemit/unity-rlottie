@@ -183,12 +183,16 @@ namespace LottiePlugin.UI
                 _lottieAnimation.CurrentFrame < nextState.FrameNumber)
             {
                 yield return _waitForEndOfFrame;
-                _lottieAnimation.Update(_animationSpeed);
+                _lottieAnimation.UpdateAsync(_animationSpeed);
                 if (_lottieAnimation.CurrentFrame == 0)
                 {
-                    _updateAnimationCoroutine = null;
-                    yield break;
+                    break;
                 }
+            }
+            while (_lottieAnimation.AsyncDrawPending)
+            {
+                yield return _waitForEndOfFrame;
+                _lottieAnimation.DrawOneFrameAsyncGetResult();
             }
             if (_currentStateIndex == 0)
             {

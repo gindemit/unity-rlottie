@@ -233,7 +233,7 @@ namespace LottiePlugin.UI
                 yield return _waitForEndOfFrame;
                 if (_lottieAnimation != null)
                 {
-                    _lottieAnimation.Update(_animationSpeed);
+                    _lottieAnimation.UpdateAsync(_animationSpeed);
                     if (!_loop && _lottieAnimation.CurrentFrame == _lottieAnimation.TotalFramesCount - 1)
                     {
                         Stop();
