@@ -173,13 +173,13 @@ namespace LottiePlugin
 
         private void PlatformDisposeAsyncDraw()
         {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
             if (_asyncDrawWasCalled && _animationWrapperIntPtr != IntPtr.Zero && _lottieRenderDataIntPtr != IntPtr.Zero)
             {
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
                 NativeBridge.LottieRenderGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr);
+#endif
                 _asyncDrawWasCalled = false;
             }
-#endif
         }
 
         private void PlatformDisposeNativeTexture()
