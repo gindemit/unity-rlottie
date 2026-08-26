@@ -19,6 +19,58 @@ namespace LottiePlugin
             return Texture;
         }
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        private static bool IsWebGLNativeUploadDevice(UnityEngine.Rendering.GraphicsDeviceType deviceType)
+        {
+            // WebGL 1/2 report their GLES compatibility level. WebGPU and any
+            // future renderer intentionally retain the managed upload path.
+            return deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES2 ||
+                   deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3;
+        }
+
+        private bool TryRegisterUnityOwnedWebGLTexture(uint width, uint height)
+        {
+            try
+            {
+                NativeBridge.LottieRegisterWebGLRenderingPlugin();
+                _nativeTexturePtr = Texture.GetNativeTexturePtr();
+                bool registered = _nativeTexturePtr != IntPtr.Zero &&
+                    NativeBridge.LottieRegisterUnityWebGLTexture(
+                        _animationWrapperIntPtr,
+                        _nativeTexturePtr,
+                        (int)width,
+                        (int)height) != 0;
+                if (registered && !sWebGLNativeUploadLogged)
+                {
+                    sWebGLNativeUploadLogged = true;
+                    Debug.Log("[LottiePlugin] Unity-owned WebGL native upload enabled");
+                }
+                return registered;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        private void UseWebGLManagedTextureUploadFallback(string reason)
+        {
+            _usesUnityOwnedWebGLTexture = false;
+            _usesCPURendering = true;
+            _nativeTexturePtr = IntPtr.Zero;
+            TextureUploadBackend = LottieTextureUploadBackend.WebGLManagedTextureUpload;
+            if (!sWebGLFallbackLogged)
+            {
+                sWebGLFallbackLogged = true;
+                Debug.LogWarning($"[LottiePlugin] WebGL native texture upload unavailable ({reason}); using Texture2D.Apply fallback");
+            }
+        }
+#endif
+
         private static void ConfigureRuntimeTexture(UnityEngine.Object textureObject)
         {
             if (textureObject == null)
@@ -184,7 +236,14 @@ namespace LottiePlugin
 
         private void PlatformDisposeNativeTexture()
         {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (_usesUnityOwnedWebGLTexture && _animationWrapperIntPtr != IntPtr.Zero)
+            {
+                NativeBridge.LottieUnregisterUnityWebGLTexture(_animationWrapperIntPtr);
+            }
+            _usesUnityOwnedWebGLTexture = false;
+            _nativeTexturePtr = IntPtr.Zero;
+#else
             if (_nativeTexturePtr != IntPtr.Zero)
             {
                 NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
@@ -247,9 +306,7 @@ namespace LottiePlugin
             }
             else
             {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
                 RequestTextureUpload();
-#endif
             }
         }
 
@@ -294,7 +351,12 @@ namespace LottiePlugin
             }
             else
             {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
+#if UNITY_WEBGL && !UNITY_EDITOR
+                // WebGL has no asynchronous worker render; the future API
+                // completed synchronously, so publish the completed buffer.
+                RequestTextureUpload();
+                _asyncDrawWasCalled = false;
+#else
                 if (NativeBridge.LottieRenderTryGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr, out int ready) == 0 && ready != 0)
                 {
                     RequestTextureUpload();
@@ -307,8 +369,38 @@ namespace LottiePlugin
         private unsafe void PlatformCreateRenderDataTexture(uint width, uint height)
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
-            _usesCPURendering = true;
             _useShaderConversion = LottieWebGLSettings.UseShaderConversion;
+            var webGLDeviceType = UnityEngine.SystemInfo.graphicsDeviceType;
+            bool tryNativeUpload = !_useManagedTextureUpload && IsWebGLNativeUploadDevice(webGLDeviceType);
+
+            if (tryNativeUpload)
+            {
+                // Native WebGL upload targets a Unity-owned RGBA texture. Do
+                // the BGRA conversion in the existing native render routine;
+                // this avoids both Texture2D.Apply and the shader blit.
+                _useShaderConversion = false;
+                Texture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, 1, false);
+                ConfigureRuntimeTexture(Texture);
+                // Allocate Unity's WebGL texture object once before requesting
+                // its native name. Per-frame Apply calls are avoided on success.
+                Texture.Apply(false, false);
+                _pixelData = Texture.GetRawTextureData<byte>();
+                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                _ownsPixelData = false;
+                _usesUnityOwnedWebGLTexture = TryRegisterUnityOwnedWebGLTexture(width, height);
+                _usesCPURendering = !_usesUnityOwnedWebGLTexture;
+                TextureUploadBackend = _usesUnityOwnedWebGLTexture
+                    ? LottieTextureUploadBackend.NativeWebGL
+                    : LottieTextureUploadBackend.WebGLManagedTextureUpload;
+                if (!_usesUnityOwnedWebGLTexture)
+                {
+                    UseWebGLManagedTextureUploadFallback("texture registration");
+                }
+                return;
+            }
+
+            _usesUnityOwnedWebGLTexture = false;
+            _usesCPURendering = true;
             if (_useShaderConversion && s_BGRAtoRGBAMaterial == null)
             {
                 s_BGRAtoRGBAShader = Shader.Find("Hidden/LottiePlugin/BGRAtoRGBA");
@@ -458,7 +550,50 @@ namespace LottiePlugin
 
         private void RequestTextureUpload()
         {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
+#if UNITY_WEBGL && !UNITY_EDITOR
+            LottieUploadPump.EnsureInstance();
+            int uploadAvailable;
+            try
+            {
+                uploadAvailable = NativeBridge.LottieIsWebGLUploadAvailable(_animationWrapperIntPtr);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                uploadAvailable = 0;
+            }
+            catch (DllNotFoundException)
+            {
+                uploadAvailable = 0;
+            }
+
+            if (uploadAvailable == 0)
+            {
+                if (!_webGLReregisterAttempted)
+                {
+                    _webGLReregisterAttempted = true;
+                    // Make this frame visible and let Unity recreate the GPU
+                    // object, if needed, before caching its native texture name.
+                    Texture.Apply(false, false);
+                    if (TryRegisterUnityOwnedWebGLTexture((uint)Texture.width, (uint)Texture.height))
+                    {
+                        return;
+                    }
+                }
+
+                UseWebGLManagedTextureUploadFallback("native upload failure");
+                Texture.Apply(false, false);
+                return;
+            }
+
+            _webGLReregisterAttempted = false;
+            if (NativeBridge.LottieRequestWebGLTextureUpload(
+                    _animationWrapperIntPtr,
+                    _lottieRenderDataIntPtr) == 0)
+            {
+                UseWebGLManagedTextureUploadFallback("upload request rejected");
+                Texture.Apply(false, false);
+            }
+#else
             // Do not let a one-shot render queue its only upload before the
             // render-thread event pump exists. Continuous animations used to
             // hide this startup race by naturally queueing another frame.
