@@ -489,7 +489,8 @@ public sealed class LottieSmokeController : MonoBehaviour
         // for graphics stacks without async readback support.
         bool nativeWritten = backend == LottieTextureUploadBackend.NativeVulkan ||
             backend == LottieTextureUploadBackend.NativeExternalTexture ||
-            backend == LottieTextureUploadBackend.NativeOpenGL;
+            backend == LottieTextureUploadBackend.NativeOpenGL ||
+            backend == LottieTextureUploadBackend.NativeWebGL;
         if (nativeWritten && SystemInfo.supportsAsyncGPUReadback)
         {
             yield return CaptureTextureAsync(source, capture);

@@ -97,6 +97,11 @@ set (RLOTTIE_PLUGIN_LIBRARY_SOURCES
     ../../src/UnityIntegration.cpp
     ../../src/UnityExports.cpp)
 
+if (RLOTTIE_WEB_ASSEMBLY)
+    list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES
+        ../../src/WebGLBackend.cpp)
+endif()
+
 # Platform-specific backend sources
 if (WIN32)
     list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES
