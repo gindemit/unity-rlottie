@@ -13,6 +13,7 @@ include(CTest)
 
 option(RLOTTIE_ANDROID_PAGE_SIZE_16K "Build Android libraries with 16KB page size" OFF)
 option(RLOTTIE_REQUIRE_NATIVE_VULKAN "Fail configuration when native Vulkan upload cannot be built" ${WIN32})
+option(RLOTTIE_WEBGL_WASM_EXCEPTIONS "Build WebGL archives for Unity versions using Wasm exceptions" OFF)
 set(UNITY_PLUGINAPI_DIR "${CMAKE_CURRENT_LIST_DIR}/../../dependency/unity-pluginapi" CACHE PATH "Path to Unity PluginAPI headers")
 
 set(BUILD_SHARED_LIBS FALSE)
@@ -138,6 +139,21 @@ else()
 endif()
 
 target_compile_definitions(LottiePlugin PRIVATE LOTTIE_PLUGIN_EXPORTS)
+
+if (RLOTTIE_WEB_ASSEMBLY AND RLOTTIE_WEBGL_WASM_EXCEPTIONS)
+    # Unity 6000.5+ links WebGL players with Emscripten's Wasm exception and
+    # longjmp ABI. setjmp/longjmp calls in rlottie's rasterizer must be lowered
+    # with the same model or the final Unity link references emscripten_longjmp
+    # from the obsolete JavaScript exception ABI.
+    target_compile_options(rlottie PRIVATE
+        -fwasm-exceptions
+        "-sSUPPORT_LONGJMP=wasm"
+        "-sWASM_LEGACY_EXCEPTIONS=1")
+    target_compile_options(LottiePlugin PRIVATE
+        -fwasm-exceptions
+        "-sSUPPORT_LONGJMP=wasm"
+        "-sWASM_LEGACY_EXCEPTIONS=1")
+endif()
 
 # Enable logging support only for non-WebGL builds
 if (NOT RLOTTIE_WEB_ASSEMBLY)
