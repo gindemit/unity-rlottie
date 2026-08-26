@@ -21,6 +21,7 @@
 
 #if defined(__EMSCRIPTEN__)
 #include "PixelFormatUtils.h"
+#include "WebGLBackend.h"
 #endif
 
 #include <cstdio>
@@ -222,6 +223,12 @@ extern "C"
             return 0;
         }
         return InvokeIntAbi([&]() -> int32_t {
+#if defined(__EMSCRIPTEN__)
+        if (animation_wrapper != nullptr && *animation_wrapper != nullptr)
+        {
+            UnregisterUnityTextureWebGL(*animation_wrapper);
+        }
+#endif
 #if !defined(__EMSCRIPTEN__)
         if (animation_wrapper != nullptr && *animation_wrapper != nullptr)
         {
@@ -235,6 +242,44 @@ extern "C"
         return 0;
         });
     }
+
+#if defined(__EMSCRIPTEN__)
+    EXPORT_API void lottie_register_webgl_rendering_plugin(void)
+    {
+        RegisterWebGLRenderingPlugin();
+    }
+
+    EXPORT_API int32_t lottie_register_unity_webgl_texture(
+        lottie_animation_wrapper* animation,
+        void* native_texture,
+        int width,
+        int height)
+    {
+        return RegisterUnityTextureWebGL(animation, native_texture, width, height) ? 1 : 0;
+    }
+
+    EXPORT_API void lottie_unregister_unity_webgl_texture(lottie_animation_wrapper* animation)
+    {
+        UnregisterUnityTextureWebGL(animation);
+    }
+
+    EXPORT_API int32_t lottie_request_webgl_texture_upload(
+        lottie_animation_wrapper* animation,
+        lottie_render_data* render_data)
+    {
+        return RequestTextureUploadWebGL(animation, render_data) ? 1 : 0;
+    }
+
+    EXPORT_API int32_t lottie_is_webgl_upload_available(lottie_animation_wrapper* animation)
+    {
+        return IsWebGLUploadAvailable(animation) ? 1 : 0;
+    }
+
+    EXPORT_API UnityRenderingEvent lottie_get_webgl_render_event_func(void)
+    {
+        return GetWebGLRenderEventFunc();
+    }
+#endif
 
     EXPORT_API int32_t lottie_render_immediately(
         lottie_animation_wrapper* animation_wrapper,

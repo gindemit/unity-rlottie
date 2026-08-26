@@ -32,6 +32,10 @@ namespace LottiePlugin
         private static bool s_Registered = false;
 #endif
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        private static bool s_WebGLRegistered;
+#endif
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         internal static void RegisterPlugin()
         {
@@ -54,6 +58,19 @@ namespace LottiePlugin
             catch (Exception ex)
             {
                 Debug.LogError($"[Lottie] Failed to register iOS plugin: {ex.Message}");
+            }
+#elif UNITY_WEBGL && !UNITY_EDITOR
+            if (s_WebGLRegistered)
+                return;
+
+            try
+            {
+                NativeBridge.LottieRegisterWebGLRenderingPlugin();
+                s_WebGLRegistered = true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[LottiePlugin] WebGL rendering plug-in registration failed; Texture2D.Apply will be used ({ex.GetType().Name})");
             }
 #endif
         }
@@ -128,6 +145,32 @@ namespace LottiePlugin
 
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_render_event_func")]
         internal static extern IntPtr LottieGetRenderEventFunc();
+#endif
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_register_webgl_rendering_plugin")]
+        internal static extern void LottieRegisterWebGLRenderingPlugin();
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_register_unity_webgl_texture")]
+        internal static extern int LottieRegisterUnityWebGLTexture(
+            IntPtr animationWrapper,
+            IntPtr nativeTexture,
+            int width,
+            int height);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_unregister_unity_webgl_texture")]
+        internal static extern void LottieUnregisterUnityWebGLTexture(IntPtr animationWrapper);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_request_webgl_texture_upload")]
+        internal static extern int LottieRequestWebGLTextureUpload(
+            IntPtr animationWrapper,
+            IntPtr renderData);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_is_webgl_upload_available")]
+        internal static extern int LottieIsWebGLUploadAvailable(IntPtr animationWrapper);
+
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_webgl_render_event_func")]
+        internal static extern IntPtr LottieGetWebGLRenderEventFunc();
 #endif
 
         [DllImport(PLUGIN_NAME,
