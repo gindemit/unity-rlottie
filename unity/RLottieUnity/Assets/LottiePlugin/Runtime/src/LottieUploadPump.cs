@@ -3,7 +3,6 @@ using UnityEngine;
 
 namespace LottiePlugin
 {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
     internal sealed class LottieUploadPump : MonoBehaviour
     {
         private static LottieUploadPump sInstance;
@@ -35,7 +34,11 @@ namespace LottiePlugin
             sInstance = this;
             if (sRenderEventFunc == IntPtr.Zero)
             {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                sRenderEventFunc = NativeBridge.LottieGetWebGLRenderEventFunc();
+#else
                 sRenderEventFunc = NativeBridge.LottieGetRenderEventFunc();
+#endif
             }
         }
 
@@ -43,7 +46,11 @@ namespace LottiePlugin
         {
             if (sRenderEventFunc == IntPtr.Zero)
             {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                sRenderEventFunc = NativeBridge.LottieGetWebGLRenderEventFunc();
+#else
                 sRenderEventFunc = NativeBridge.LottieGetRenderEventFunc();
+#endif
                 if (sRenderEventFunc == IntPtr.Zero)
                 {
                     return;
@@ -68,5 +75,4 @@ namespace LottiePlugin
             }
         }
     }
-#endif
 }

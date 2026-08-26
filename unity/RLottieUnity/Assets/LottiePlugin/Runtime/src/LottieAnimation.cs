@@ -16,7 +16,8 @@ namespace LottiePlugin
         NativeExternalTexture,
         WebGLManagedTextureUpload,
         WebGLShaderConversion,
-        NativeOpenGL
+        NativeOpenGL,
+        NativeWebGL
     }
 
     public sealed class LottieAnimationOptions
@@ -106,13 +107,17 @@ namespace LottiePlugin
         private bool _usesCPURendering;
         private bool _usesUnityOwnedNativeTexture;
         private bool _usesUnityOwnedOpenGLTexture;
+        private bool _usesUnityOwnedWebGLTexture;
         private bool _useManagedTextureUpload;
         private bool _vulkanReregisterAttempted;
         private bool _openGLReregisterAttempted;
+        private bool _webGLReregisterAttempted;
         private static bool sVulkanNativeUploadLogged;
         private static bool sVulkanFallbackLogged;
         private static bool sOpenGLNativeUploadLogged;
         private static bool sOpenGLFallbackLogged;
+        private static bool sWebGLNativeUploadLogged;
+        private static bool sWebGLFallbackLogged;
         private float _timeSinceLastRenderCall;
         private double _frameDelta;
         private double _clipFrameDelta;
@@ -126,9 +131,7 @@ namespace LottiePlugin
         private Action<int> DrawOneFrameCached;
         private Action<int> DrawOneFrameAsyncPrepareCached;
 
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
         private IntPtr _nativeTexturePtr;
-#endif
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         // WebGL shader-based BGRA to RGBA conversion
