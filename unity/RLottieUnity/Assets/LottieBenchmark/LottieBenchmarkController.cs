@@ -19,6 +19,7 @@ using Debug = UnityEngine.Debug;
 public sealed class LottieBenchmarkController : MonoBehaviour
 {
     private const string AndroidArgumentsExtra = "lottieBenchmarkArguments";
+    private const string EnvironmentVariablePrefix = "LOTTIE_BENCHMARK_";
     private const double SixtyFpsBudgetMs = 1000.0 / 60.0;
     private const int MaxVisiblePreviews = 12;
 
@@ -120,7 +121,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
                     var combined = new string[arguments.Length + extraArguments.Length];
                     Array.Copy(arguments, combined, arguments.Length);
                     Array.Copy(extraArguments, 0, combined, arguments.Length, extraArguments.Length);
-                    return combined;
+                    return AppendEnvironmentArguments(combined);
                 }
             }
         }
@@ -129,7 +130,73 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             Debug.LogWarning("Could not read Android benchmark arguments: " + exception.Message);
         }
 #endif
-        return arguments;
+        return AppendEnvironmentArguments(arguments);
+    }
+
+    /// <summary>
+    /// Appends benchmark options supplied through <c>LOTTIE_BENCHMARK_*</c> environment
+    /// variables. Unity does not populate <see cref="Environment.GetCommandLineArgs"/> from
+    /// the launch arguments on iOS, so these variables are the only unattended entry point
+    /// on that platform, mirroring the smoke controller's LOTTIE_SMOKE_* fallback.
+    /// Command-line arguments keep priority because the synthesized tokens are appended and
+    /// the argument readers return the first match.
+    /// </summary>
+    private static string[] AppendEnvironmentArguments(string[] arguments)
+    {
+        var appended = new List<string>();
+        AppendEnvironmentFlag(appended, "MATRIX", "-lottieBenchmarkMatrix");
+        AppendEnvironmentFlag(appended, "QUIT", "-lottieBenchmarkQuit");
+        AppendEnvironmentFlag(appended, "UNCAPPED", "-lottieBenchmarkUncapped");
+        AppendEnvironmentFlag(appended, "VALIDATE_PIXELS", "-lottieBenchmarkValidatePixels");
+        AppendEnvironmentFlag(appended, "HOLD_AFTER_WARMUP", "-lottieBenchmarkHoldAfterWarmup");
+        AppendEnvironmentFlag(appended, "MANAGED_UPLOAD", "-lottieBenchmarkManagedUpload");
+        AppendEnvironmentFlag(appended, "VULKAN_DIAGNOSTICS", "-lottieBenchmarkVulkanDiagnostics");
+        AppendEnvironmentValue(appended, "INSTANCES", "-lottieBenchmarkInstances");
+        AppendEnvironmentValue(appended, "WARMUP", "-lottieBenchmarkWarmup");
+        AppendEnvironmentValue(appended, "SAMPLES", "-lottieBenchmarkSamples");
+        AppendEnvironmentValue(appended, "OUTPUT", "-lottieBenchmarkOutput");
+        AppendEnvironmentValue(appended, "RESOLUTIONS", "-lottieBenchmarkResolutions");
+        if (appended.Count == 0)
+        {
+            return arguments;
+        }
+        var combined = new string[arguments.Length + appended.Count];
+        Array.Copy(arguments, combined, arguments.Length);
+        appended.CopyTo(combined, arguments.Length);
+        return combined;
+    }
+
+    private static void AppendEnvironmentFlag(List<string> appended, string suffix, string argumentName)
+    {
+        string value = ReadEnvironmentVariable(suffix);
+        if (string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            appended.Add(argumentName);
+        }
+    }
+
+    private static void AppendEnvironmentValue(List<string> appended, string suffix, string argumentName)
+    {
+        string value = ReadEnvironmentVariable(suffix);
+        if (!string.IsNullOrEmpty(value))
+        {
+            appended.Add(argumentName);
+            appended.Add(value);
+        }
+    }
+
+    private static string ReadEnvironmentVariable(string suffix)
+    {
+        try
+        {
+            return Environment.GetEnvironmentVariable(EnvironmentVariablePrefix + suffix);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning("Could not read benchmark environment variable " + suffix + ": " + exception.Message);
+            return null;
+        }
     }
 
     private void Update()

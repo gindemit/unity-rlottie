@@ -19,7 +19,29 @@ A standalone player can run the full matrix and exit without UI interaction:
 RLottieSmoke.exe -lottieBenchmarkMatrix -lottieBenchmarkInstances 10 -lottieBenchmarkWarmup 30 -lottieBenchmarkSamples 180 -lottieBenchmarkUncapped -lottieBenchmarkQuit -lottieBenchmarkOutput C:\benchmarks\patch-pal.csv
 ```
 
-Omit `-lottieBenchmarkUncapped` when the observed frame metric should include the player's configured VSync/frame cap. On iOS, use the in-scene controls and retrieve the logged summary or CSV from the app container.
+Omit `-lottieBenchmarkUncapped` when the observed frame metric should include the player's configured VSync/frame cap.
+
+On iOS, Unity does not populate `Environment.GetCommandLineArgs()` from the arguments
+passed by `devicectl device process launch`, so command-line options never reach the
+controller there. Pass the same options as `LOTTIE_BENCHMARK_*` environment variables
+instead; every command-line option has an equivalent, and command-line arguments keep
+priority when both are present:
+
+```bash
+xcrun devicectl device process launch --device <device-id> --console \
+  -e '{"LOTTIE_BENCHMARK_MATRIX":"1","LOTTIE_BENCHMARK_INSTANCES":"10","LOTTIE_BENCHMARK_WARMUP":"30","LOTTIE_BENCHMARK_SAMPLES":"180","LOTTIE_BENCHMARK_UNCAPPED":"1","LOTTIE_BENCHMARK_QUIT":"1"}' \
+  -- com.DefaultCompany.LottiePlugin
+```
+
+Flag variables (`MATRIX`, `QUIT`, `UNCAPPED`, `VALIDATE_PIXELS`, `HOLD_AFTER_WARMUP`,
+`MANAGED_UPLOAD`, `VULKAN_DIAGNOSTICS`) are enabled by `1` or `true`. Value variables
+(`INSTANCES`, `WARMUP`, `SAMPLES`, `OUTPUT`, `RESOLUTIONS`) take the same values as their
+command-line counterparts. Omit `LOTTIE_BENCHMARK_OUTPUT` on iOS: `ExportCsv` uses the
+path verbatim, so a relative path would target the read-only bundle directory. With it
+omitted the CSV is auto-named into `Application.persistentDataPath`, from where it can be
+retrieved with `xcrun devicectl device copy from --domain-type appDataContainer`.
+
+The in-scene controls remain available on all platforms as a manual alternative.
 
 The existing `RLottie.CI.BuildMatrix.Build` method accepts Windows, Linux,
 Android, WebGL, and iOS targets. Add `-ciDevelopment true
