@@ -24,7 +24,9 @@ publisher can overwrite bytes still owned by an upload.
   buffer before `glTexSubImage2D`. This avoids both the former dummy external
   texture handle and Mali's rejected BGRA upload into a Unity RGBA texture.
 - Managed `Texture2D.Apply` fallback and WebGL continue rendering into their
-  external Unity-owned buffers and do not acquire native mailbox slots.
+  external Unity-owned buffers and do not acquire native mailbox slots. Native
+  WebGL upload snapshots each completed frame into one per-instance upload
+  buffer that its render-thread `glTexSubImage2D` callback consumes.
 
 When both CPU slots are busy, a frame is skipped instead of allocating or
 blocking. When multiple completed frames are ready, the newest is uploaded and
@@ -46,8 +48,16 @@ sequential CPU-to-upload-ring copy on explicit APIs.
 
 ## Scope and snapshot
 
-This document describes the implementation on the canonical `dev` branch as
-audited and validated on 2026-08-13.
+This document describes the implementation on the canonical `dev` branch. Every
+non-WebGL path was audited and validated on 2026-08-13. The WebGL statements
+were re-audited from source at the `dev` tip on 2026-09-01, after
+`Add native WebGL texture uploads with fallback` (2026-08-26) and
+`Support Unity 6000.5 WebGL exception ABI` (2026-08-27) landed.
+
+The WebGL native-upload path is **described from code, not test-validated**. The
+most recent test evidence on this repository is from 2026-08-14 and therefore
+predates that implementation, so no statement about WebGL native upload below
+should be read as a browser or device validation result.
 
 In this document, **Apply** specifically means a call to `Texture2D.Apply()`.
 The synchronous and asynchronous draw paths make the same upload choice.
@@ -67,9 +77,10 @@ The synchronous and asynchronous draw paths make the same upload choice.
 | iOS | Metal | No | Native external Metal texture and native upload |
 | Android | OpenGL ES 2 or 3 | No | Unity-owned RGBA texture; native render-thread BGRA-to-RGBA conversion and upload |
 | Android | Vulkan | No when native Vulkan is available; otherwise Yes | Unity-owned `Texture2D` with native render-thread upload; guarded `Texture2D.Apply()` fallback |
-| WebGL | Shader conversion (default) | Yes | Apply to the source `Texture2D`, then blit into the exposed `RenderTexture` |
-| WebGL | Native conversion | Yes | Apply converted pixels to the exposed `Texture2D` |
-| WebGL | Shader unavailable | Yes | Automatic fallback to the native-conversion path |
+| WebGL | WebGL 1 or 2, reported as `OpenGLES2` or `OpenGLES3` | No when native WebGL upload is available; otherwise Yes | Unity-owned RGBA `Texture2D` with native BGRA-to-RGBA conversion and render-thread `glTexSubImage2D`; guarded `Texture2D.Apply()` fallback |
+| WebGL | Managed upload requested, or a renderer outside `OpenGLES2`/`OpenGLES3` such as WebGPU; shader conversion (default) | Yes | Apply to the source `Texture2D`, then blit into the exposed `RenderTexture` |
+| WebGL | Managed WebGL path with native conversion selected | Yes | Apply converted pixels to the exposed `Texture2D` |
+| WebGL | Managed WebGL path with the conversion shader unavailable | Yes | Automatic fallback to the native-conversion path |
 
 The Built-in, URP, and HDRP render pipelines do not select the upload path.
 The active graphics API and platform compile symbols select it. Consequently:
@@ -80,12 +91,19 @@ The active graphics API and platform compile symbols select it. Consequently:
 - Android Built-in and URP use the native path on supported Vulkan devices and
   Apply only as a runtime fallback; OpenGL ES retains its native upload path;
 - iOS Built-in and URP do not use Apply on Metal; and
-- WebGL Built-in and URP always use Apply. HDRP is not a targeted WebGL,
-  Android, or iOS configuration in the project matrix.
+- WebGL Built-in and URP use the native WebGL upload path on WebGL 1/2
+  renderers and Apply only when managed upload is requested, when the reported
+  renderer is not a WebGL 1/2 renderer, or as a runtime fallback. HDRP is not a
+  targeted WebGL, Android, or iOS configuration in the project matrix.
 
 The relevant managed decisions are:
 
-1. WebGL player builds force `_usesCPURendering = true`.
+1. WebGL player builds attempt native upload first. They create a Unity-owned
+   single-mip RGBA `Texture2D`, allocate it with one initialization-time Apply,
+   and register its cached native texture name. They set
+   `_usesCPURendering = true` only when managed upload was requested, when the
+   reported renderer is not `OpenGLES2`/`OpenGLES3`, or when registration or a
+   later upload request fails.
 2. Vulkan creates a Unity-owned `Texture2D`, registers its cached native handle,
    and selects native upload only when the native capability check succeeds.
 3. Linux OpenGL and Vulkan use Unity-owned textures with native render-thread
@@ -97,7 +115,10 @@ The relevant managed decisions are:
    consumed by `GL.IssuePluginEvent` on Unity's render thread.
 
 In WebGL shader mode, Apply is called on the intermediate source `Texture2D`,
-not on the exposed output `RenderTexture`.
+not on the exposed output `RenderTexture`. Native WebGL upload disables shader
+conversion, so neither that intermediate texture nor the blit exists on the
+native path; its guarded managed fallback keeps the same RGBA texture and native
+channel conversion and only resumes calling Apply.
 
 `AnimatedButton` and `AnimatedImage` now make the same upload-path selection.
 The former `AnimatedButton` managed-upload override was removed after the
@@ -141,8 +162,10 @@ The following paths are not classified as unsupported:
   `glTexSubImage2D()` run from `GL.IssuePluginEvent` with Unity's render-thread
   context. Registration or upload failures retain or restore
   `Texture2D.Apply()`.
-- WebGL is **managed-upload only** and uses `Texture2D.Apply()` by design; it
-  does not use a native graphics-device texture backend.
+- WebGL has a native WebGL 1/2 texture backend with a guarded managed fallback,
+  so it is no longer managed-upload only. Renderers that WebGL does not report
+  as `OpenGLES2` or `OpenGLES3`, such as WebGPU, and explicitly requested
+  managed upload retain `Texture2D.Apply()`.
 - Vulkan has a guarded managed fallback when its Unity interface or an upload
   operation is unavailable.
 
@@ -242,7 +265,9 @@ Vulkan. Relevant primary references:
   `UpdateExternalTexture()` for a Unity-owned Vulkan texture.
 - Keep the Vulkan and Linux OpenGL capability checks independent so either
   backend can return to managed upload without masking the other.
-- Keep WebGL unchanged because it cannot use this native plugin path.
+- Keep WebGL unchanged by this Vulkan work. WebGL later received its own
+  Unity-owned native upload path; see "WebGL native upload: implementation
+  status".
 
 #### Native bridge and instance state
 
@@ -377,6 +402,64 @@ The remaining acceptance work is broader vendor, color-space, lifecycle, and
 desktop Vulkan coverage; the tested Unity 6000.5.3f1 Android configuration no
 longer has a known sampled-texture update failure.
 
+## WebGL native upload: implementation status
+
+Native WebGL upload without a per-frame Apply call is implemented for WebGL
+player builds. Managed code creates a Unity-owned RGBA `Texture2D` with exactly
+one mip level, calls Apply once so Unity allocates the GL texture object, caches
+`GetNativeTexturePtr()` as that texture's WebGL name, and registers it with the
+plugin. rlottie renders into Unity's raw-data view for that texture and the
+native render routine converts BGRA to RGBA in place, which is why the shader
+conversion blit is disabled on this path. Each completed frame is copied once
+into a per-instance upload snapshot, and the `GL.IssuePluginEvent` pump runs a
+render-thread callback that uploads that snapshot with `glTexSubImage2D`. The
+callback saves and restores the previous 2D texture binding and unpack
+alignment, and drains already-pending GL errors first so it does not attribute
+another plugin's error to this upload.
+
+The path is capability guarded. It is attempted only when managed upload was not
+requested and Unity reports the renderer as `OpenGLES2` or `OpenGLES3`, which is
+how WebGL 1 and WebGL 2 identify themselves; WebGPU and any future renderer
+intentionally retain the managed path. If handle registration fails, if the
+native side reports the upload as unavailable, or if an upload request is
+rejected, managed code retries registration once and otherwise returns to
+`Texture2D.Apply()` instead of exposing a stale texture. The runtime emits one of
+these diagnostic messages:
+
+- `[LottiePlugin] Unity-owned WebGL native upload enabled`
+- `[LottiePlugin] WebGL native texture upload unavailable (<reason>); using Texture2D.Apply fallback`
+
+The reported reasons are `texture registration`, `native upload failure`, and
+`upload request rejected`.
+
+WebGL still does not acquire native CPU mailbox slots and still has no
+asynchronous worker render; its future API completes synchronously and the
+managed asynchronous path then publishes the completed buffer. Persistent CPU
+frame memory on the native path is `2F`: Unity's retained raw-data view plus the
+native upload snapshot.
+
+Unity 6000.5 and newer build WebGL with the WebAssembly exception and longjmp
+ABI, so a build pre-process step selects the matching prebuilt native archive
+variant (`WasmExceptions` for Unity 6000.5 or newer, `Legacy` otherwise) and
+restores the checked-in legacy pair after the build or on the next editor tick.
+
+Two aspects are not determined by the code alone:
+
+- The WebGL path does not call `Texture.IncrementUpdateCount()` after a native
+  GPU-side write, unlike the Unity-owned Linux OpenGL path. Whether an immediate
+  `Graphics.Blit` or `ReadPixels` observes a native WebGL upload without it is
+  unverified; the rendered-player smoke already prefers asynchronous GPU
+  readback for `NativeWebGL`, which would mask the same class of false negative
+  seen earlier on Android Vulkan.
+- Color correctness is reasoned from the RGBA texture format plus the native
+  BGRA-to-RGBA conversion, not from a rendered comparison in Gamma and Linear
+  projects.
+
+This whole section is described from the current source. No rendered-player,
+browser, or device run has yet exercised `NativeWebGL`, its managed fallback, or
+the archive-variant selection, so WebGL 1 and WebGL 2 browser validation remains
+open acceptance work.
+
 ## Follow-up engineering audit
 
 ### Staging-buffer ownership and the cacheable-mailbox fix
@@ -414,7 +497,8 @@ metadata are excluded.
 | Unity-owned Vulkan | `2F + 3V` | `F + 3V` | `3F + 3V` |
 | Linux Unity-owned OpenGL | `2F` plus optional conversion scratch | `4F` plus optional conversion scratch | `3F` plus optional conversion scratch |
 | Android OpenGL ES | `2F` | `3F` | `4F` (`F` Unity raw view + `2F` mailbox + `F` RGBA scratch) |
-| Managed Apply / WebGL CPU frame | `F` | `F` | `F` |
+| Managed Apply / WebGL managed CPU frame | `F` | `F` | `F` |
+| Unity-owned WebGL (native upload) | not implemented then | not implemented then | `2F` (`F` Unity raw view + `F` upload snapshot) |
 
 The Unity-owned Vulkan formulas include the readable Unity raw-data view kept
 for live fallback continuity. The rejected direct-mapped column therefore has
@@ -455,11 +539,10 @@ The pool change includes these adjacent fixes:
 - Evaluate `Texture.IncrementUpdateCount()` after Vulkan GPU-side writes, as is
   already done for Unity-owned OpenGL textures. Validate immediate blits and
   asynchronous readback before making it unconditional.
-- Prototype WebGL upload through Unity's custom texture-update callback or a
-  render-thread OpenGL ES `glTexSubImage2D` path. Unity's native rendering sample
-  supports WebGL texture updates, so `Apply()` is a current implementation
-  choice rather than necessarily a permanent platform limit. Keep the current
-  managed path until WebGL 1/2 browser validation demonstrates compatibility.
+- WebGL upload through a render-thread `glTexSubImage2D` path is implemented and
+  is no longer a proposal; `Apply()` on WebGL is now a guarded fallback rather
+  than the only path. WebGL 1 and WebGL 2 browser validation of that path is
+  still outstanding, so it remains code-reviewed only.
 - Add native mailbox stress tests covering concurrent publish/upload, newest-
   frame coalescing, queue saturation, disposal during queued work, resize, and
   graphics-device restart. Run them with native sanitizers where possible.
