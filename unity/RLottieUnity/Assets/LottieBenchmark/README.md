@@ -21,6 +21,14 @@ RLottieSmoke.exe -lottieBenchmarkMatrix -lottieBenchmarkInstances 10 -lottieBenc
 
 Omit `-lottieBenchmarkUncapped` when the observed frame metric should include the player's configured VSync/frame cap.
 
+On iOS and Android, `-lottieBenchmarkUncapped` requests a target frame rate above any
+current mobile display refresh rather than `Application.targetFrameRate = -1`, because
+`-1` restores the platform default of 30 fps on mobile and would cap the observed-frame
+metric instead of releasing it. The platform still clamps to the display's real maximum,
+and the iOS player setting *Adjust iOS FPS based on thermal state* can lower it further.
+The stopwatch batch metric is unaffected either way: it times synchronous
+`LottieAnimation.DrawOneFrame` calls and never depends on presentation.
+
 On iOS, Unity does not populate `Environment.GetCommandLineArgs()` from the arguments
 passed by `devicectl device process launch`, so command-line options never reach the
 controller there. Pass the same options as `LOTTIE_BENCHMARK_*` environment variables

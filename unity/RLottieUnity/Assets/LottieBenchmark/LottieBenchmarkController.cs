@@ -20,6 +20,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
 {
     private const string AndroidArgumentsExtra = "lottieBenchmarkArguments";
     private const string EnvironmentVariablePrefix = "LOTTIE_BENCHMARK_";
+    private const int UncappedMobileTargetFrameRate = 240;
     private const double SixtyFpsBudgetMs = 1000.0 / 60.0;
     private const int MaxVisiblePreviews = 12;
 
@@ -99,7 +100,14 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         if (HasArgument(arguments, "-lottieBenchmarkUncapped"))
         {
             QualitySettings.vSyncCount = 0;
+#if UNITY_IOS || UNITY_ANDROID
+            // -1 restores the platform default, which is 30 fps on mobile, so it caps the
+            // observed-frame metric instead of releasing it. Request a rate above any
+            // current mobile display refresh and let the platform clamp to its real maximum.
+            Application.targetFrameRate = UncappedMobileTargetFrameRate;
+#else
             Application.targetFrameRate = -1;
+#endif
         }
         StartCoroutine(StartAutomaticMatrixNextFrame());
     }
