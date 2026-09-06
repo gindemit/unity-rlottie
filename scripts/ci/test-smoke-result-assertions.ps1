@@ -9,14 +9,21 @@ function New-SmokeResult {
         [string] $GraphicsApi = 'Direct3D11',
         [string] $AnimatedImageBackend = 'NativeExternalTexture',
         [string] $AnimatedButtonBackend = 'NativeExternalTexture',
+        [string] $ColorSpace = 'Linear',
         [bool] $Passed = $true,
         [object[]] $Checks = @([pscustomobject]@{ name = 'render'; passed = $true; details = 'ok' })
     )
 
     [pscustomobject]@{
+        schemaVersion = 2
         passed = $Passed
         checks = $Checks
         graphicsApi = $GraphicsApi
+        colorSpace = $ColorSpace
+        graphicsDevice = 'Test GPU'
+        graphicsDeviceVendor = 'Test Vendor'
+        graphicsDeviceVersion = 'Vulkan 1.3'
+        operatingSystem = 'Test OS'
         animatedImageUploadBackend = $AnimatedImageBackend
         animatedButtonUploadBackend = $AnimatedButtonBackend
     }
@@ -43,7 +50,10 @@ function Assert-Throws {
 }
 
 Assert-LottieSmokeResult -Result (New-SmokeResult) -Platform Windows `
-    -ExpectedGraphicsApi Direct3D11 -ExpectedUploadBackend NativeExternalTexture -RequireNativeUpload
+    -ExpectedGraphicsApi Direct3D11 -ExpectedColorSpace Linear `
+    -ExpectedUploadBackend NativeExternalTexture -ExpectedGraphicsVendor 'Test*' `
+    -MinimumSchemaVersion 2 -RequiredCheckNames render `
+    -RequireGraphicsDeviceMetadata -RequireNativeUpload
 Assert-LottieSmokeResult -Result (New-SmokeResult -GraphicsApi Vulkan `
     -AnimatedImageBackend NativeVulkan -AnimatedButtonBackend NativeVulkan) -Platform Android `
     -ExpectedGraphicsApi Vulkan -ExpectedUploadBackend NativeVulkan -RequireNativeVulkanUpload
@@ -55,6 +65,22 @@ Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -AnimatedButto
     'missing upload-backend metadata'
 Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult) -Platform Windows `
         -ExpectedGraphicsApi Direct3D12 } 'unexpected graphics API'
+Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult) -Platform Windows `
+        -ExpectedColorSpace Gamma } 'unexpected color space'
+Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult) -Platform Windows `
+        -ExpectedGraphicsVendor 'Other*' } 'unexpected graphics vendor'
+Assert-Throws {
+    $oldSchema = New-SmokeResult
+    $oldSchema.schemaVersion = 1
+    Assert-LottieSmokeResult -Result $oldSchema -Platform Windows -MinimumSchemaVersion 2
+} 'outdated schema'
+Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult) -Platform Windows `
+        -RequiredCheckNames exactColorCalibration } "missing required check 'exactColorCalibration'"
+Assert-Throws {
+    $missingMetadata = New-SmokeResult
+    $missingMetadata.graphicsDeviceVersion = ''
+    Assert-LottieSmokeResult -Result $missingMetadata -Platform Windows -RequireGraphicsDeviceMetadata
+} 'missing graphics-device metadata'
 Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -AnimatedImageBackend ManagedTextureUpload) `
         -Platform Windows -ExpectedUploadBackend NativeExternalTexture } 'unexpected upload backend'
 Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -AnimatedButtonBackend ManagedTextureUpload) `
