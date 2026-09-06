@@ -28,6 +28,21 @@ namespace LottiePlugin.Tests.Runtime
             GameObject.Destroy(_animatedImage.gameObject);
         }
 
+        [TestCase(UnityEngine.Rendering.GraphicsDeviceType.OpenGLES2, true)]
+        [TestCase(UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3, true)]
+        [TestCase(UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore, true)]
+        [TestCase(UnityEngine.Rendering.GraphicsDeviceType.Vulkan, false)]
+        public void UnityOwnedOpenGLUploadSelection(
+            UnityEngine.Rendering.GraphicsDeviceType deviceType,
+            bool expected)
+        {
+            MethodInfo method = typeof(LottieAnimation).GetMethod(
+                "IsUnityOwnedOpenGLUploadDevice",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            Assert.AreEqual(expected, method.Invoke(null, new object[] { deviceType }));
+        }
+
         [UnityTest]
         public IEnumerator CheckAwakeFunctionality()
         {
