@@ -6,7 +6,14 @@ function Assert-LottieSmokeResult {
         [Parameter(Mandatory = $true)]
         [string] $Platform,
         [string] $ExpectedGraphicsApi,
+        [ValidateSet('Gamma', 'Linear')]
+        [string] $ExpectedColorSpace,
         [string] $ExpectedUploadBackend,
+        [string] $ExpectedGraphicsVendor,
+        [ValidateRange(1, 2147483647)]
+        [int] $MinimumSchemaVersion,
+        [string[]] $RequiredCheckNames,
+        [switch] $RequireGraphicsDeviceMetadata,
         [switch] $RequireNativeUpload,
         [switch] $RequireNativeVulkanUpload
     )
@@ -17,6 +24,15 @@ function Assert-LottieSmokeResult {
         throw "$Platform rendered-player smoke test failed:`n$($details -join "`n")"
     }
 
+    if ($MinimumSchemaVersion -gt 0 -and [int] $Result.schemaVersion -lt $MinimumSchemaVersion) {
+        throw "$Platform smoke result uses an outdated schema: required>=$MinimumSchemaVersion, actual=$($Result.schemaVersion)."
+    }
+    foreach ($requiredCheckName in @($RequiredCheckNames | Where-Object { $_ })) {
+        if (-not @($Result.checks | Where-Object { $_.name -eq $requiredCheckName }).Count) {
+            throw "$Platform smoke result is missing required check '$requiredCheckName'."
+        }
+    }
+
     $animatedImageBackend = [string] $Result.animatedImageUploadBackend
     $animatedButtonBackend = [string] $Result.animatedButtonUploadBackend
     if (-not $animatedImageBackend -or -not $animatedButtonBackend) {
@@ -24,6 +40,17 @@ function Assert-LottieSmokeResult {
     }
     if ($ExpectedGraphicsApi -and $Result.graphicsApi -ne $ExpectedGraphicsApi) {
         throw "$Platform smoke test used an unexpected graphics API: expected=$ExpectedGraphicsApi, actual=$($Result.graphicsApi)."
+    }
+    if ($ExpectedColorSpace -and $Result.colorSpace -ne $ExpectedColorSpace) {
+        throw "$Platform smoke test used an unexpected color space: expected=$ExpectedColorSpace, actual=$($Result.colorSpace)."
+    }
+    if ($ExpectedGraphicsVendor -and $Result.graphicsDeviceVendor -notlike $ExpectedGraphicsVendor) {
+        throw "$Platform smoke test used an unexpected graphics vendor: expected=$ExpectedGraphicsVendor, actual=$($Result.graphicsDeviceVendor)."
+    }
+    if ($RequireGraphicsDeviceMetadata -and
+        (-not $Result.graphicsDevice -or -not $Result.graphicsDeviceVendor -or
+        -not $Result.graphicsDeviceVersion -or -not $Result.operatingSystem)) {
+        throw "$Platform smoke result is missing graphics-device metadata."
     }
     if ($ExpectedUploadBackend -and
         ($animatedImageBackend -ne $ExpectedUploadBackend -or $animatedButtonBackend -ne $ExpectedUploadBackend)) {
