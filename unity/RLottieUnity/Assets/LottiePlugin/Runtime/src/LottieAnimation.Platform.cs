@@ -89,6 +89,13 @@ namespace LottiePlugin
                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
         }
 
+        private static bool IsUnityOwnedOpenGLUploadDevice(UnityEngine.Rendering.GraphicsDeviceType deviceType)
+        {
+            return deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore ||
+                   deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES2 ||
+                   deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3;
+        }
+
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
         private unsafe void UseManagedTextureUploadFallback(uint width, uint height, string reason)
         {
@@ -423,8 +430,7 @@ namespace LottiePlugin
             _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload();
 #if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || (UNITY_ANDROID && !UNITY_EDITOR)
             _usesUnityOwnedOpenGLTexture =
-                (deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore ||
-                 deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3) &&
+                IsUnityOwnedOpenGLUploadDevice(deviceType) &&
                 !_useManagedTextureUpload;
 #else
             _usesUnityOwnedOpenGLTexture = false;
