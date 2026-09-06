@@ -37,6 +37,7 @@ $matrix = @(
     @{ Repo = 'unity-rlottie-2019.4.41f2'; Version = '2019.4.41f2'; Editor = '2019.4.41f2'; Pipeline = 'BuiltIn' },
     @{ Repo = 'unity-rlottie-2021.3.45f2'; Version = '2021.3.45f2'; Editor = '2021.3.45f2'; Pipeline = 'BuiltIn' },
     @{ Repo = 'unity-rlottie'; Version = '2022.3.62f3'; Editor = '2022.3.62f3'; Pipeline = 'BuiltIn' },
+    @{ Repo = 'unity-rlottie-6000.2.13f1'; Version = '6000.2.13f1'; Editor = '6000.2.13f1'; Pipeline = 'BuiltIn' },
     @{ Repo = 'unity-rlottie-6000.3.7f1'; Version = '6000.3.7f1'; Editor = '6000.3.7f1-x86_64'; Pipeline = 'BuiltIn' },
     @{ Repo = 'unity-rlottie-6000.3.7f1-urp'; Version = '6000.3.7f1'; Editor = '6000.3.7f1-x86_64'; Pipeline = 'URP' },
     @{ Repo = 'unity-rlottie-6000.4.5f1'; Version = '6000.4.5f1'; Editor = '6000.4.5f1'; Pipeline = 'BuiltIn' },
