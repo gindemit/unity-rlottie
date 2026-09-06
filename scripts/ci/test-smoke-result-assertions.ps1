@@ -57,6 +57,10 @@ Assert-LottieSmokeResult -Result (New-SmokeResult) -Platform Windows `
 Assert-LottieSmokeResult -Result (New-SmokeResult -GraphicsApi Vulkan `
     -AnimatedImageBackend NativeVulkan -AnimatedButtonBackend NativeVulkan) -Platform Android `
     -ExpectedGraphicsApi Vulkan -ExpectedUploadBackend NativeVulkan -RequireNativeVulkanUpload
+# Wrapper scripts forward omitted optional values as empty strings. The shared
+# assertion must treat that value as "no expectation" instead of rejecting it
+# during parameter binding.
+Assert-LottieSmokeResult -Result (New-SmokeResult) -Platform Windows -ExpectedColorSpace ''
 
 Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -Checks @(
             [pscustomobject]@{ name = 'render'; passed = $false; details = 'failed' })) -Platform Windows } `
