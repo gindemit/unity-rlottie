@@ -24,15 +24,22 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const float AnimationTimeoutSeconds = 5f;
     private const float ReadbackTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
+    private const int LifecycleStressCycles = 12;
 
     [Serializable]
     private sealed class SmokeResult
     {
-        public int schemaVersion = 1;
+        public int schemaVersion = 2;
         public bool passed;
         public string platform;
         public string graphicsApi;
         public string graphicsDevice;
+        public string graphicsDeviceVendor;
+        public int graphicsDeviceVendorId;
+        public int graphicsDeviceId;
+        public string graphicsDeviceVersion;
+        public string operatingSystem;
+        public string colorSpace;
         public string animatedImageUploadBackend;
         public string animatedButtonUploadBackend;
         public string error;
@@ -239,7 +246,13 @@ public sealed class LottieSmokeController : MonoBehaviour
         {
             platform = Application.platform.ToString(),
             graphicsApi = SystemInfo.graphicsDeviceType.ToString(),
-            graphicsDevice = SystemInfo.graphicsDeviceName
+            graphicsDevice = SystemInfo.graphicsDeviceName,
+            graphicsDeviceVendor = SystemInfo.graphicsDeviceVendor,
+            graphicsDeviceVendorId = SystemInfo.graphicsDeviceVendorID,
+            graphicsDeviceId = SystemInfo.graphicsDeviceID,
+            graphicsDeviceVersion = SystemInfo.graphicsDeviceVersion,
+            operatingSystem = SystemInfo.operatingSystem,
+            colorSpace = QualitySettings.activeColorSpace.ToString()
         };
 
         AnimatedButton animatedButton = FindObjectOfType<AnimatedButton>();
@@ -352,8 +365,177 @@ public sealed class LottieSmokeController : MonoBehaviour
         Record("animatedButtonPixelsChangeAfterPress", buttonLaterCapture.Succeeded && buttonInitial.Hash != buttonLater.Hash,
             buttonLaterCapture.Succeeded ? DescribeTransition(buttonInitial, buttonLater) : buttonLaterCapture.Error);
 
+        yield return ValidateCalibrationColors();
+        yield return RunLifecycleStress(imageAnimation.TextureUploadBackend);
+
         Debug.Log("[LottieSmoke] Smoke checks complete; writing result.");
         Complete(null);
+    }
+
+    private IEnumerator ValidateCalibrationColors()
+    {
+        TextAsset json = Resources.Load<TextAsset>("device_color_calibration_bars");
+        if (json == null)
+        {
+            Record("exactColorCalibration", false, "Missing device_color_calibration_bars resource.");
+            yield break;
+        }
+
+        LottieAnimation animation = null;
+        Texture2D readable = null;
+        RenderTexture temporary = null;
+        RenderTexture previous = RenderTexture.active;
+        try
+        {
+            animation = LottieAnimation.LoadFromJsonData(json.text, string.Empty, 512, 512);
+            animation.DrawOneFrame(0);
+            yield return new WaitForEndOfFrame();
+
+            temporary = RenderTexture.GetTemporary(
+                512, 512, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            Graphics.Blit(animation.OutputTexture, temporary);
+            RenderTexture.active = temporary;
+            readable = new Texture2D(512, 512, TextureFormat.RGBA32, false, true);
+            readable.ReadPixels(new Rect(0, 0, 512, 512), 0, 0, false);
+            readable.Apply(false, false);
+
+            int[] centers = { 36, 99, 162, 225, 288, 351, 414, 477 };
+            Color32[] expected =
+            {
+                new Color32(255, 255, 255, 255),
+                new Color32(255, 255, 0, 255),
+                new Color32(0, 255, 255, 255),
+                new Color32(0, 255, 0, 255),
+                new Color32(255, 0, 255, 255),
+                new Color32(255, 0, 0, 255),
+                new Color32(0, 0, 255, 255),
+                new Color32(0, 0, 0, 255)
+            };
+            const int tolerance = 3;
+            bool passed = true;
+            string details = "backend=" + animation.TextureUploadBackend +
+                ", colorSpace=" + QualitySettings.activeColorSpace;
+            for (int index = 0; index < centers.Length; index++)
+            {
+                Color32 actual = readable.GetPixel(centers[index], 256);
+                Color32 target = expected[index];
+                bool matches = Math.Abs(actual.r - target.r) <= tolerance &&
+                    Math.Abs(actual.g - target.g) <= tolerance &&
+                    Math.Abs(actual.b - target.b) <= tolerance &&
+                    Math.Abs(actual.a - target.a) <= tolerance;
+                if (!matches)
+                {
+                    passed = false;
+                    details += ", bar=" + index.ToString(CultureInfo.InvariantCulture) +
+                        " expected=" + target + " actual=" + actual;
+                    break;
+                }
+            }
+
+            // Saturated RGB/CMY bars catch channel-order errors but cannot
+            // distinguish correct sRGB sampling from an accidental linear
+            // texture. The grayscale row exercises intermediate values. Since
+            // the readback target is explicitly linear, a Linear project must
+            // contain the sRGB-to-linear conversion performed while sampling.
+            for (int index = 0; passed && index < centers.Length; index++)
+            {
+                byte encoded = (byte)Mathf.RoundToInt(index * 255f / (centers.Length - 1));
+                byte expectedChannel = QualitySettings.activeColorSpace == ColorSpace.Linear
+                    ? (byte)Mathf.RoundToInt(Mathf.GammaToLinearSpace(encoded / 255f) * 255f)
+                    : encoded;
+                Color32 target = new Color32(expectedChannel, expectedChannel, expectedChannel, 255);
+                Color32 actual = readable.GetPixel(centers[index], 340);
+                bool matches = Math.Abs(actual.r - target.r) <= tolerance &&
+                    Math.Abs(actual.g - target.g) <= tolerance &&
+                    Math.Abs(actual.b - target.b) <= tolerance &&
+                    Math.Abs(actual.a - target.a) <= tolerance;
+                if (!matches)
+                {
+                    passed = false;
+                    details += ", grayscaleStep=" + index.ToString(CultureInfo.InvariantCulture) +
+                        " encoded=" + encoded.ToString(CultureInfo.InvariantCulture) +
+                        " expectedLinearReadback=" + target + " actual=" + actual;
+                }
+            }
+            Record("exactColorCalibration", passed, details);
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            if (readable != null)
+            {
+                Destroy(readable);
+            }
+            if (temporary != null)
+            {
+                RenderTexture.ReleaseTemporary(temporary);
+            }
+            if (animation != null)
+            {
+                animation.Dispose();
+            }
+        }
+    }
+
+    private IEnumerator RunLifecycleStress(LottieTextureUploadBackend expectedBackend)
+    {
+        TextAsset json = Resources.Load<TextAsset>("device_color_calibration_alpha");
+        if (json == null)
+        {
+            Record("animationLifecycleStress", false, "Missing device_color_calibration_alpha resource.");
+            yield break;
+        }
+
+        int completed = 0;
+        for (int cycle = 0; cycle < LifecycleStressCycles; cycle++)
+        {
+            uint size = (uint)(64 + cycle % 4 * 32);
+            LottieAnimation animation = null;
+            try
+            {
+                animation = LottieAnimation.LoadFromJsonData(json.text, string.Empty, size, size);
+                if (animation.TextureUploadBackend != expectedBackend)
+                {
+                    Record("animationLifecycleStress", false,
+                        "Upload backend changed from " + expectedBackend + " to " +
+                        animation.TextureUploadBackend + " during cycle " + cycle + ".");
+                    yield break;
+                }
+                int frame = cycle * 7;
+                if ((cycle & 1) == 0)
+                {
+                    animation.DrawOneFrame(frame);
+                }
+                else
+                {
+                    animation.DrawOneFrameAsyncPrepare(frame);
+                    animation.DrawOneFrameAsyncGetResult();
+                }
+                yield return new WaitForEndOfFrame();
+
+                var capture = new PixelCapture();
+                yield return CaptureTexture(animation.OutputTexture, animation.TextureUploadBackend, capture);
+                if (!capture.Succeeded || capture.Signature.VisiblePixels == 0)
+                {
+                    Record("animationLifecycleStress", false,
+                        "Cycle " + cycle + " produced no readable pixels: " +
+                        (capture.Error ?? DescribeSignature(capture.Signature)));
+                    yield break;
+                }
+                completed++;
+            }
+            finally
+            {
+                if (animation != null)
+                {
+                    animation.Dispose();
+                }
+            }
+            yield return null;
+        }
+        Record("animationLifecycleStress", true,
+            "completedCycles=" + completed.ToString(CultureInfo.InvariantCulture) +
+            ", backend=" + expectedBackend);
     }
 
     private void Record(string name, bool passed, string details)
