@@ -9,7 +9,6 @@ function Assert-LottieSmokeResult {
         [string] $ExpectedColorSpace,
         [string] $ExpectedUploadBackend,
         [string] $ExpectedGraphicsVendor,
-        [ValidateRange(1, 2147483647)]
         [int] $MinimumSchemaVersion,
         [string[]] $RequiredCheckNames,
         [switch] $RequireGraphicsDeviceMetadata,
