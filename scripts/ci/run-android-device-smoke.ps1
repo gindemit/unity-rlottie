@@ -11,7 +11,7 @@ param(
     [string] $Screenshot,
     [string] $ResultFile,
     [int] $RunSeconds = 20,
-    [ValidateSet('Vulkan', 'OpenGLES3')]
+    [ValidateSet('Vulkan', 'OpenGLES2', 'OpenGLES3')]
     [string] $ExpectedGraphicsApi,
     [string] $ExpectedUploadBackend,
     [switch] $RequireNativeVulkanUpload,
