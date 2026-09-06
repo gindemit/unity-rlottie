@@ -8,7 +8,14 @@ param(
     [int] $RunSeconds = 20,
     [ValidateSet('Direct3D11', 'Direct3D12', 'OpenGLCore', 'Vulkan')]
     [string] $ExpectedGraphicsApi,
+    [ValidateSet('Gamma', 'Linear')]
+    [string] $ExpectedColorSpace,
     [string] $ExpectedUploadBackend,
+    [string] $ExpectedGraphicsVendor,
+    [ValidateRange(1, 2147483647)]
+    [int] $MinimumSchemaVersion,
+    [string[]] $RequiredCheckNames,
+    [switch] $RequireGraphicsDeviceMetadata,
     [switch] $RequireNativeUpload
 )
 
@@ -49,6 +56,10 @@ if (-not (Test-Path -LiteralPath $ResultFile)) {
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
 Assert-LottieSmokeResult -Result $result -Platform Windows -ExpectedGraphicsApi $ExpectedGraphicsApi `
-    -ExpectedUploadBackend $ExpectedUploadBackend -RequireNativeUpload:$RequireNativeUpload
+    -ExpectedColorSpace $ExpectedColorSpace -ExpectedUploadBackend $ExpectedUploadBackend `
+    -ExpectedGraphicsVendor $ExpectedGraphicsVendor `
+    -MinimumSchemaVersion $MinimumSchemaVersion -RequiredCheckNames $RequiredCheckNames `
+    -RequireGraphicsDeviceMetadata:$RequireGraphicsDeviceMetadata `
+    -RequireNativeUpload:$RequireNativeUpload
 
 Write-Output "Windows rendered-player smoke test passed. Result: $ResultFile; log: $LogFile"
