@@ -14,12 +14,14 @@ namespace RLottie.CI
         public static void Build()
         {
             GraphicsApiState graphicsApiState = default(GraphicsApiState);
+            ColorSpaceState colorSpaceState = default(ColorSpaceState);
             try
             {
                 string targetName = GetArgument("-ciTarget", "Windows64");
                 string outputPath = GetArgument("-ciOutputPath", GetDefaultOutput(targetName));
                 string expectedPipeline = GetArgument("-ciPipeline", "Auto");
                 string requestedGraphicsApi = GetArgument("-ciGraphicsApi", "Auto");
+                string requestedColorSpace = GetArgument("-ciColorSpace", "Auto");
                 bool connectProfiler = GetBooleanArgument("-ciAutoconnectProfiler", false);
                 bool developmentBuild = GetBooleanArgument("-ciDevelopment", false) || connectProfiler;
 
@@ -34,6 +36,7 @@ namespace RLottie.CI
                 }
 
                 graphicsApiState = ConfigureGraphicsApi(target, requestedGraphicsApi);
+                colorSpaceState = ConfigureColorSpace(requestedColorSpace);
                 EnsureOutputDirectory(outputPath, target);
 
                 BuildOptions buildOptions = BuildOptions.StrictMode;
@@ -74,8 +77,94 @@ namespace RLottie.CI
             }
             finally
             {
+                RestoreBuildSettings(graphicsApiState, colorSpaceState);
+            }
+        }
+
+        private static void RestoreBuildSettings(
+            GraphicsApiState graphicsApiState,
+            ColorSpaceState colorSpaceState)
+        {
+            Exception firstFailure = null;
+            try
+            {
                 RestoreGraphicsApi(graphicsApiState);
             }
+            catch (Exception exception)
+            {
+                firstFailure = exception;
+                Debug.LogError("Failed to restore graphics API settings: " + exception);
+            }
+
+            try
+            {
+                RestoreColorSpace(colorSpaceState);
+            }
+            catch (Exception exception)
+            {
+                if (firstFailure == null)
+                {
+                    firstFailure = exception;
+                }
+                Debug.LogError("Failed to restore color-space settings: " + exception);
+            }
+
+            if (firstFailure != null)
+            {
+                throw new InvalidOperationException(
+                    "Failed to restore one or more player settings after the CI build.",
+                    firstFailure);
+            }
+        }
+
+        private static ColorSpaceState ConfigureColorSpace(string requestedColorSpace)
+        {
+            if (string.Equals(requestedColorSpace, "Auto", StringComparison.OrdinalIgnoreCase))
+            {
+                return default(ColorSpaceState);
+            }
+
+            ColorSpace colorSpace;
+            if (string.Equals(requestedColorSpace, "Gamma", StringComparison.OrdinalIgnoreCase))
+            {
+                colorSpace = ColorSpace.Gamma;
+            }
+            else if (string.Equals(requestedColorSpace, "Linear", StringComparison.OrdinalIgnoreCase))
+            {
+                colorSpace = ColorSpace.Linear;
+            }
+            else
+            {
+                throw new ArgumentException("Unsupported -ciColorSpace value: " + requestedColorSpace);
+            }
+
+            ColorSpaceState state = new ColorSpaceState
+            {
+                Original = PlayerSettings.colorSpace,
+                Changed = PlayerSettings.colorSpace != colorSpace
+            };
+            if (state.Changed)
+            {
+                PlayerSettings.colorSpace = colorSpace;
+            }
+            Debug.Log("RLottie CI color space configured as " + colorSpace + ".");
+            return state;
+        }
+
+        private static void RestoreColorSpace(ColorSpaceState state)
+        {
+            if (!state.Changed)
+            {
+                return;
+            }
+            PlayerSettings.colorSpace = state.Original;
+            Debug.Log("RLottie CI color space restored as " + state.Original + ".");
+        }
+
+        private struct ColorSpaceState
+        {
+            public ColorSpace Original;
+            public bool Changed;
         }
 
         private static BuildTarget ParseTarget(string targetName)
@@ -228,6 +317,8 @@ namespace RLottie.CI
                     return GraphicsDeviceType.OpenGLCore;
                 case "vulkan":
                     return GraphicsDeviceType.Vulkan;
+                case "opengles2":
+                    return GraphicsDeviceType.OpenGLES2;
                 case "opengles3":
                     return GraphicsDeviceType.OpenGLES3;
                 default:
@@ -237,9 +328,10 @@ namespace RLottie.CI
 
         private static void ValidateGraphicsApiTarget(GraphicsDeviceType graphicsApi, BuildTarget target)
         {
-            if (graphicsApi == GraphicsDeviceType.OpenGLES3 && target != BuildTarget.Android)
+            if ((graphicsApi == GraphicsDeviceType.OpenGLES2 || graphicsApi == GraphicsDeviceType.OpenGLES3) &&
+                target != BuildTarget.Android)
             {
-                throw new InvalidOperationException("OpenGLES3 is only supported by the Android CI target.");
+                throw new InvalidOperationException(graphicsApi + " is only supported by the Android CI target.");
             }
 
             if ((graphicsApi == GraphicsDeviceType.Direct3D11 || graphicsApi == GraphicsDeviceType.Direct3D12) &&
@@ -268,16 +360,9 @@ namespace RLottie.CI
                 return;
             }
 
-            try
-            {
-                PlayerSettings.SetGraphicsAPIs(state.Target, state.Apis);
-                PlayerSettings.SetUseDefaultGraphicsAPIs(state.Target, state.Automatic);
-                Debug.Log("RLottie CI graphics API settings restored for " + state.Target + ".");
-            }
-            catch (Exception exception)
-            {
-                Debug.LogError("Failed to restore graphics API settings for " + state.Target + ": " + exception);
-            }
+            PlayerSettings.SetGraphicsAPIs(state.Target, state.Apis);
+            PlayerSettings.SetUseDefaultGraphicsAPIs(state.Target, state.Automatic);
+            Debug.Log("RLottie CI graphics API settings restored for " + state.Target + ".");
         }
 
         private struct GraphicsApiState

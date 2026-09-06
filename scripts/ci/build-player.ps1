@@ -8,8 +8,10 @@ param(
     [string] $Target = 'Windows64',
     [ValidateSet('Auto', 'BuiltIn', 'URP', 'HDRP')]
     [string] $Pipeline = 'Auto',
-    [ValidateSet('Auto', 'Direct3D11', 'Direct3D12', 'OpenGLCore', 'Vulkan', 'OpenGLES3')]
+    [ValidateSet('Auto', 'Direct3D11', 'Direct3D12', 'OpenGLCore', 'Vulkan', 'OpenGLES2', 'OpenGLES3')]
     [string] $GraphicsApi = 'Auto',
+    [ValidateSet('Auto', 'Gamma', 'Linear')]
+    [string] $ColorSpace = 'Auto',
     [Parameter(Mandatory = $true)]
     [string] $OutputPath,
     [Parameter(Mandatory = $true)]
@@ -24,6 +26,11 @@ if (-not (Test-Path -LiteralPath $Unity)) {
 if (-not (Test-Path -LiteralPath $ProjectPath)) {
     throw "Unity project not found: $ProjectPath"
 }
+
+$Unity = (Resolve-Path -LiteralPath $Unity).Path
+$ProjectPath = (Resolve-Path -LiteralPath $ProjectPath).Path
+$OutputPath = [IO.Path]::GetFullPath($OutputPath)
+$LogFile = [IO.Path]::GetFullPath($LogFile)
 
 $outputDirectory = Split-Path -Parent $OutputPath
 if ($Target -eq 'WebGL') {
@@ -40,6 +47,7 @@ $arguments = @(
     '-ciTarget', $Target,
     '-ciPipeline', $Pipeline,
     '-ciGraphicsApi', $GraphicsApi,
+    '-ciColorSpace', $ColorSpace,
     '-ciOutputPath', $OutputPath,
     '-logFile', $LogFile
 )

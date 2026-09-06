@@ -54,10 +54,12 @@ were re-audited from source at the `dev` tip on 2026-09-01, after
 `Add native WebGL texture uploads with fallback` (2026-08-26) and
 `Support Unity 6000.5 WebGL exception ABI` (2026-08-27) landed.
 
-The WebGL native-upload path is **described from code, not test-validated**. The
-most recent test evidence on this repository is from 2026-08-14 and therefore
-predates that implementation, so no statement about WebGL native upload below
-should be read as a browser or device validation result.
+The WebGL native-upload path was browser-tested on 2026-09-07. WebGL 2 native
+upload passes with the checked-in Unity 6000.5 archive. WebGL 1 reaches native
+upload and renders with a Unity-2019/Fastcomp monolithic test archive, but the
+checked-in legacy archives are not ABI-compatible with the tested Unity 2019
+and 2021 Emscripten linkers. See
+`benchmark-results/2026-09-07-webgl/README.md` for the exact evidence boundary.
 
 In this document, **Apply** specifically means a call to `Texture2D.Apply()`.
 The synchronous and asynchronous draw paths make the same upload choice.
@@ -372,6 +374,11 @@ Validation completed for this implementation:
   1024 x 1024 after removing the old 4 MiB denylist. The selected backend was
   `NativeVulkan`; the sampled hash changed from `a7a119b46a06c987` to
   `835277a42a36cd08`, and every rendered-player smoke check passed.
+- On 2026-09-06, an explicitly GLES2-only Unity 2022.3 Built-in player passed
+  all 16 rendered-player checks on the same Mali-G76. It selected the
+  Unity-owned `NativeOpenGL` backend, passed exact Gamma color calibration and
+  12 lifecycle-stress cycles, and emitted no rlottie fallback. See
+  `docs/benchmark-results/2026-09-06-android-gles2/README.md`.
 
 Exercise both immediate and asynchronous rendering, multiple simultaneous
 animations, resize/recreation, pause/resume, disposal with queued uploads, and
@@ -398,9 +405,12 @@ The Vulkan-native path is complete only when:
 - unsupported Unity/device combinations fall back to the Apply path instead of
   returning a blank texture.
 
-The remaining acceptance work is broader vendor, color-space, lifecycle, and
-desktop Vulkan coverage; the tested Unity 6000.5.3f1 Android configuration no
-longer has a known sampled-texture update failure.
+Windows/NVIDIA desktop Vulkan now has repeated Gamma and Linear rendered-player
+coverage, including synchronous/asynchronous create, draw, readback, and dispose
+cycles plus process teardown/relaunch. Remaining acceptance work includes AMD
+and Intel desktop GPUs, physical Linux Vulkan, pause/resume and queued-disposal
+stress, an OS-level driver reset, and the wider supported Unity-version range.
+See `docs/vulkan-validation.md`.
 
 ## WebGL native upload: implementation status
 
@@ -455,10 +465,13 @@ Two aspects are not determined by the code alone:
   BGRA-to-RGBA conversion, not from a rendered comparison in Gamma and Linear
   projects.
 
-This whole section is described from the current source. No rendered-player,
-browser, or device run has yet exercised `NativeWebGL`, its managed fallback, or
-the archive-variant selection, so WebGL 1 and WebGL 2 browser validation remains
-open acceptance work.
+Chrome 152 exercised `NativeWebGL` with real WebGL 1 and WebGL 2 contexts on
+2026-09-07. WebGL 2 passed native initialization and continuous rendering with
+the checked-in Unity 6000.5 archive. WebGL 1 passed the same basic rendered
+smoke only with a Unity-2019/Fastcomp monolithic test archive; the shipped
+legacy archive failed before animation startup. Full rendered comparisons in
+Gamma and Linear, managed-fallback coverage, and a shippable legacy archive
+matrix remain open acceptance work.
 
 ## Follow-up engineering audit
 
@@ -541,14 +554,17 @@ The pool change includes these adjacent fixes:
   asynchronous readback before making it unconditional.
 - WebGL upload through a render-thread `glTexSubImage2D` path is implemented and
   is no longer a proposal; `Apply()` on WebGL is now a guarded fallback rather
-  than the only path. WebGL 1 and WebGL 2 browser validation of that path is
-  still outstanding, so it remains code-reviewed only.
+  than the only path. WebGL 2 has passed a Chrome native-render smoke. WebGL 1
+  also renders with a matching monolithic Fastcomp archive, but the checked-in
+  legacy archives must be rebuilt or split by Unity Emscripten ABI before that
+  configuration can ship.
 - Add native mailbox stress tests covering concurrent publish/upload, newest-
   frame coalescing, queue saturation, disposal during queued work, resize, and
   graphics-device restart. Run them with native sanitizers where possible.
-- Expand rendered-player coverage to WebGL browsers, Apple Metal, multiple
-  Android Vulkan GPU vendors, Gamma and Linear color spaces, and the supported
-  Unity 2019.4, 2021.3, and Unity 6 branches.
+- Expand rendered-player coverage to Apple Metal, AMD and Intel desktop Vulkan,
+  physical Linux Vulkan, more WebGL browsers, and the supported Unity 2019.4,
+  2021.3, and Unity 6 branches. Gamma and Linear Vulkan coverage currently
+  exists on one NVIDIA device and should be repeated on those additional GPUs.
 
 The Windows player produced by the normal CI matrix now has a mandatory hosted
 rendered-player smoke job which rejects managed upload for both `AnimatedImage`
