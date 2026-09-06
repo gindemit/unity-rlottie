@@ -502,19 +502,34 @@ public sealed class LottieSmokeController : MonoBehaviour
                     yield break;
                 }
                 int frame = cycle * 7;
+                var capture = new PixelCapture();
                 if ((cycle & 1) == 0)
                 {
                     animation.DrawOneFrame(frame);
+                    yield return new WaitForEndOfFrame();
+                    yield return CaptureTexture(animation.OutputTexture, animation.TextureUploadBackend, capture);
                 }
                 else
                 {
                     animation.DrawOneFrameAsyncPrepare(frame);
-                    animation.DrawOneFrameAsyncGetResult();
+                    float asyncDeadline = Time.realtimeSinceStartup + AnimationTimeoutSeconds;
+                    do
+                    {
+                        animation.DrawOneFrameAsyncGetResult();
+                        yield return new WaitForEndOfFrame();
+                        capture = new PixelCapture();
+                        yield return CaptureTexture(
+                            animation.OutputTexture,
+                            animation.TextureUploadBackend,
+                            capture);
+                        if (capture.Succeeded && capture.Signature.VisiblePixels > 0)
+                        {
+                            break;
+                        }
+                    }
+                    while (Time.realtimeSinceStartup < asyncDeadline);
                 }
-                yield return new WaitForEndOfFrame();
 
-                var capture = new PixelCapture();
-                yield return CaptureTexture(animation.OutputTexture, animation.TextureUploadBackend, capture);
                 if (!capture.Succeeded || capture.Signature.VisiblePixels == 0)
                 {
                     Record("animationLifecycleStress", false,
