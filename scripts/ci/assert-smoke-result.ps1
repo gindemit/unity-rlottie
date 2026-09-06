@@ -6,7 +6,6 @@ function Assert-LottieSmokeResult {
         [Parameter(Mandatory = $true)]
         [string] $Platform,
         [string] $ExpectedGraphicsApi,
-        [ValidateSet('Gamma', 'Linear')]
         [string] $ExpectedColorSpace,
         [string] $ExpectedUploadBackend,
         [string] $ExpectedGraphicsVendor,
