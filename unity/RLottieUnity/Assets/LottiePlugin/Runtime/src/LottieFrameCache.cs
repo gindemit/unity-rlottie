@@ -70,6 +70,7 @@ namespace LottiePlugin
         private NativeArray<byte> _pixels;
         private int _warmClip;
         private int _warmFrame;
+        private int _warmedFrameCount;
         private bool _disposed;
         private bool _ready;
         private LottieFrameCachePreflight _preflight;
@@ -77,6 +78,7 @@ namespace LottiePlugin
 
         public bool Ready { get { ThrowIfDisposed(); return _ready; } }
         public int CachedFrameCount { get { ThrowIfDisposed(); return _preflight.TotalFrameCount; } }
+        public int WarmedFrameCount { get { ThrowIfDisposed(); return _warmedFrameCount; } }
         public long EstimatedRawPixelBytes { get { ThrowIfDisposed(); return _preflight.TotalRawPixelBytes; } }
         public LottieFrameCachePreflight Preflight { get { ThrowIfDisposed(); return _preflight; } }
 
@@ -136,6 +138,7 @@ namespace LottiePlugin
                 texture.LoadRawTextureData(_pixels);
                 texture.Apply(false, _options.MakeNoLongerReadable);
                 clip.Textures[_warmFrame] = texture;
+                _warmedFrameCount++;
                 _warmFrame++;
                 if (_warmFrame == clip.SourceFrames.Length) { _warmClip++; _warmFrame = 0; }
             }
@@ -167,6 +170,11 @@ namespace LottiePlugin
             return SampleNormalized(clip, normalized);
         }
 
+        public double DurationSeconds(string markerName)
+        {
+            return GetClip(markerName).Duration;
+        }
+
         public Texture2D SampleNormalized(string markerName, float normalized)
         {
             if (float.IsNaN(normalized)) throw new ArgumentException("Normalized position must be finite.", nameof(normalized));
@@ -193,8 +201,14 @@ namespace LottiePlugin
 
         private Clip GetReadyClip(string markerName)
         {
-            ThrowIfDisposed();
+            Clip clip = GetClip(markerName);
             if (!_ready) throw new InvalidOperationException("The frame cache is not ready.");
+            return clip;
+        }
+
+        private Clip GetClip(string markerName)
+        {
+            ThrowIfDisposed();
             if (markerName == null) throw new ArgumentNullException(nameof(markerName));
             Clip clip;
             if (!_clips.TryGetValue(markerName, out clip)) throw new KeyNotFoundException("No cached marker named '" + markerName + "'.");
