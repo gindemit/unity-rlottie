@@ -63,6 +63,10 @@ namespace LottiePlugin
             _usesCPURendering = true;
             _nativeTexturePtr = IntPtr.Zero;
             TextureUploadBackend = LottieTextureUploadBackend.WebGLManagedTextureUpload;
+            if (!_pixelData.IsCreated)
+            {
+                AllocateCpuPixelData((uint)Texture.width, (uint)Texture.height);
+            }
             if (!sWebGLFallbackLogged)
             {
                 sWebGLFallbackLogged = true;
@@ -96,22 +100,47 @@ namespace LottiePlugin
                    deviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3;
         }
 
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
-        private unsafe void UseManagedTextureUploadFallback(uint width, uint height, string reason)
+        private unsafe void AllocateCpuPixelData(uint width, uint height)
         {
-            // A Unity-owned Android GLES texture is RGBA32, while rlottie's
-            // managed output is BGRA. Preserve any frame already rendered into
-            // the raw bytes, but replace the texture so Texture2D.Apply uses the
-            // correct channel layout.
-            Texture2D previousTexture = Texture;
-            NativeArray<byte> previousPixelData = !_ownsPixelData && _pixelData.IsCreated
-                ? _pixelData
-                : default;
+            long byteCount = checked((long)width * height * 4L);
+            if (byteCount > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(width), "The requested raster surface is too large.");
+            }
+
             if (_ownsPixelData && _pixelData.IsCreated)
             {
                 _pixelData.Dispose();
             }
 
+            _pixelData = new NativeArray<byte>((int)byteCount, Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            _ownsPixelData = true;
+            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+        }
+
+        private void UploadCpuPixels(Texture2D texture)
+        {
+            texture.LoadRawTextureData(_pixelData);
+            texture.Apply(false, false);
+        }
+
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        private unsafe void UseManagedTextureUploadFallback(uint width, uint height, string reason)
+        {
+            // A Unity-owned Android GLES texture is RGBA32, while rlottie's
+            // managed output is BGRA. Replace it so Texture2D.Apply uses the
+            // correct channel layout and detach the native mailbox before the
+            // independently owned CPU buffer becomes the render target.
+            Texture2D previousTexture = Texture;
+            if (_animationWrapperIntPtr != IntPtr.Zero)
+            {
+                NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
+            }
+            if (_ownsPixelData && _pixelData.IsCreated)
+            {
+                _pixelData.Dispose();
+            }
             _pixelData = default;
             _ownsPixelData = false;
             _nativeTexturePtr = IntPtr.Zero;
@@ -120,20 +149,24 @@ namespace LottiePlugin
             _usesCPURendering = true;
             TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
 
-            Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 0, false);
+            Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 1, false);
             ConfigureRuntimeTexture(Texture);
-            _pixelData = Texture.GetRawTextureData<byte>();
-            _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
-            if (previousPixelData.IsCreated && previousPixelData.Length == _pixelData.Length)
-            {
-                NativeArray<byte>.Copy(previousPixelData, _pixelData);
-            }
+            AllocateCpuPixelData(width, height);
             if (previousTexture != null)
             {
                 UnityEngine.Object.Destroy(previousTexture);
             }
 
             Debug.LogWarning($"[LottiePlugin] Native texture upload unavailable ({reason}); using Texture2D.Apply fallback");
+        }
+
+        private void RenderCurrentFrameAfterManagedFallback()
+        {
+            int result = NativeBridge.LottieRenderImmediately(
+                _animationWrapperIntPtr, _lottieRenderDataIntPtr, CurrentFrame, true, false);
+            if (result != 0)
+                throw new InvalidOperationException("Native rlottie rasterization failed after switching to managed upload.");
+            UploadCpuPixels(Texture);
         }
 #endif
 
@@ -261,12 +294,10 @@ namespace LottiePlugin
 
         private void PlatformDisposePixelData()
         {
-#if !(UNITY_WEBGL && !UNITY_EDITOR)
             if (_ownsPixelData && _pixelData.IsCreated)
             {
                 _pixelData.Dispose();
             }
-#endif
         }
 
         private void PlatformDisposeWebGLTextures()
@@ -290,25 +321,28 @@ namespace LottiePlugin
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             bool useNativeConversion = !_useShaderConversion;
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, useNativeConversion);
+            int result = NativeBridge.LottieRenderImmediately(
+                _animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, useNativeConversion);
 #else
-            NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
+            int result = NativeBridge.LottieRenderImmediately(
+                _animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
 #endif
+            if (result != 0) throw new InvalidOperationException("Native rlottie rasterization failed.");
             CurrentFrame = frameNumber;
             if (_usesCPURendering)
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
                 if (_useShaderConversion)
                 {
-                    _sourceTexture.Apply();
+                    UploadCpuPixels(_sourceTexture);
                     Graphics.Blit(_sourceTexture, _convertedRT, s_BGRAtoRGBAMaterial);
                 }
                 else
                 {
-                    Texture.Apply();
+                    UploadCpuPixels(Texture);
                 }
 #else
-                Texture.Apply();
+                UploadCpuPixels(Texture);
 #endif
             }
             else
@@ -321,10 +355,13 @@ namespace LottiePlugin
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             bool useNativeConversion = !_useShaderConversion;
-            NativeBridge.LottieRenderCreateFutureAsync(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, useNativeConversion);
+            int result = NativeBridge.LottieRenderCreateFutureAsync(
+                _animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, useNativeConversion);
 #else
-            NativeBridge.LottieRenderCreateFutureAsync(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
+            int result = NativeBridge.LottieRenderCreateFutureAsync(
+                _animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
 #endif
+            if (result != 0) throw new InvalidOperationException("Native rlottie asynchronous rasterization could not start.");
         }
 
         private void PlatformDrawOneFrameAsyncGetResult()
@@ -339,21 +376,21 @@ namespace LottiePlugin
                 _asyncDrawWasCalled = false;
                 if (result != 0)
                 {
-                    return;
+                    throw new InvalidOperationException("Native rlottie asynchronous rasterization failed.");
                 }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
                 if (_useShaderConversion)
                 {
-                    _sourceTexture.Apply();
+                    UploadCpuPixels(_sourceTexture);
                     Graphics.Blit(_sourceTexture, _convertedRT, s_BGRAtoRGBAMaterial);
                 }
                 else
                 {
-                    Texture.Apply();
+                    UploadCpuPixels(Texture);
                 }
 #else
-                Texture.Apply();
+                UploadCpuPixels(Texture);
 #endif
             }
             else
@@ -364,7 +401,14 @@ namespace LottiePlugin
                 RequestTextureUpload();
                 _asyncDrawWasCalled = false;
 #else
-                if (NativeBridge.LottieRenderTryGetFutureResult(_animationWrapperIntPtr, _lottieRenderDataIntPtr, out int ready) == 0 && ready != 0)
+                int result = NativeBridge.LottieRenderTryGetFutureResult(
+                    _animationWrapperIntPtr, _lottieRenderDataIntPtr, out int ready);
+                if (result != 0)
+                {
+                    _asyncDrawWasCalled = false;
+                    throw new InvalidOperationException("Native rlottie asynchronous rasterization failed.");
+                }
+                if (ready != 0)
                 {
                     RequestTextureUpload();
                     _asyncDrawWasCalled = false;
@@ -391,8 +435,8 @@ namespace LottiePlugin
                 // Allocate Unity's WebGL texture object once before requesting
                 // its native name. Per-frame Apply calls are avoided on success.
                 Texture.Apply(false, false);
-                _pixelData = Texture.GetRawTextureData<byte>();
-                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                _pixelData = default;
+                _lottieRenderData.buffer = null;
                 _ownsPixelData = false;
                 _usesUnityOwnedWebGLTexture = TryRegisterUnityOwnedWebGLTexture(width, height);
                 _usesCPURendering = !_usesUnityOwnedWebGLTexture;
@@ -449,10 +493,9 @@ namespace LottiePlugin
 #if UNITY_WEBGL && !UNITY_EDITOR
                 if (_useShaderConversion)
                 {
-                    _sourceTexture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, 0, false);
+                    _sourceTexture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, 1, false);
                     ConfigureRuntimeTexture(_sourceTexture);
-                    _pixelData = _sourceTexture.GetRawTextureData<byte>();
-                    _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                    AllocateCpuPixelData(width, height);
                     _convertedRT = new RenderTexture((int)width, (int)height, 0, RenderTextureFormat.ARGB32);
                     ConfigureRuntimeTexture(_convertedRT);
                     _convertedRT.Create();
@@ -460,19 +503,16 @@ namespace LottiePlugin
                 }
                 else
                 {
-                    Texture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, 0, false);
+                    Texture = new Texture2D((int)width, (int)height, TextureFormat.RGBA32, 1, false);
                     ConfigureRuntimeTexture(Texture);
-                    _pixelData = Texture.GetRawTextureData<byte>();
-                    _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                    AllocateCpuPixelData(width, height);
                 }
 #else
                 TextureFormat format = TextureFormat.BGRA32;
-                Texture = new Texture2D((int)width, (int)height, format, 0, false);
+                Texture = new Texture2D((int)width, (int)height, format, 1, false);
                 ConfigureRuntimeTexture(Texture);
-                _pixelData = Texture.GetRawTextureData<byte>();
-                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                AllocateCpuPixelData(width, height);
 #endif
-                _ownsPixelData = false;
             }
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
             else if (_usesUnityOwnedNativeTexture || _usesUnityOwnedOpenGLTexture)
@@ -489,8 +529,9 @@ namespace LottiePlugin
                     : TextureFormat.BGRA32;
                 Texture = new Texture2D((int)width, (int)height, nativeTextureFormat, 1, false);
                 ConfigureRuntimeTexture(Texture);
-                _pixelData = Texture.GetRawTextureData<byte>();
-                _lottieRenderData.buffer = _pixelData.GetUnsafePtr();
+                Texture.Apply(false, false);
+                _pixelData = default;
+                _lottieRenderData.buffer = null;
                 _ownsPixelData = false;
 
                 if (!TryRegisterUnityOwnedTexture(width, height))
@@ -637,7 +678,7 @@ namespace LottiePlugin
                     uint width = (uint)Texture.width;
                     uint height = (uint)Texture.height;
                     UseManagedTextureUploadFallback(width, height, "OpenGL native upload failure");
-                    Texture.Apply();
+                    RenderCurrentFrameAfterManagedFallback();
                     return;
                 }
 
@@ -675,11 +716,11 @@ namespace LottiePlugin
                         }
                     }
 
-                    _usesUnityOwnedNativeTexture = false;
-                    _usesCPURendering = true;
-                    TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
+                    uint width = (uint)Texture.width;
+                    uint height = (uint)Texture.height;
+                    UseManagedTextureUploadFallback(width, height, "Vulkan native upload failure");
                     LogVulkanApplyFallback();
-                    Texture.Apply();
+                    RenderCurrentFrameAfterManagedFallback();
                     return;
                 }
 
