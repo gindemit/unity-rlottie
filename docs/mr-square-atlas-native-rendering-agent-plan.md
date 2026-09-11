@@ -9,6 +9,55 @@ Primary repositories:
 
 This document is intentionally written so an AI coding agent can use it as its main task brief.
 
+## Review decisions and scope gates
+
+The following decisions are authoritative when later "suggested" API sketches are
+ambiguous:
+
+- Deliver and validate the reusable package work in `unity-rlottie` first. Treat
+  the MrSquare migration and the botanical `enter` content change as a separate
+  integration deliverable in `MrSquareUnity`; do not mix changes from both
+  repositories in one commit or claim the package task failed merely because the
+  consuming repository or its content pipeline is unavailable.
+- Preserve the package's Unity 2019.4 minimum. Every public API and allocation
+  choice must compile in the 2019.4 clone as well as current Unity versions. Add
+  Unity `.meta` files for every new asset.
+- Do not expose `NativeArray` storage owned by an animation after disposal. CPU
+  APIs accept caller-owned writable storage, validate its exact byte capacity,
+  and complete synchronously before returning. The documented format for the
+  first implementation is tightly packed premultiplied BGRA8 with `stride =
+  width * 4`. Document and parity-test row orientation before freezing the API.
+  Any conversion to straight RGBA8 is an explicit option performed into
+  cache-owned staging storage.
+- `TextureUploadBackend` is the source of truth for backend selection, but pixel
+  correctness must be established from GPU-visible readback in rendered-player
+  tests. A changing `CurrentFrame`, log message, source CPU buffer, or screenshot
+  alone is insufficient.
+- Avoid a new native render-to-buffer ABI unless the existing synchronous render
+  ABI cannot safely target an independently owned buffer. The current ABI already
+  accepts a caller-supplied `LottieRenderData`; native mailbox registration only
+  substitutes plugin-owned slots for live native-upload instances.
+- Platform/device work is capability-gated, not silently skipped. Record the
+  exact editor, player, graphics API, device/driver, backend, command, result, and
+  artifact path. If hardware or an editor module is unavailable, report that gate
+  as unexecuted rather than presenting it as passing.
+- Follow repository policy: shared work is committed on `dev`; a release push is
+  performed only through `scripts/sync-unity-branches.ps1`, and all synchronized
+  `unity/**` branches must succeed. Preserve unrelated working-tree changes.
+
+Before implementation, write a short design note or code comments resolving the
+two issues below from actual rlottie behavior:
+
+1. rlottie's public render call receives a zero-based animation frame index and
+   internally adds the composition start frame. Lottie marker `tm`, `ip`, and
+   `op` are composition-timeline values. Marker APIs must therefore distinguish
+   timeline values from render indices and subtract the parsed/rounded `ip`
+   consistently; a file with non-zero `ip` is a required fixture.
+2. Lottie `op` is an exclusive boundary, while the vendored rlottie version
+   rounds composition bounds and reports its own `TotalFramesCount`. Clamp every
+   derived render index to `[0, TotalFramesCount - 1]` and test the final-frame
+   behavior instead of assuming JSON `op - ip` and rlottie's count are identical.
+
 ---
 
 ## Objective
@@ -178,14 +227,16 @@ Suggested public concepts (names may be improved during implementation):
 public readonly struct LottieMarker
 {
     public string Name;
-    public int StartFrame;
-    public int DurationFrames;
-    public int EndFrameInclusive;
+    public double TimelineStart;
+    public double TimelineDuration;
+    public int FirstRenderFrame;
+    public int LastRenderFrameInclusive;
 }
 
 public sealed class LottieMarkerSet
 {
     public double FrameRate { get; }
+    public double TimelineInPoint { get; }
     public IReadOnlyList<LottieMarker> Markers { get; }
 
     public bool TryGet(string name, out LottieMarker marker);
@@ -208,15 +259,33 @@ or keep marker mapping as a separate utility if that better preserves `LottieAni
 ### Marker rules
 
 - parse standard `{cm, tm, dr}` marker data;
-- use the Lottie document frame rate;
-- inclusive final frame must be `tm + dr - 1`;
+- parse `fr`, `ip`, and `op` from the same document and validate they are finite;
+- use the Lottie document frame rate and require `fr > 0`; do not invent a silent
+  fallback frame rate;
+- treat the marker timeline interval as half-open `[tm, tm + dr)`; the first
+  renderable integral timeline frame is `ceil(tm)`, and the final one is
+  `ceil(tm + dr) - 1`, before conversion to a zero-based render index and clamp;
 - normalized 1.0 must resolve to the marker's final displayed frame, not the next marker's first frame;
-- reject or clearly define duplicate marker names;
-- preserve float marker values if valid Lottie files can contain them, but expose deterministic integer sampling behavior;
+- reject empty names, duplicate names (ordinal comparison), non-finite values,
+  negative durations, and positive intervals with no renderable frame. Treat a
+  zero-duration point marker as one frame at `ceil(tm)` and test it explicitly;
+- preserve fractional `tm`/`dr` in metadata while exposing the deterministic
+  integral bounds above;
 - missing markers should produce a clear exception in strict APIs and a non-throwing result through `TryGet`;
 - marker parsing must not require any garden-specific schema.
 
-A lightweight Unity `JsonUtility` DTO is acceptable if it robustly handles the marker/header subset and adds no external dependency. Add tests with unrelated normal Lottie fields present in the same JSON.
+`Frame(name, normalized)` clamps normalized input to `[0, 1]` and maps it over
+the inclusive integral render-frame range using one documented rounding rule.
+Use `floor(first + normalized * frameCount)`, clamped to the last frame, so 0
+and 1 are exact and every intermediate result is deterministic. Strict APIs
+must throw `ObjectDisposedException` after owner disposal and meaningful
+argument/data exceptions otherwise.
+
+A lightweight Unity `JsonUtility` DTO is acceptable if it robustly handles the
+marker/header subset and adds no external dependency. Confirm how it reports
+missing versus explicit zero numeric fields before relying on DTO defaults. Add
+tests with unrelated normal Lottie fields, escaped/non-ASCII marker names,
+scientific-notation numbers, and a non-zero `ip` in the same JSON.
 
 ---
 
@@ -241,6 +310,14 @@ Do not retain a `GetRawTextureData()` pointer as the authoritative native render
 
 A `NativeArray<byte>(Allocator.Persistent)` is preferable to the MrSquare pinned managed array if it fits all supported Unity/IL2CPP targets and disposal rules. Validate it rather than assuming.
 
+For the managed texture path, keep the persistent buffer separate from the
+Unity texture and upload with `Texture2D.LoadRawTextureData(...)` followed by
+`Apply(false, false)`. Never reacquire raw texture data and repoint native render
+state after an upload. The native-upload path may leave the external render
+pointer null because `AcquireRenderSlot(...)` supplies a mailbox slot; add a
+native regression that proves this invariant rather than allocating an unused
+Unity CPU buffer.
+
 ### Required properties
 
 - one stable allocation per animation/output surface, not per frame;
@@ -252,6 +329,10 @@ A `NativeArray<byte>(Allocator.Persistent)` is preferable to the MrSquare pinned
 - no `Color32[]` per frame;
 - correct BGRA/RGBA behavior;
 - preserved premultiplied-alpha semantics.
+- checked multiplication/conversion for `width * height * 4` and maximum Unity
+  texture dimensions before allocating;
+- all native load/allocation return codes and null pointers validated, with
+  partially constructed wrappers/render data/buffers/textures cleaned up.
 
 ### Backward compatibility
 
@@ -302,6 +383,15 @@ or a package-internal CPU mode used by the frame-cache builder.
 - deterministic output equal to the ordinary renderer for the same size/frame/options;
 - safe with multiple concurrent animation objects.
 
+Prefer a dedicated `LottieCpuRasterizer` over adding a CPU mode to the public
+live-animation object. It should own one native animation wrapper and one
+persistent staging buffer, have no `Texture2D` and no upload registration, and
+render synchronously through the existing ABI. Its public render method copies
+the completed staging bytes into caller-owned writable storage before returning;
+it never retains the caller's pointer. Do not run two renders concurrently on
+one rasterizer; either reject or reliably serialize re-entry and document that
+separate instances are required for parallelism.
+
 If implementation can reuse the existing managed render route cleanly after fixing buffer ownership, avoid adding unnecessary native C ABI. If it cannot, add a narrowly scoped render-to-buffer native entry point rather than exposing internal structs unsafely.
 
 ---
@@ -338,7 +428,7 @@ public sealed class LottieFrameCache : IDisposable
 {
     public bool Ready { get; }
     public int CachedFrameCount { get; }
-    public long EstimatedPixelBytes { get; }
+    public long EstimatedRawPixelBytes { get; }
 
     public bool WarmStep(int maxFrames = 1);
     public Texture Sample(string marker, double seconds);
@@ -362,6 +452,32 @@ Names and exact signatures are flexible; the behavioral contract is not.
 - disposal destroys generated textures;
 - warmup can be incremental to avoid a long startup spike;
 - no requirement for one renderer per visual instance.
+- `WarmStep` is main-thread-only because it creates/destroys Unity textures;
+  validate `maxFrames > 0`, make completion idempotent, and define behavior for
+  cancellation/disposal partway through warmup;
+- cache construction validates all requested clips before allocating textures
+  and rejects duplicate clip requests unless a documented merge policy exists;
+- the cache owns generated textures, while consumers borrow references only;
+  sampling or warming after disposal throws `ObjectDisposedException`;
+- `EstimatedRawPixelBytes` is checked `frameCount * width * height * 4` and is
+  explicitly not a claim about driver/Unity object overhead.
+
+Use one deterministic sampling contract:
+
+- marker duration is `TimelineDuration / FrameRate`;
+- for loops, `N = max(1, ceil(durationSeconds * sampleRate))` and samples are at
+  normalized positions `k / N` for `k = 0..N-1`, so the seam endpoint is absent;
+- for one-shots including the endpoint, `I = max(1, ceil(durationSeconds *
+  sampleRate))` and samples are at `k / I` for `k = 0..I`;
+- for one-shots excluding the endpoint, use the loop formula;
+- resolve normalized positions to source render indices before allocating and
+  collapse adjacent duplicate indices (notably single-frame/oversampled clips);
+  preflight and `CachedFrameCount` report the post-deduplication count;
+- `Sample(seconds)` wraps loop time with positive modulo and clamps one-shot
+  time; `SampleNormalized` follows the same endpoint policy.
+
+Expose a preflight descriptor containing the computed per-clip and total frame
+counts/bytes so callers can enforce a budget before warmup starts.
 
 ### Straight vs premultiplied alpha
 
@@ -546,6 +662,23 @@ Do not build device-tier policy into `unity-rlottie`; that belongs to the consum
 
 Do not consider the task complete with only Editor unit tests.
 
+Split tests by what they can actually prove:
+
+- pure marker/sampling/preflight tests run in EditMode and require no native
+  library where practical;
+- CPU raster/lifetime tests run in PlayMode and in a built player against the
+  freshly rebuilt native binary;
+- native-upload correctness tests run only in rendered players and use
+  `AsyncGPUReadback` or an equivalent bounded readback after the upload event;
+- performance scenarios are kept out of pass/fail functional tests and emit
+  machine-readable raw measurements plus environment metadata.
+
+Use compact generated JSON fixtures checked into the package test resources.
+Fixtures must have known solid/transparent colors, non-zero `ip`, fractional
+markers, duplicate/malformed markers, and exact clip boundaries. Compare hashes
+against platform-appropriate golden values/tolerances; do not use a complex
+sample animation as the sole correctness oracle.
+
 ## Marker tests
 
 Cover:
@@ -588,6 +721,9 @@ No test should rely only on `CurrentFrame` changing. Validate pixel hashes.
 - correct BGRA/RGBA channels;
 - correct alpha;
 - fallback after native registration failure.
+- test-only fallback injection rather than requiring a genuinely broken graphics
+  device; keep the injection internal or conditional so it cannot become a
+  production API.
 
 ## Native upload tests
 
@@ -626,6 +762,9 @@ Exercise:
 - straight-alpha conversion if exposed;
 - no frame cache allocation growth after warmup;
 - two consumers reuse the same cached texture references when sharing one cache.
+- cancellation/disposal during partial warmup and all public calls after dispose;
+- checked overflow/invalid dimensions/budget preflight failure;
+- non-zero-`ip` marker-to-render-index parity with direct rendering.
 
 ## Native C++ tests
 
@@ -641,12 +780,14 @@ At minimum validate the paths available in the existing plugin infrastructure.
 
 Priority:
 
-1. Windows development/player path used by local visual reviews.
-2. Android OpenGL ES on a physical device.
-3. Android Vulkan on a physical device.
-4. WebGL current `dev` path, because current `dev` has changes beyond the MrSquare pinned tag.
-5. macOS Metal if the development environment is available.
-6. iOS Metal before declaring the feature production-ready for iOS.
+1. Windows D3D11 and D3D12 rendered players used by local visual reviews.
+2. Android OpenGL ES 3 on a physical device.
+3. Android Vulkan on the same physical device where supported.
+4. Android OpenGL ES 2 on a supported device/editor only as a compatibility
+   gate; report unsupported capability explicitly rather than substituting ES3.
+5. WebGL current `dev` path, because current `dev` has changes beyond the MrSquare pinned tag.
+6. macOS Metal if the development environment is available.
+7. iOS Metal before declaring the feature production-ready for iOS.
 
 For every supported native backend record:
 
@@ -659,6 +800,15 @@ For every supported native backend record:
 - native upload/raster profiler markers where available.
 
 Do not treat a screenshot alone as performance evidence.
+
+Use the repository's existing harnesses instead of inventing one-off manual
+players: `scripts/ci/build-player.ps1`, `scripts/ci/run-player-tests.ps1`,
+`scripts/ci/run-windows-player-smoke.ps1`,
+`scripts/ci/run-android-device-smoke.ps1`, and
+`scripts/benchmarks/run-android-performance-matrix.ps1`. Extend
+`LottieSmokeController` and its JSON assertions for the new backend/pixel/cache
+checks. The current CI matrix builds Android Vulkan only, so add separate GLES3
+(and capability-gated GLES2) player builds before claiming API coverage.
 
 ---
 
@@ -704,12 +854,15 @@ Separate Lottie cost from consumer UI/layout cost in reporting.
 
 ## Phase 0 — baseline and evidence
 
-1. Checkout current `unity-rlottie/dev`.
+1. Confirm the primary clone is on `dev`, fetch without discarding local work,
+   record `git status`, and stop if requested files overlap unrelated edits.
 2. Record the current commit SHA.
 3. Run existing native/unit/runtime tests available in the environment.
 4. Run an existing benchmark/smoke case for at least one native path and one managed path.
 5. Record baseline backend selection and allocation/performance evidence.
 6. Inspect current `dev` changes relative to `0.5.0-dev.238`; do not accidentally revert newer WebGL/native work.
+7. Inventory installed Unity editors/modules and `adb devices -l`; turn that
+   inventory into an explicit validation matrix before implementation.
 
 ## Phase 1 — marker API
 
@@ -724,6 +877,8 @@ Separate Lottie cost from consumer UI/layout cost in reporting.
 2. Preserve native upload paths.
 3. Add lifetime/pixel/allocation regressions.
 4. Verify managed fallback on rendered players where possible.
+5. Rebuild and stage the native binaries used by every test; never validate new
+   C++ against a stale DLL/SO already present under `Plugins`.
 
 ## Phase 3 — CPU bake API and generic frame cache
 
@@ -738,8 +893,20 @@ Separate Lottie cost from consumer UI/layout cost in reporting.
 1. Verify default `LottieAnimation` still selects native upload on supported APIs.
 2. Run benchmark comparison against Phase 0.
 3. Fix any upload/presentation regression before touching MrSquare integration.
+4. Run Windows D3D11/D3D12 functional smoke and Android GLES3/Vulkan functional
+   smoke on the connected device, then execute the same benchmark cases and
+   compare medians/p95 against the Phase 0 baseline.
+5. Create a task-scoped candidate commit, propagate it to adjacent Unity clones
+   through the repository sync workflow, then run EditMode/PlayMode tests on at least the minimum
+   supported 2019.4 clone, 2021.3 LTS, the default 2022.3 LTS, and the newest
+   installed Unity 6 Built-in/URP clones. Do not directly edit shared source in
+   those clones.
 
 ## Phase 5 — MrSquare integration
+
+This phase requires a separately clean `MrSquareUnity` checkout and is not part
+of a package-only commit. Record its baseline commit and test commands before
+editing it.
 
 1. Point MrSquare to the validated plugin commit/tag.
 2. Replace game-local marker parsing with package API.
@@ -762,6 +929,20 @@ Update:
 - a marker/frame-cache sample;
 - MrSquare garden animation docs;
 - performance evidence with exact device/API/backend information.
+
+## Phase 7 - review, release, and evidence audit
+
+1. Have a reviewer inspect ownership, failure cleanup, public compatibility,
+   frame math, thread affinity, and tests. Address findings and rerun affected
+   tests.
+2. Ensure every claimed player used binaries built from the candidate commit and
+   every result names its commit SHA.
+3. Commit only task files on `dev`. If review produced a follow-up commit, push
+   and synchronize again through `scripts/sync-unity-branches.ps1`; resolve every
+   branch failure.
+4. Verify the resulting `dev` CI workflow and retain links/paths to functional
+   and performance artifacts. A queued or unavailable external job is reported
+   as pending/unexecuted, not passed.
 
 ---
 
@@ -814,6 +995,11 @@ Those are future layers. First make the reusable animation ownership, marker, na
 ---
 
 # Definition of done
+
+For a package-only delivery, items 3, 4, 5, 8, 9, 11, and 12 plus all available
+platform gates are the completion criteria; items 1, 2, 6, 7, and 10 become the
+subsequent MrSquare integration acceptance criteria. For the full cross-repo
+delivery, all items apply. No unavailable hardware/platform may be marked passed.
 
 This task is complete only when all of the following are true:
 

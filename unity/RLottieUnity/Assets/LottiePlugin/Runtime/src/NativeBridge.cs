@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -252,12 +253,24 @@ namespace LottiePlugin
 
         internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)
         {
-            LottieLoadFromData(filePath, resourcesPath, out animationWrapper);
+            int result = LottieLoadFromData(filePath, resourcesPath, out animationWrapper);
+            if (result != 0 || animationWrapper == IntPtr.Zero)
+            {
+                if (animationWrapper != IntPtr.Zero)
+                    LottieDisposeWrapper(ref animationWrapper);
+                throw new InvalidDataException("The native rlottie library could not load the JSON data.");
+            }
             return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
         }
         internal static LottieAnimationWrapper LoadFromFile(string filePath, out IntPtr animationWrapper)
         {
-            LottieLoadFromFile(filePath, out animationWrapper);
+            int result = LottieLoadFromFile(filePath, out animationWrapper);
+            if (result != 0 || animationWrapper == IntPtr.Zero)
+            {
+                if (animationWrapper != IntPtr.Zero)
+                    LottieDisposeWrapper(ref animationWrapper);
+                throw new InvalidDataException("The native rlottie library could not load the JSON file.");
+            }
             return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
         }
         internal static void Dispose(ref IntPtr animationWrapperPtr)
