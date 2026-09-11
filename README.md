@@ -124,6 +124,8 @@ https://github.com/gindemit/unity-rlottie/assets/5675979/3301d00e-fc9e-49c0-bc7f
 ## Documentation
 
 * [Texture upload paths and Vulkan native-upload analysis](docs/texture-upload-platform-matrix.md)
+* [Markers, CPU rasterization, and shared frame caches](docs/markers-and-shared-frame-cache.md)
+* [Marker/cache implementation validation (2026-09-11)](docs/marker-frame-cache-validation-2026-09-11.md)
 
 ## Support
 
