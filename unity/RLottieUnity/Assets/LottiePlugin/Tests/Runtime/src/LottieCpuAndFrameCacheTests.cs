@@ -45,8 +45,16 @@ namespace LottiePlugin.Tests.Runtime
             using (var cache = new LottieFrameCache(json, string.Empty, options))
             {
                 Assert.AreEqual(7, cache.CachedFrameCount);
+                Assert.AreEqual(0, cache.WarmedFrameCount);
+                Assert.AreEqual(0.5, cache.DurationSeconds("clip"), 0.0001);
+                Assert.Throws<System.Collections.Generic.KeyNotFoundException>(
+                    () => cache.DurationSeconds("missing"));
                 Assert.AreEqual(7L * 32 * 32 * 4, cache.EstimatedRawPixelBytes);
+                Assert.IsFalse(cache.WarmStep(2));
+                Assert.AreEqual(2, cache.WarmedFrameCount);
+                Assert.AreEqual(7, cache.CachedFrameCount);
                 while (!cache.WarmStep(2)) { }
+                Assert.AreEqual(cache.CachedFrameCount, cache.WarmedFrameCount);
                 Texture2D firstConsumer = cache.SampleNormalized("clip", 0);
                 Texture2D secondConsumer = cache.SampleNormalized("clip", 0);
                 Assert.AreSame(firstConsumer, secondConsumer);
@@ -96,6 +104,8 @@ namespace LottiePlugin.Tests.Runtime
             var cache = new LottieFrameCache(json, string.Empty, options);
             cache.Dispose();
             Assert.Throws<ObjectDisposedException>(() => cache.WarmStep());
+            Assert.Throws<ObjectDisposedException>(() => { int ignored = cache.WarmedFrameCount; });
+            Assert.Throws<ObjectDisposedException>(() => cache.DurationSeconds("loop"));
         }
 
         [Test]
