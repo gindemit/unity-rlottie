@@ -59,6 +59,7 @@ namespace LottiePlugin
         public double FrameRate => _animationWrapper.frameRate;
         public long TotalFramesCount => _animationWrapper.totalFrames;
         public double DurationSeconds => _animationWrapper.duration;
+        public LottieMarkerSet Markers { get; private set; }
         public bool IsPlaying { get; private set; }
         public LottieTextureUploadBackend TextureUploadBackend { get; private set; }
         public int TargetFps
@@ -155,23 +156,39 @@ namespace LottiePlugin
             ThrowIf.String.IsNullOrEmpty(jsonData, nameof(jsonData));
             ThrowIf.Value.IsZero(width, nameof(width));
             ThrowIf.Value.IsZero(height, nameof(height));
-            _animationWrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animationWrapperIntPtr);
-            _clipFrameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
-            InitializeOptions(options);
-            uint scaledWidth = ApplyResolutionDivider(width, _resolutionDivider);
-            uint scaledHeight = ApplyResolutionDivider(height, _resolutionDivider);
-            CreateRenderDataTexture2DMarshalToNative(scaledWidth, scaledHeight);
-            IsPlaying = true;
-            DrawOneFrameCached = DrawOneFrame;
-            DrawOneFrameAsyncPrepareCached = DrawOneFrameAsyncPrepare;
-            RegisterAliveInstance();
+            try
+            {
+                _animationWrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animationWrapperIntPtr);
+                Markers = LottieMarkerSet.Parse(jsonData, _animationWrapper.totalFrames, () => _disposed);
+                CompleteConstruction(width, height, options);
+            }
+            catch
+            {
+                Dispose(false);
+                throw;
+            }
         }
         private LottieAnimation(string jsonFilePath, uint width, uint height, LottieAnimationOptions options)
         {
             ThrowIf.String.IsNullOrEmpty(jsonFilePath, nameof(jsonFilePath));
             ThrowIf.Value.IsZero(width, nameof(width));
             ThrowIf.Value.IsZero(height, nameof(height));
-            _animationWrapper = NativeBridge.LoadFromFile(jsonFilePath, out _animationWrapperIntPtr);
+            string jsonData = File.ReadAllText(jsonFilePath);
+            try
+            {
+                _animationWrapper = NativeBridge.LoadFromFile(jsonFilePath, out _animationWrapperIntPtr);
+                Markers = LottieMarkerSet.Parse(jsonData, _animationWrapper.totalFrames, () => _disposed);
+                CompleteConstruction(width, height, options);
+            }
+            catch
+            {
+                Dispose(false);
+                throw;
+            }
+        }
+
+        private void CompleteConstruction(uint width, uint height, LottieAnimationOptions options)
+        {
             _clipFrameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
             InitializeOptions(options);
             uint scaledWidth = ApplyResolutionDivider(width, _resolutionDivider);
@@ -213,8 +230,7 @@ namespace LottiePlugin
             }
 
             uint d = (uint)divider;
-            uint scaled = (value + d - 1u) / d;
-            return scaled == 0u ? 1u : scaled;
+            return ((value - 1u) / d) + 1u;
         }
         ~LottieAnimation()
         {
@@ -308,6 +324,11 @@ namespace LottiePlugin
             }
             PlatformDrawOneFrame(frameNumber);
         }
+
+        public void DrawMarkerFrame(string markerName, float normalized)
+        {
+            DrawOneFrame(Markers.Frame(markerName, normalized));
+        }
         public void DrawOneFrameAsyncPrepare(int frameNumber)
         {
             if (_asyncDrawWasCalled)
@@ -329,12 +350,18 @@ namespace LottiePlugin
             if (_lottieRenderDataIntPtr != IntPtr.Zero)
                 return;
 
-            NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr);
+            long byteCount = checked((long)width * height * sizeof(uint));
+            if (width > int.MaxValue || height > int.MaxValue || byteCount > int.MaxValue ||
+                width > SystemInfo.maxTextureSize || height > SystemInfo.maxTextureSize)
+                throw new ArgumentOutOfRangeException(nameof(width), "The requested render surface exceeds Unity's supported limits.");
+
+            if (NativeBridge.LottieAllocateRenderData(ref _lottieRenderDataIntPtr) != 0 || _lottieRenderDataIntPtr == IntPtr.Zero)
+                throw new InvalidOperationException("The native rlottie render surface could not be allocated.");
             _lottieRenderData = new LottieRenderData
             {
                 width = width,
                 height = height,
-                bytesPerLine = width * sizeof(uint)
+                bytesPerLine = checked(width * sizeof(uint))
             };
 
             PlatformCreateRenderDataTexture(width, height);
