@@ -23,10 +23,12 @@ publisher can overwrite bytes still owned by an upload.
   BGRA, so the render-thread upload converts into one persistent RGBA scratch
   buffer before `glTexSubImage2D`. This avoids both the former dummy external
   texture handle and Mali's rejected BGRA upload into a Unity RGBA texture.
-- Managed `Texture2D.Apply` fallback and WebGL continue rendering into their
-  external Unity-owned buffers and do not acquire native mailbox slots. Native
-  WebGL upload snapshots each completed frame into one per-instance upload
-  buffer that its render-thread `glTexSubImage2D` callback consumes.
+- Managed `Texture2D.Apply` fallback renders into a persistent, plugin-wrapper-
+  owned `NativeArray<byte>` and uploads it with `LoadRawTextureData` followed by
+  `Apply(false, false)`; it no longer retains a pointer into Unity texture raw
+  storage. It does not acquire native mailbox slots. Native WebGL upload
+  snapshots each completed frame into one per-instance upload buffer that its
+  render-thread `glTexSubImage2D` callback consumes.
 
 When both CPU slots are busy, a frame is skipped instead of allocating or
 blocking. When multiple completed frames are ready, the newest is uploaded and
@@ -111,8 +113,9 @@ The relevant managed decisions are:
 3. Linux OpenGL and Vulkan use Unity-owned textures with native render-thread
    uploads when their capability checks succeed. Android OpenGL ES also uses a
    Unity-owned RGBA texture and a persistent native conversion scratch buffer.
-4. Managed-upload branches call Apply after a synchronous result or a completed
-   asynchronous result.
+4. Managed-upload branches rasterize into independently owned persistent CPU
+   storage, pass those bytes to `LoadRawTextureData`, and call Apply after a
+   synchronous result or a completed asynchronous result.
 5. Other branches call `RequestTextureUpload()`, which queues a native upload
    consumed by `GL.IssuePluginEvent` on Unity's render thread.
 
@@ -260,9 +263,11 @@ Vulkan. Relevant primary references:
   produces CPU pixels, but Vulkan should use a native GPU upload.
 - Add a Vulkan initialization path that creates a Unity-owned BGRA `Texture2D`,
   obtains its native handle once, and registers it with the plugin.
-- Retain the Unity raw-data view for runtime managed-fallback continuity, but
-  redirect native Vulkan rasterization into the two-slot cacheable CPU mailbox
-  and route completed frames through `RequestTextureUpload()`.
+- Leave the external render pointer null while native upload is active. Native
+  Vulkan rasterization uses the two-slot cacheable CPU mailbox and routes
+  completed frames through `RequestTextureUpload()`. If native initialization
+  or upload fails, managed code creates independent persistent CPU staging,
+  rerenders the current frame, and uploads it through `Texture2D.Apply()`.
 - Track whether the output texture is Unity-owned or plugin-owned. Do not call
   `UpdateExternalTexture()` for a Unity-owned Vulkan texture.
 - Keep the Vulkan and Linux OpenGL capability checks independent so either
@@ -507,16 +512,15 @@ metadata are excluded.
 |---|---:|---:|---:|
 | D3D11 / plugin-owned OpenGL / Metal | `2F` | `3F` | `2F` |
 | D3D12 | `2F + 3P` | `3P` | `2F + 3P` |
-| Unity-owned Vulkan | `2F + 3V` | `F + 3V` | `3F + 3V` |
-| Linux Unity-owned OpenGL | `2F` plus optional conversion scratch | `4F` plus optional conversion scratch | `3F` plus optional conversion scratch |
-| Android OpenGL ES | `2F` | `3F` | `4F` (`F` Unity raw view + `2F` mailbox + `F` RGBA scratch) |
-| Managed Apply / WebGL managed CPU frame | `F` | `F` | `F` |
+| Unity-owned Vulkan | `2F + 3V` | `F + 3V` | `2F + 3V` |
+| Linux Unity-owned OpenGL | `2F` plus optional conversion scratch | `4F` plus optional conversion scratch | `2F` plus optional conversion scratch |
+| Android OpenGL ES | `2F` | `3F` | `3F` (`2F` mailbox + `F` RGBA scratch) |
+| Managed Apply / WebGL managed CPU frame | `F` | `F` | `F` stable wrapper-owned staging, plus Unity's implementation-defined readable texture storage |
 | Unity-owned WebGL (native upload) | not implemented then | not implemented then | `2F` (`F` Unity raw view + `F` upload snapshot) |
 
-The Unity-owned Vulkan formulas include the readable Unity raw-data view kept
-for live fallback continuity. The rejected direct-mapped column therefore has
-`F + 3V`, not merely `3V`. If a platform can later recreate the texture when
-falling back, that retained `F` could be removed independently of this design.
+The current Unity-owned Vulkan native path no longer retains a readable Unity
+raw-data view merely for fallback continuity. A fallback recreates a compatible
+texture and allocates stable CPU staging only if it is actually needed.
 
 ### Related correctness work
 
@@ -530,9 +534,9 @@ The pool change includes these adjacent fixes:
   instance lifetime ownership;
 - D3D12 mapped-region reuse is gated by Unity's frame fence, and Vulkan mapped
   buffer reuse is gated by `safeFrameNumber`;
-- plugin-owned native texture paths no longer allocate a managed frame buffer.
-  Unity-owned OpenGL/Vulkan paths retain their raw-data view only for live
-  fallback continuity, but native rendering redirects away from it.
+- native texture paths do not allocate an external managed render buffer.
+  Unity-owned OpenGL/Vulkan paths leave the external render pointer null; a
+  guarded fallback allocates independent persistent staging on demand.
 
 ### Validation of the final architecture
 
