@@ -112,8 +112,12 @@ using (var cache = new LottieFrameCache(json, resourcesPath, options))
 Construction validates dimensions, clips, sampling rates, marker names,
 checked arithmetic, and the byte budget before allocating cached textures.
 Inspect `Preflight`, `CachedFrameCount`, and `EstimatedRawPixelBytes` to report
-the plan. The estimate is exactly `frame count * width * height * 4`; it does
-not include `Texture2D` objects, allocator metadata, driver copies, or other GPU
+the plan. `CachedFrameCount` is the final planned frame count, while
+`WarmedFrameCount` reports how many immutable snapshots have actually completed
+during incremental warmup. `DurationSeconds(markerName)` exposes the retained
+clip duration before and after warmup without keeping the source rasterizer
+alive. The estimate is exactly `frame count * width * height * 4`; it does not
+include `Texture2D` objects, allocator metadata, driver copies, or other GPU
 overhead. `MaximumRawPixelBytes` limits this raw-pixel estimate, not total
 process residency.
 
