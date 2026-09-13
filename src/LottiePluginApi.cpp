@@ -25,6 +25,7 @@
 #endif
 
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -35,6 +36,34 @@ namespace
     bool IsValidAnimation(const lottie_animation_wrapper* animation) noexcept
     {
         return animation != nullptr && animation->animation != nullptr;
+    }
+
+    bool IsValidColor(float red, float green, float blue) noexcept
+    {
+        return std::isfinite(red) && std::isfinite(green) && std::isfinite(blue);
+    }
+
+    bool IsValidColorOverride(const lottie_color_override& colorOverride) noexcept
+    {
+        return colorOverride.key_path != nullptr && colorOverride.key_path[0] != '\0' &&
+            (colorOverride.property == LOTTIE_COLOR_PROPERTY_FILL ||
+             colorOverride.property == LOTTIE_COLOR_PROPERTY_STROKE) &&
+            IsValidColor(colorOverride.red, colorOverride.green, colorOverride.blue);
+    }
+
+    void ApplyColorOverride(
+        rlottie::Animation& animation,
+        const lottie_color_override& colorOverride)
+    {
+        const rlottie::Color color(colorOverride.red, colorOverride.green, colorOverride.blue);
+        if (colorOverride.property == LOTTIE_COLOR_PROPERTY_FILL)
+        {
+            animation.setValue<rlottie::Property::FillColor>(colorOverride.key_path, color);
+        }
+        else
+        {
+            animation.setValue<rlottie::Property::StrokeColor>(colorOverride.key_path, color);
+        }
     }
 
     bool IsValidRenderRequest(
@@ -151,6 +180,56 @@ namespace
 
 extern "C"
 {
+    EXPORT_API int32_t lottie_apply_color_overrides(
+        lottie_animation_wrapper* animation_wrapper,
+        const lottie_color_override* overrides,
+        uint32_t override_count)
+    {
+        if (!IsValidAnimation(animation_wrapper) ||
+            (override_count > 0 && overrides == nullptr))
+        {
+            return -1;
+        }
+        for (uint32_t index = 0; index < override_count; ++index)
+        {
+            if (!IsValidColorOverride(overrides[index]))
+            {
+                return -1;
+            }
+        }
+        return InvokeIntAbi([&]() -> int32_t {
+            for (uint32_t index = 0; index < override_count; ++index)
+            {
+                ApplyColorOverride(*animation_wrapper->animation, overrides[index]);
+            }
+            return 0;
+        });
+    }
+
+    EXPORT_API int32_t lottie_set_fill_color(
+        lottie_animation_wrapper* animation_wrapper,
+        const char* key_path,
+        float red,
+        float green,
+        float blue)
+    {
+        const lottie_color_override colorOverride{
+            key_path, LOTTIE_COLOR_PROPERTY_FILL, red, green, blue};
+        return lottie_apply_color_overrides(animation_wrapper, &colorOverride, 1);
+    }
+
+    EXPORT_API int32_t lottie_set_stroke_color(
+        lottie_animation_wrapper* animation_wrapper,
+        const char* key_path,
+        float red,
+        float green,
+        float blue)
+    {
+        const lottie_color_override colorOverride{
+            key_path, LOTTIE_COLOR_PROPERTY_STROKE, red, green, blue};
+        return lottie_apply_color_overrides(animation_wrapper, &colorOverride, 1);
+    }
+
     EXPORT_API int32_t lottie_load_from_data(
         const char* json_data,
         const char* resource_path,
