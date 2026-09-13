@@ -31,6 +31,102 @@ namespace LottiePlugin.Tests.Runtime
         }
 
         [Test]
+        public void SemanticFillAndStrokeOverridesMatchAcrossPublicAndBatchApis()
+        {
+            TextAsset source = Resources.Load<TextAsset>("semantic_palette");
+            var overrides = new[]
+            {
+                LottieColorOverride.Fill("**.palette.base", Color.green),
+                LottieColorOverride.Stroke("**.palette.ink", Color.blue)
+            };
+            using (var baseline = LottieCpuRasterizer.LoadFromJsonData(
+                source.text, string.Empty, 16, 16))
+            using (var sequential = LottieCpuRasterizer.LoadFromJsonData(
+                source.text, string.Empty, 16, 16))
+            using (var batched = LottieCpuRasterizer.LoadFromJsonData(
+                source.text, string.Empty, 16, 16, overrides))
+            using (var baselinePixels = new NativeArray<byte>(16 * 16 * 4, Allocator.Temp))
+            using (var sequentialPixels = new NativeArray<byte>(16 * 16 * 4, Allocator.Temp))
+            using (var batchPixels = new NativeArray<byte>(16 * 16 * 4, Allocator.Temp))
+            {
+                baseline.RenderFrame(0, baselinePixels);
+                sequential.SetFillColor("**.palette.base", Color.green);
+                sequential.SetStrokeColor("**.palette.ink", Color.blue);
+                sequential.RenderFrame(0, sequentialPixels);
+                batched.RenderFrame(0, batchPixels);
+
+                Assert.AreNotEqual(Hash(baselinePixels), Hash(sequentialPixels));
+                Assert.AreEqual(Hash(sequentialPixels), Hash(batchPixels));
+                Assert.Throws<ArgumentException>(() => sequential.SetFillColor(string.Empty, Color.red));
+                Assert.Throws<ArgumentException>(() => sequential.SetStrokeColor(
+                    "**.palette.ink", new Color(float.NaN, 0, 0)));
+            }
+        }
+
+        [Test]
+        public void FrameCacheAppliesColorOverridesBeforeWarming()
+        {
+            TextAsset source = Resources.Load<TextAsset>("semantic_palette");
+            var options = new LottieFrameCacheOptions
+            {
+                Width = 16,
+                Height = 16,
+                Clips = new[] { new LottieClipSampling("clip", 30, false, true) },
+                MakeNoLongerReadable = false,
+                ColorOverrides = new[]
+                {
+                    LottieColorOverride.Fill("**.palette.base", Color.green),
+                    LottieColorOverride.Stroke("**.palette.ink", Color.blue)
+                }
+            };
+            using (var cache = new LottieFrameCache(source.text, string.Empty, options))
+            {
+                while (!cache.WarmStep(2)) { }
+                Texture2D texture = cache.SampleNormalized("clip", 0);
+                using (var expected = LottieCpuRasterizer.LoadFromJsonData(
+                    source.text, string.Empty, 16, 16, options.ColorOverrides))
+                using (var expectedPixels = new NativeArray<byte>(16 * 16 * 4, Allocator.Temp))
+                {
+                    expected.RenderFrame(0, expectedPixels);
+                    Assert.AreEqual(Hash(expectedPixels), Hash(texture.GetRawTextureData<byte>()));
+                }
+            }
+        }
+
+        [Test]
+        public void AnimatedTextureSupportsOptionAndMethodOverridesBeforeFirstRender()
+        {
+            TextAsset source = Resources.Load<TextAsset>("semantic_palette");
+            var options = new LottieAnimationOptions
+            {
+                UseManagedTextureUpload = true,
+                ColorOverrides = new[]
+                {
+                    LottieColorOverride.Fill("**.palette.base", Color.green),
+                    LottieColorOverride.Stroke("**.palette.ink", Color.blue)
+                }
+            };
+            using (var baseline = LottieAnimation.LoadFromJsonData(
+                source.text, string.Empty, 16, 16,
+                new LottieAnimationOptions { UseManagedTextureUpload = true }))
+            using (var configured = LottieAnimation.LoadFromJsonData(
+                source.text, string.Empty, 16, 16, options))
+            using (var methods = LottieAnimation.LoadFromJsonData(
+                source.text, string.Empty, 16, 16,
+                new LottieAnimationOptions { UseManagedTextureUpload = true }))
+            {
+                methods.SetFillColor("**.palette.base", Color.green);
+                methods.SetStrokeColor("**.palette.ink", Color.blue);
+                baseline.DrawOneFrame(0);
+                configured.DrawOneFrame(0);
+                methods.DrawOneFrame(0);
+                uint configuredHash = Hash(configured.Texture.GetRawTextureData<byte>());
+                Assert.AreNotEqual(Hash(baseline.Texture.GetRawTextureData<byte>()), configuredHash);
+                Assert.AreEqual(configuredHash, Hash(methods.Texture.GetRawTextureData<byte>()));
+            }
+        }
+
+        [Test]
         public void CachePreflightDeduplicatesFramesAndReusesTextureReferences()
         {
             TextAsset source = Resources.Load<TextAsset>("device_color_calibration_alpha");
