@@ -28,6 +28,7 @@ namespace LottiePlugin
         public Func<bool> VisibilityEvaluator { get; set; }
         public LottieLogLevel LogLevel { get; set; } = LottieLogLevel.Warning;
         public bool UseManagedTextureUpload { get; set; }
+        public IReadOnlyList<LottieColorOverride> ColorOverrides { get; set; }
     }
 
     public sealed partial class LottieAnimation : IDisposable
@@ -189,8 +190,11 @@ namespace LottiePlugin
 
         private void CompleteConstruction(uint width, uint height, LottieAnimationOptions options)
         {
+            options = options ?? new LottieAnimationOptions();
             _clipFrameDelta = _animationWrapper.duration / _animationWrapper.totalFrames;
             InitializeOptions(options);
+            if (options.ColorOverrides != null)
+                ApplyColorOverrides(options.ColorOverrides);
             uint scaledWidth = ApplyResolutionDivider(width, _resolutionDivider);
             uint scaledHeight = ApplyResolutionDivider(height, _resolutionDivider);
             CreateRenderDataTexture2DMarshalToNative(scaledWidth, scaledHeight);
@@ -323,6 +327,32 @@ namespace LottiePlugin
                 PlatformDisposeAsyncDraw();
             }
             PlatformDrawOneFrame(frameNumber);
+        }
+
+        /// <summary>Overrides every fill resolved by the rlottie keypath.</summary>
+        public void SetFillColor(string keyPath, Color color)
+        {
+            ApplyColorOverrides(new[] { LottieColorOverride.Fill(keyPath, color) });
+        }
+
+        /// <summary>Overrides every stroke resolved by the rlottie keypath.</summary>
+        public void SetStrokeColor(string keyPath, Color color)
+        {
+            ApplyColorOverrides(new[] { LottieColorOverride.Stroke(keyPath, color) });
+        }
+
+        /// <summary>Applies fill and stroke overrides in one native call.</summary>
+        public void ApplyColorOverrides(IReadOnlyList<LottieColorOverride> overrides)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(LottieAnimation));
+            if (overrides == null)
+                throw new ArgumentNullException(nameof(overrides));
+            if (_asyncDrawWasCalled)
+                PlatformDisposeAsyncDraw();
+            int result = NativeBridge.ApplyColorOverrides(_animationWrapperIntPtr, overrides);
+            if (result != 0)
+                throw new InvalidOperationException("The native rlottie library could not apply color overrides.");
         }
 
         public void DrawMarkerFrame(string markerName, float normalized)
