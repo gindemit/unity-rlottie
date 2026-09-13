@@ -55,10 +55,12 @@ if (-not (Test-Path -LiteralPath $ResultFile)) {
 }
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
+$effectiveRequiredCheckNames = @($RequiredCheckNames) + 'semanticColorOverrides'
+$effectiveMinimumSchemaVersion = [Math]::Max(3, $MinimumSchemaVersion)
 Assert-LottieSmokeResult -Result $result -Platform Windows -ExpectedGraphicsApi $ExpectedGraphicsApi `
     -ExpectedColorSpace $ExpectedColorSpace -ExpectedUploadBackend $ExpectedUploadBackend `
     -ExpectedGraphicsVendor $ExpectedGraphicsVendor `
-    -MinimumSchemaVersion $MinimumSchemaVersion -RequiredCheckNames $RequiredCheckNames `
+    -MinimumSchemaVersion $effectiveMinimumSchemaVersion -RequiredCheckNames $effectiveRequiredCheckNames `
     -RequireGraphicsDeviceMetadata:$RequireGraphicsDeviceMetadata `
     -RequireNativeUpload:$RequireNativeUpload
 
