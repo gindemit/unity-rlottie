@@ -658,6 +658,11 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         if (_quitAfterAutomaticRun)
         {
             ExportCsv(false);
+            // Native texture teardown can enqueue render-thread work (notably
+            // for Vulkan). Let Unity drain that work before automatic player
+            // shutdown tears down the graphics device.
+            yield return new WaitForEndOfFrame();
+            yield return null;
             Application.Quit(_results.Count > 0 && !_cancelRequested && !_validationFailed ? 0 : 1);
         }
     }
