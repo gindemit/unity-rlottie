@@ -40,6 +40,19 @@ typedef enum {
     LOTTIE_LOG_INFO = 3
 } LottieLogLevel;
 
+typedef enum {
+    LOTTIE_COLOR_PROPERTY_FILL = 0,
+    LOTTIE_COLOR_PROPERTY_STROKE = 1
+} LottieColorProperty;
+
+typedef struct lottie_color_override {
+    const char* key_path;
+    LottieColorProperty property;
+    float red;
+    float green;
+    float blue;
+} lottie_color_override;
+
 typedef struct lottie_animation_wrapper {
     lottie_animation_wrapper *self;
     std::unique_ptr<rlottie::Animation> animation;
@@ -105,6 +118,23 @@ extern "C" {
         LottieLogLevel log_level);
     
     EXPORT_API int32_t lottie_set_global_log_level(LottieLogLevel log_level);
+
+    EXPORT_API int32_t lottie_set_fill_color(
+        lottie_animation_wrapper* animation_wrapper,
+        const char* key_path,
+        float red,
+        float green,
+        float blue);
+    EXPORT_API int32_t lottie_set_stroke_color(
+        lottie_animation_wrapper* animation_wrapper,
+        const char* key_path,
+        float red,
+        float green,
+        float blue);
+    EXPORT_API int32_t lottie_apply_color_overrides(
+        lottie_animation_wrapper* animation_wrapper,
+        const lottie_color_override* overrides,
+        uint32_t override_count);
 
     // Match Unity's expected render-event callback signature. Now that
     // UNITY_INTERFACE_API is guaranteed to be defined, this typedef parses cleanly

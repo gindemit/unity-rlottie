@@ -35,6 +35,7 @@ namespace LottiePlugin
         public bool MakeNoLongerReadable { get; set; } = true;
         public LottieAlphaMode AlphaMode { get; set; } = LottieAlphaMode.PremultipliedBgra;
         public long MaximumRawPixelBytes { get; set; } = long.MaxValue;
+        public IReadOnlyList<LottieColorOverride> ColorOverrides { get; set; }
     }
 
     public sealed class LottieClipPreflight
@@ -99,12 +100,14 @@ namespace LottiePlugin
                 WrapMode = options.WrapMode,
                 MakeNoLongerReadable = options.MakeNoLongerReadable,
                 AlphaMode = options.AlphaMode,
-                MaximumRawPixelBytes = options.MaximumRawPixelBytes
+                MaximumRawPixelBytes = options.MaximumRawPixelBytes,
+                ColorOverrides = options.ColorOverrides == null
+                    ? null : new List<LottieColorOverride>(options.ColorOverrides).AsReadOnly()
             };
             try
             {
                 _rasterizer = LottieCpuRasterizer.LoadFromJsonData(jsonData, resourcesPath,
-                    options.Width, options.Height);
+                    options.Width, options.Height, _options.ColorOverrides);
                 _preflight = BuildPreflight(_rasterizer.Markers, _options);
                 if (_preflight.TotalRawPixelBytes > options.MaximumRawPixelBytes)
                     throw new InvalidOperationException("The frame cache exceeds MaximumRawPixelBytes.");
