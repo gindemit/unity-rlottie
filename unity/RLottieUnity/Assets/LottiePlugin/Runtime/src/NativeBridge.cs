@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using UnityEngine;
 
 namespace LottiePlugin
@@ -95,6 +97,15 @@ namespace LottiePlugin
         public uint width;
         public uint height;
         public uint bytesPerLine;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NativeLottieColorOverride
+    {
+        public IntPtr keyPath;
+        public LottieColorProperty property;
+        public float red;
+        public float green;
+        public float blue;
     }
     internal static class NativeBridge
     {
@@ -250,6 +261,97 @@ namespace LottiePlugin
             CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_set_global_log_level")]
         internal static extern int LottieSetGlobalLogLevel(LottieLogLevel logLevel);
+
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_set_fill_color")]
+        internal static extern int LottieSetFillColor(
+            IntPtr animationWrapper,
+            [MarshalAs(UnmanagedType.LPStr)] string keyPath,
+            float red,
+            float green,
+            float blue);
+
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_set_stroke_color")]
+        internal static extern int LottieSetStrokeColor(
+            IntPtr animationWrapper,
+            [MarshalAs(UnmanagedType.LPStr)] string keyPath,
+            float red,
+            float green,
+            float blue);
+
+        [DllImport(PLUGIN_NAME,
+            CallingConvention = CallingConvention.Cdecl,
+            EntryPoint = "lottie_apply_color_overrides")]
+        private static extern int LottieApplyColorOverrides(
+            IntPtr animationWrapper,
+            IntPtr overrides,
+            uint overrideCount);
+
+        internal static int ApplyColorOverrides(
+            IntPtr animationWrapper,
+            IReadOnlyList<LottieColorOverride> overrides)
+        {
+            if (overrides == null || overrides.Count == 0)
+                return 0;
+
+            int itemSize = Marshal.SizeOf<NativeLottieColorOverride>();
+            IntPtr items = Marshal.AllocHGlobal(checked(itemSize * overrides.Count));
+            IntPtr[] keyPaths = new IntPtr[overrides.Count];
+            try
+            {
+                for (int index = 0; index < overrides.Count; index++)
+                {
+                    LottieColorOverride colorOverride = overrides[index];
+                    ValidateColorOverride(colorOverride, nameof(overrides));
+                    keyPaths[index] = StringToHGlobalUtf8(colorOverride.KeyPath);
+                    var nativeOverride = new NativeLottieColorOverride
+                    {
+                        keyPath = keyPaths[index],
+                        property = colorOverride.Property,
+                        red = colorOverride.Color.r,
+                        green = colorOverride.Color.g,
+                        blue = colorOverride.Color.b
+                    };
+                    Marshal.StructureToPtr(nativeOverride, IntPtr.Add(items, itemSize * index), false);
+                }
+                return LottieApplyColorOverrides(animationWrapper, items, checked((uint)overrides.Count));
+            }
+            finally
+            {
+                for (int index = 0; index < keyPaths.Length; index++)
+                {
+                    if (keyPaths[index] != IntPtr.Zero)
+                        Marshal.FreeHGlobal(keyPaths[index]);
+                }
+                Marshal.FreeHGlobal(items);
+            }
+        }
+
+        internal static void ValidateColorOverride(LottieColorOverride colorOverride, string parameterName)
+        {
+            if (string.IsNullOrEmpty(colorOverride.KeyPath))
+                throw new ArgumentException("A non-empty rlottie keypath is required.", parameterName);
+            if (colorOverride.Property != LottieColorProperty.FillColor &&
+                colorOverride.Property != LottieColorProperty.StrokeColor)
+                throw new ArgumentOutOfRangeException(parameterName, "Unsupported Lottie color property.");
+            Color color = colorOverride.Color;
+            if (float.IsNaN(color.r) || float.IsInfinity(color.r) ||
+                float.IsNaN(color.g) || float.IsInfinity(color.g) ||
+                float.IsNaN(color.b) || float.IsInfinity(color.b))
+                throw new ArgumentException("Lottie override colors must contain finite RGB values.", parameterName);
+        }
+
+        private static IntPtr StringToHGlobalUtf8(string value)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(value);
+            IntPtr pointer = Marshal.AllocHGlobal(bytes.Length + 1);
+            Marshal.Copy(bytes, 0, pointer, bytes.Length);
+            Marshal.WriteByte(pointer, bytes.Length, 0);
+            return pointer;
+        }
 
         internal static LottieAnimationWrapper LoadFromData(string filePath, string resourcesPath, out IntPtr animationWrapper)
         {
