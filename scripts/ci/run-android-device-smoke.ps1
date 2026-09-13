@@ -107,7 +107,8 @@ Invoke-Adb -Arguments @('shell', 'rm', $remoteScreenshot)
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
 Assert-LottieSmokeResult -Result $result -Platform Android -ExpectedGraphicsApi $ExpectedGraphicsApi `
-    -ExpectedUploadBackend $ExpectedUploadBackend -RequireNativeVulkanUpload:$RequireNativeVulkanUpload
+    -ExpectedUploadBackend $ExpectedUploadBackend -MinimumSchemaVersion 3 `
+    -RequiredCheckNames semanticColorOverrides -RequireNativeVulkanUpload:$RequireNativeVulkanUpload
 if ((Get-Item -LiteralPath $Screenshot).Length -lt 1024) {
     throw "Android screenshot is unexpectedly small: $Screenshot"
 }

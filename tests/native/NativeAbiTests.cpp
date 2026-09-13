@@ -139,6 +139,11 @@ namespace
         Expect(lottie_render_immediately(baseline, &baselineSurface, 0, false, false) == 0,
                "baseline palette frame renders");
         const uint32_t baselineHash = HashPixels(baselinePixels, 16 * 16);
+        Expect(lottie_set_fill_color(baseline, "**.palette.base", 0, 1, 0) == 0,
+               "fill override applies after an initial render");
+        Expect(lottie_render_immediately(baseline, &baselineSurface, 1, false, false) == 0 &&
+                   HashPixels(baselinePixels, 16 * 16) != baselineHash,
+               "post-render fill override changes the next source frame");
 
         Expect(lottie_set_fill_color(sequential, "**.palette.base", 0, 1, 0) == 0,
                "globstar semantic fill keypath applies");
@@ -159,6 +164,25 @@ namespace
                "batch-overridden frame renders");
         Expect(HashPixels(batchPixels, 16 * 16) == sequentialHash,
                "batched overrides match sequential fill and stroke output");
+        Expect(batchPixels[8 * 16 + 8] == 0xff00ff00u,
+               "semantic fill override renders exact opaque green at the center");
+        bool containsBlueStroke = false;
+        for (uint32_t pixel : batchPixels)
+        {
+            const uint32_t blue = pixel & 0xffu;
+            const uint32_t green = (pixel >> 8) & 0xffu;
+            const uint32_t red = (pixel >> 16) & 0xffu;
+            const uint32_t alpha = pixel >> 24;
+            containsBlueStroke |= alpha > 0 && blue > green && blue > red;
+        }
+        Expect(containsBlueStroke,
+               "semantic stroke override renders blue-dominant edge pixels");
+        const uint32_t beforeEmptyBatch = HashPixels(batchPixels, 16 * 16);
+        Expect(lottie_apply_color_overrides(batched, nullptr, 0) == 0,
+               "empty batch is valid for a loaded animation");
+        Expect(lottie_render_immediately(batched, &batchSurface, 1, false, false) == 0 &&
+                   HashPixels(batchPixels, 16 * 16) == beforeEmptyBatch,
+               "empty batch leaves rendered colors unchanged");
 
         lottie_color_override invalid = {"**.palette.base", static_cast<LottieColorProperty>(99), 0, 0, 0};
         Expect(lottie_apply_color_overrides(batched, &invalid, 1) == -1,
