@@ -649,6 +649,11 @@ public sealed class LottieBenchmarkController : MonoBehaviour
             _status = "Completed: " + result.ToSummary();
             Debug.Log("[LottieBenchmark] " + result.ToSummary());
             ExportCsv(false);
+            // A render event for the last sampled frame may still reference
+            // this case's native texture. Dispose at the case boundary and
+            // let the render thread drain before constructing the next case.
+            DisposeInstances();
+            yield return new WaitForEndOfFrame();
             yield return null;
         }
 
