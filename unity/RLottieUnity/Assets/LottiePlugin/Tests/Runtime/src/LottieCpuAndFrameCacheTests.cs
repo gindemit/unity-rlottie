@@ -57,9 +57,37 @@ namespace LottiePlugin.Tests.Runtime
 
                 Assert.AreNotEqual(Hash(baselinePixels), Hash(sequentialPixels));
                 Assert.AreEqual(Hash(sequentialPixels), Hash(batchPixels));
+                AssertBgraApproximately(sequentialPixels, 16, 8, 8, 0, 255, 0, 255);
+                AssertContainsBlueDominantPixel(sequentialPixels);
                 Assert.Throws<ArgumentException>(() => sequential.SetFillColor(string.Empty, Color.red));
                 Assert.Throws<ArgumentException>(() => sequential.SetStrokeColor(
                     "**.palette.ink", new Color(float.NaN, 0, 0)));
+            }
+        }
+
+        [Test]
+        public void SemanticOverridesApplyAfterRenderAndEmptyBatchIsANoOp()
+        {
+            TextAsset source = Resources.Load<TextAsset>("semantic_palette");
+            using (var rasterizer = LottieCpuRasterizer.LoadFromJsonData(
+                source.text, string.Empty, 16, 16))
+            using (var pixels = new NativeArray<byte>(16 * 16 * 4, Allocator.Temp))
+            {
+                rasterizer.RenderFrame(0, pixels);
+                uint baseline = Hash(pixels);
+                rasterizer.ApplyColorOverrides(Array.Empty<LottieColorOverride>());
+                rasterizer.RenderFrame(1, pixels);
+                Assert.AreEqual(baseline, Hash(pixels));
+
+                rasterizer.ApplyColorOverrides(new[]
+                {
+                    LottieColorOverride.Fill("**.palette.base", Color.green),
+                    LottieColorOverride.Stroke("**.palette.ink", Color.blue)
+                });
+                rasterizer.RenderFrame(0, pixels);
+                Assert.AreNotEqual(baseline, Hash(pixels));
+                AssertBgraApproximately(pixels, 16, 8, 8, 0, 255, 0, 255);
+                AssertContainsBlueDominantPixel(pixels);
             }
         }
 
@@ -256,6 +284,37 @@ namespace LottiePlugin.Tests.Runtime
             uint hash = 2166136261;
             for (int index = 0; index < pixels.Length; index++) hash = (hash ^ pixels[index]) * 16777619;
             return hash;
+        }
+
+        private static void AssertBgraApproximately(
+            NativeArray<byte> pixels,
+            int width,
+            int x,
+            int y,
+            byte blue,
+            byte green,
+            byte red,
+            byte alpha)
+        {
+            int offset = (y * width + x) * 4;
+            const int tolerance = 3;
+            Assert.That(pixels[offset], Is.EqualTo(blue).Within(tolerance), "blue channel");
+            Assert.That(pixels[offset + 1], Is.EqualTo(green).Within(tolerance), "green channel");
+            Assert.That(pixels[offset + 2], Is.EqualTo(red).Within(tolerance), "red channel");
+            Assert.That(pixels[offset + 3], Is.EqualTo(alpha).Within(tolerance), "alpha channel");
+        }
+
+        private static void AssertContainsBlueDominantPixel(NativeArray<byte> pixels)
+        {
+            for (int offset = 0; offset < pixels.Length; offset += 4)
+            {
+                if (pixels[offset + 3] > 0 && pixels[offset] > pixels[offset + 1] &&
+                    pixels[offset] > pixels[offset + 2])
+                {
+                    return;
+                }
+            }
+            Assert.Fail("Expected a blue-dominant stroke pixel in the rendered pixels.");
         }
     }
 }
