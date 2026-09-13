@@ -279,7 +279,10 @@ namespace LottiePlugin
             PlatformDisposeWebGLTextures();
             if (Texture != null)
             {
-                UnityEngine.Object.DestroyImmediate(Texture);
+                if (Application.isPlaying)
+                    UnityEngine.Object.Destroy(Texture);
+                else
+                    UnityEngine.Object.DestroyImmediate(Texture);
                 Texture = null;
             }
             if (_animationWrapperIntPtr != IntPtr.Zero)
