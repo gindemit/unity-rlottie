@@ -472,7 +472,7 @@ namespace LottiePlugin
             var deviceType = UnityEngine.SystemInfo.graphicsDeviceType;
             bool isVulkan = deviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
             _usesUnityOwnedNativeTexture = isVulkan && !_useManagedTextureUpload && TryEnableNativeVulkanUpload();
-#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || (UNITY_ANDROID && !UNITY_EDITOR)
+#if UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || UNITY_STANDALONE_WIN || (UNITY_ANDROID && !UNITY_EDITOR)
             _usesUnityOwnedOpenGLTexture =
                 IsUnityOwnedOpenGLUploadDevice(deviceType) &&
                 !_useManagedTextureUpload;
