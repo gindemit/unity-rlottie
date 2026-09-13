@@ -39,7 +39,8 @@ namespace LottiePlugin
 #endif
         }
 
-        private LottieCpuRasterizer(string jsonData, string resourcesPath, int width, int height)
+        private LottieCpuRasterizer(string jsonData, string resourcesPath, int width, int height,
+            IReadOnlyList<LottieColorOverride> colorOverrides)
         {
             ValidateDimensions(width, height);
             Width = width;
@@ -47,6 +48,8 @@ namespace LottiePlugin
             try
             {
                 _wrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animation);
+                if (colorOverrides != null)
+                    ApplyColorOverrides(colorOverrides);
                 Markers = LottieMarkerSet.Parse(jsonData, _wrapper.totalFrames, () => _disposed);
                 InitializeSurface();
                 lock (sAliveLock) sAlive.Add(this);
@@ -59,17 +62,41 @@ namespace LottiePlugin
         }
 
         public static LottieCpuRasterizer LoadFromJsonData(string jsonData, string resourcesPath,
-            int width, int height)
+            int width, int height, IReadOnlyList<LottieColorOverride> colorOverrides = null)
         {
             if (string.IsNullOrEmpty(jsonData)) throw new ArgumentException("Lottie JSON is required.", nameof(jsonData));
-            return new LottieCpuRasterizer(jsonData, resourcesPath, width, height);
+            return new LottieCpuRasterizer(jsonData, resourcesPath, width, height, colorOverrides);
         }
 
-        public static LottieCpuRasterizer LoadFromJsonFile(string path, int width, int height)
+        public static LottieCpuRasterizer LoadFromJsonFile(string path, int width, int height,
+            IReadOnlyList<LottieColorOverride> colorOverrides = null)
         {
             if (string.IsNullOrEmpty(path)) throw new ArgumentException("A Lottie JSON path is required.", nameof(path));
             string json = File.ReadAllText(path);
-            return new LottieCpuRasterizer(json, Path.GetDirectoryName(path), width, height);
+            return new LottieCpuRasterizer(json, Path.GetDirectoryName(path), width, height, colorOverrides);
+        }
+
+        public void SetFillColor(string keyPath, UnityEngine.Color color)
+        {
+            ApplyColorOverrides(new[] { LottieColorOverride.Fill(keyPath, color) });
+        }
+
+        public void SetStrokeColor(string keyPath, UnityEngine.Color color)
+        {
+            ApplyColorOverrides(new[] { LottieColorOverride.Stroke(keyPath, color) });
+        }
+
+        public void ApplyColorOverrides(IReadOnlyList<LottieColorOverride> overrides)
+        {
+            lock (_renderLock)
+            {
+                ThrowIfDisposed();
+                if (overrides == null)
+                    throw new ArgumentNullException(nameof(overrides));
+                int result = NativeBridge.ApplyColorOverrides(_animation, overrides);
+                if (result != 0)
+                    throw new InvalidOperationException("The native rlottie library could not apply color overrides.");
+            }
         }
 
         public void RenderFrame(int frame, NativeArray<byte> destination)
