@@ -86,17 +86,22 @@ void CollectRetiredTextures(uint64_t safeFrameNumber, bool deviceShutdown)
     while (it != gRetiredTextures.end())
     {
         VulkanTextureData* data = *it;
-        bool safe = deviceShutdown;
-        if (!safe)
+        const bool safe = std::all_of(data->slots.begin(), data->slots.end(), [safeFrameNumber](const UploadSlot& slot)
         {
-            safe = std::all_of(data->slots.begin(), data->slots.end(), [safeFrameNumber](const UploadSlot& slot)
-            {
-                return !slot.used || slot.lastUsedFrame <= safeFrameNumber;
-            });
-        }
+            return !slot.used || slot.lastUsedFrame <= safeFrameNumber;
+        });
         if (safe)
         {
             DestroyTextureData(data);
+            it = gRetiredTextures.erase(it);
+        }
+        else if (deviceShutdown)
+        {
+            // Unity can begin graphics-device shutdown before the GPU reaches
+            // the last plugin copy. Freeing its mapped buffer here races that
+            // command buffer. Abandon the Vulkan handles to device teardown,
+            // which reclaims them after outstanding work has stopped.
+            delete data;
             it = gRetiredTextures.erase(it);
         }
         else
