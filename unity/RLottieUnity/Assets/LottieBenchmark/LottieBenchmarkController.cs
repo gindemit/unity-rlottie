@@ -39,6 +39,11 @@ public sealed class LottieBenchmarkController : MonoBehaviour
     };
 
     private static readonly int[] DefaultMatrixResolutions = { 128, 256, 512, 1024 };
+    private static readonly LottieColorOverride[] BenchmarkColorOverrides =
+    {
+        LottieColorOverride.Fill("**.Warm Charcoal Eye Fill", new Color(0.10f, 0.62f, 0.86f)),
+        LottieColorOverride.Fill("**.Soft Pink Cheek Thread", new Color(0.95f, 0.42f, 0.58f))
+    };
     private static readonly ProfilerMarker RenderBatchMarker = new ProfilerMarker("LottieBenchmark.RenderBatch");
     private static readonly ProfilerMarker RenderInstanceMarker = new ProfilerMarker("LottieBenchmark.RenderInstance");
 
@@ -61,6 +66,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
     private bool _validationFailed;
     private bool _holdAfterWarmup;
     private bool _useManagedUpload;
+    private bool _useColorOverrides;
     private bool _panelOpen = true;
     private int[] _matrixResolutions = DefaultMatrixResolutions;
     private int _liveFrame;
@@ -92,6 +98,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         _validatePixels = HasArgument(arguments, "-lottieBenchmarkValidatePixels");
         _holdAfterWarmup = HasArgument(arguments, "-lottieBenchmarkHoldAfterWarmup");
         _useManagedUpload = HasArgument(arguments, "-lottieBenchmarkManagedUpload");
+        _useColorOverrides = HasArgument(arguments, "-lottieBenchmarkColorOverrides");
         string resolutions = GetArgument(arguments, "-lottieBenchmarkResolutions", string.Empty);
         if (!string.IsNullOrEmpty(resolutions))
         {
@@ -158,6 +165,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         AppendEnvironmentFlag(appended, "VALIDATE_PIXELS", "-lottieBenchmarkValidatePixels");
         AppendEnvironmentFlag(appended, "HOLD_AFTER_WARMUP", "-lottieBenchmarkHoldAfterWarmup");
         AppendEnvironmentFlag(appended, "MANAGED_UPLOAD", "-lottieBenchmarkManagedUpload");
+        AppendEnvironmentFlag(appended, "COLOR_OVERRIDES", "-lottieBenchmarkColorOverrides");
         AppendEnvironmentFlag(appended, "VULKAN_DIAGNOSTICS", "-lottieBenchmarkVulkanDiagnostics");
         AppendEnvironmentValue(appended, "INSTANCES", "-lottieBenchmarkInstances");
         AppendEnvironmentValue(appended, "WARMUP", "-lottieBenchmarkWarmup");
@@ -636,7 +644,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
 
             BenchmarkResult result = BenchmarkResult.Create(benchmarkCase, loadMs, memoryDelta,
                 batchSamples, observedFrameSamples, pixelValidation,
-                _instances[0].TextureUploadBackend.ToString());
+                _instances[0].TextureUploadBackend.ToString(), _useColorOverrides);
             _results.Add(result);
             _status = "Completed: " + result.ToSummary();
             Debug.Log("[LottieBenchmark] " + result.ToSummary());
@@ -789,7 +797,8 @@ public sealed class LottieBenchmarkController : MonoBehaviour
                 ResolutionDivider = 1,
                 PauseIfCulled = false,
                 LogLevel = LottieLogLevel.None,
-                UseManagedTextureUpload = _useManagedUpload
+                UseManagedTextureUpload = _useManagedUpload,
+                ColorOverrides = _useColorOverrides ? BenchmarkColorOverrides : null
             };
             for (int i = 0; i < benchmarkCase.InstanceCount; i++)
             {
@@ -1011,10 +1020,12 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         public int DistinctSampledColors;
         public string PixelValidationError;
         public string UploadBackend;
+        public string ColorScenario;
+        public int ColorOverrideCount;
 
         public static BenchmarkResult Create(BenchmarkCase benchmarkCase, double loadMs, long memoryDelta,
             double[] batchSamples, double[] observedFrameSamples, PixelValidation pixelValidation,
-            string uploadBackend)
+            string uploadBackend, bool useColorOverrides)
         {
             double meanBatch = Mean(batchSamples);
             double totalBatch = meanBatch * batchSamples.Length;
@@ -1059,7 +1070,9 @@ public sealed class LottieBenchmarkController : MonoBehaviour
                 PixelHash = pixelValidation.Hash,
                 DistinctSampledColors = pixelValidation.DistinctSampledColors,
                 PixelValidationError = pixelValidation.Error,
-                UploadBackend = uploadBackend
+                UploadBackend = uploadBackend,
+                ColorScenario = useColorOverrides ? "palette_at_load" : "baseline",
+                ColorOverrideCount = useColorOverrides ? BenchmarkColorOverrides.Length : 0
             };
         }
 
@@ -1076,7 +1089,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
         public static string ToCsv(IList<BenchmarkResult> results)
         {
             var builder = new StringBuilder();
-            builder.AppendLine("timestamp_utc,animation,instances,width,height,warmup_frames,sample_frames,load_ms,memory_delta_bytes,mean_batch_ms,p50_batch_ms,p95_batch_ms,max_batch_ms,mean_per_animation_ms,renders_per_second,batches_over_16_67ms,mean_observed_frame_ms,p95_observed_frame_ms,platform,device,operating_system,graphics_device,graphics_api,unity_version,upload_backend,pixel_validation_enabled,pixel_valid,pixel_hash,distinct_sampled_colors,pixel_validation_error");
+            builder.AppendLine("timestamp_utc,animation,instances,width,height,warmup_frames,sample_frames,load_ms,memory_delta_bytes,mean_batch_ms,p50_batch_ms,p95_batch_ms,max_batch_ms,mean_per_animation_ms,renders_per_second,batches_over_16_67ms,mean_observed_frame_ms,p95_observed_frame_ms,platform,device,operating_system,graphics_device,graphics_api,unity_version,upload_backend,color_scenario,color_override_count,pixel_validation_enabled,pixel_valid,pixel_hash,distinct_sampled_colors,pixel_validation_error");
             foreach (BenchmarkResult result in results)
             {
                 AppendCsvRow(builder, result);
@@ -1099,6 +1112,7 @@ public sealed class LottieBenchmarkController : MonoBehaviour
                 result.BatchesOver60FpsBudget.ToString(CultureInfo.InvariantCulture), result.MeanObservedFrameMs.ToString("F4", CultureInfo.InvariantCulture),
                 result.P95ObservedFrameMs.ToString("F4", CultureInfo.InvariantCulture), result.Platform, result.Device,
                 result.OperatingSystem, result.GraphicsDevice, result.GraphicsApi, result.UnityVersion, result.UploadBackend,
+                result.ColorScenario, result.ColorOverrideCount.ToString(CultureInfo.InvariantCulture),
                 result.PixelValidationEnabled.ToString(CultureInfo.InvariantCulture),
                 result.PixelValid.ToString(CultureInfo.InvariantCulture), result.PixelHash,
                 result.DistinctSampledColors.ToString(CultureInfo.InvariantCulture), result.PixelValidationError
