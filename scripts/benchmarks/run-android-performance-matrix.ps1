@@ -6,6 +6,10 @@ param(
     [int] $Instances = 1,
     [int] $WarmupFrames = 30,
     [int] $SampleFrames = 180,
+    [ValidateRange(1, 20)]
+    [int] $Repeats = 3,
+    [ValidateRange(0, 100)]
+    [double] $RegressionThresholdPercent = 5,
     [int] $RunTimeoutSeconds = 900,
     [int] $CooldownTemperatureTenthsC = 380,
     [string[]] $SkipRepos = @()
@@ -133,68 +137,76 @@ for ($matrixIndex = 0; $matrixIndex -lt $matrix.Count; $matrixIndex++) {
         $apiOrder = if (($matrixIndex % 2) -eq 0) { @('Vulkan', 'OpenGLES3') } else { @('OpenGLES3', 'Vulkan') }
         foreach ($graphicsApi in $apiOrder) {
             $apiSlug = if ($graphicsApi -eq 'Vulkan') { 'vulkan' } else { 'opengles3' }
-            $runName = "unity-$($entry.Version)-$($entry.Pipeline.ToLowerInvariant())-$apiSlug"
-            $runDirectory = Join-Path $ResultsRoot $runName
-            $apk = Join-Path $runDirectory 'RLottieBenchmark.apk'
-            $buildLog = Join-Path $runDirectory 'build.log'
-            $deviceLog = Join-Path $runDirectory 'device.log'
-            $localCsv = Join-Path $runDirectory 'benchmark.csv'
-            New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
-            if (Test-Path -LiteralPath $localCsv) {
-                $existingLines = (Get-Content -LiteralPath $localCsv | Measure-Object -Line).Lines
-                if ($existingLines -ge $expectedCsvLines) {
-                    Write-Output "SKIP  $runName (complete CSV already exists)"
-                    continue
-                }
-            }
-
-            $temperatureBefore = Wait-ForCooldown
-            $startedUtc = (Get-Date).ToUniversalTime().ToString('O')
-            Write-Output ("START {0} at {1:F1} C" -f $runName, ($temperatureBefore / 10.0))
-            if (Test-Path -LiteralPath $apk) {
-                Write-Output "REUSE $runName APK"
-            }
-            else {
+            $buildName = "unity-$($entry.Version)-$($entry.Pipeline.ToLowerInvariant())-$apiSlug"
+            $buildDirectory = Join-Path $ResultsRoot ("_players\" + $buildName)
+            $apk = Join-Path $buildDirectory 'RLottieBenchmark.apk'
+            $buildLog = Join-Path $buildDirectory 'build.log'
+            New-Item -ItemType Directory -Force -Path $buildDirectory | Out-Null
+            if (-not (Test-Path -LiteralPath $apk)) {
                 & (Join-Path $repoPath 'scripts\ci\build-player.ps1') -Unity $unity -ProjectPath $projectPath `
                     -Target Android -Pipeline $entry.Pipeline -GraphicsApi $graphicsApi -OutputPath $apk -LogFile $buildLog
             }
-
             Invoke-Adb install -r -t $apk
-            Invoke-Adb shell rm -f $remoteCsv
-            Invoke-Adb logcat -c
-            $benchmarkArguments = "-lottieBenchmarkMatrix -lottieBenchmarkInstances $Instances -lottieBenchmarkWarmup $WarmupFrames -lottieBenchmarkSamples $SampleFrames -lottieBenchmarkUncapped -lottieBenchmarkQuit -lottieBenchmarkOutput $remoteCsv"
-            Invoke-Adb shell "am start -S -n $activity -e lottieBenchmarkArguments '$benchmarkArguments'"
 
-            $deadline = (Get-Date).AddSeconds($RunTimeoutSeconds)
-            $completed = $false
-            while ((Get-Date) -lt $deadline) {
-                Start-Sleep -Seconds 3
-                $pidText = (& $Adb shell pidof $package) -join ''
-                if ([string]::IsNullOrWhiteSpace($pidText)) {
-                    $lineCountText = (& $Adb shell "if [ -f '$remoteCsv' ]; then wc -l < '$remoteCsv'; else echo 0; fi") -join ''
-                    $lineCount = 0
-                    [void][int]::TryParse($lineCountText.Trim(), [ref] $lineCount)
-                    if ($lineCount -ge $expectedCsvLines) { $completed = $true }
-                    break
+            for ($repeat = 1; $repeat -le $Repeats; $repeat++) {
+                $scenarios = if (($repeat % 2) -eq 1) { @('baseline', 'palette-at-load') } else { @('palette-at-load', 'baseline') }
+                foreach ($scenario in $scenarios) {
+                    $runName = "$buildName-$scenario-r$repeat"
+                    $runDirectory = Join-Path $ResultsRoot $runName
+                    $deviceLog = Join-Path $runDirectory 'device.log'
+                    $localCsv = Join-Path $runDirectory 'benchmark.csv'
+                    New-Item -ItemType Directory -Force -Path $runDirectory | Out-Null
+                    if (Test-Path -LiteralPath $localCsv) {
+                        $existingLines = (Get-Content -LiteralPath $localCsv | Measure-Object -Line).Lines
+                        if ($existingLines -ge $expectedCsvLines) {
+                            Write-Output "SKIP  $runName (complete CSV already exists)"
+                            continue
+                        }
+                    }
+
+                    $temperatureBefore = Wait-ForCooldown
+                    $startedUtc = (Get-Date).ToUniversalTime().ToString('O')
+                    Write-Output ("START {0} at {1:F1} C" -f $runName, ($temperatureBefore / 10.0))
+                    Invoke-Adb shell rm -f $remoteCsv
+                    Invoke-Adb logcat -c
+                    $colorArgument = if ($scenario -eq 'palette-at-load') { ' -lottieBenchmarkColorOverrides' } else { '' }
+                    $benchmarkArguments = "-lottieBenchmarkMatrix -lottieBenchmarkInstances $Instances -lottieBenchmarkWarmup $WarmupFrames -lottieBenchmarkSamples $SampleFrames -lottieBenchmarkUncapped -lottieBenchmarkQuit -lottieBenchmarkOutput $remoteCsv$colorArgument"
+                    Invoke-Adb shell "am start -S -n $activity -e lottieBenchmarkArguments '$benchmarkArguments'"
+
+                    $deadline = (Get-Date).AddSeconds($RunTimeoutSeconds)
+                    $completed = $false
+                    while ((Get-Date) -lt $deadline) {
+                        Start-Sleep -Seconds 3
+                        $pidText = (& $Adb shell pidof $package) -join ''
+                        if ([string]::IsNullOrWhiteSpace($pidText)) {
+                            $lineCountText = (& $Adb shell "if [ -f '$remoteCsv' ]; then wc -l < '$remoteCsv'; else echo 0; fi") -join ''
+                            $lineCount = 0
+                            [void][int]::TryParse($lineCountText.Trim(), [ref] $lineCount)
+                            if ($lineCount -ge $expectedCsvLines) { $completed = $true }
+                            break
+                        }
+                    }
+
+                    & $Adb logcat -d -v time | Out-File -LiteralPath $deviceLog -Encoding utf8
+                    if (-not $completed) { throw "Benchmark did not complete successfully: $runName" }
+                    Invoke-Adb pull $remoteCsv $localCsv
+                    $temperatureAfter = Get-DeviceTemperature
+                    [ordered]@{
+                        run = $runName; repository = $entry.Repo; commit = (git -C $repoPath rev-parse HEAD)
+                        native_dependency_commit = (git -C $repoPath rev-parse 'HEAD:dependency/rlottie')
+                        unity_version = $entry.Version; render_pipeline = $entry.Pipeline; graphics_api = $graphicsApi
+                        color_scenario = $scenario; repeat = $repeat
+                        instances = $Instances; warmup_frames = $WarmupFrames; sample_frames = $SampleFrames
+                        started_utc = $startedUtc; completed_utc = (Get-Date).ToUniversalTime().ToString('O')
+                        temperature_before_c = $temperatureBefore / 10.0; temperature_after_c = $temperatureAfter / 10.0
+                        device_serial = ((& $Adb get-serialno) -join '').Trim()
+                        device_model = ((& $Adb shell getprop ro.product.model) -join '').Trim()
+                        android_version = ((& $Adb shell getprop ro.build.version.release) -join '').Trim()
+                        android_api = ((& $Adb shell getprop ro.build.version.sdk) -join '').Trim()
+                    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runDirectory 'metadata.json') -Encoding utf8
+                    Write-Output ("DONE  {0} at {1:F1} C" -f $runName, ($temperatureAfter / 10.0))
                 }
             }
-
-            & $Adb logcat -d -v time | Out-File -LiteralPath $deviceLog -Encoding utf8
-            if (-not $completed) { throw "Benchmark did not complete successfully: $runName" }
-            Invoke-Adb pull $remoteCsv $localCsv
-            $temperatureAfter = Get-DeviceTemperature
-            [ordered]@{
-                run = $runName; repository = $entry.Repo; commit = (git -C $repoPath rev-parse HEAD)
-                unity_version = $entry.Version; render_pipeline = $entry.Pipeline; graphics_api = $graphicsApi
-                instances = $Instances; warmup_frames = $WarmupFrames; sample_frames = $SampleFrames
-                started_utc = $startedUtc; completed_utc = (Get-Date).ToUniversalTime().ToString('O')
-                temperature_before_c = $temperatureBefore / 10.0; temperature_after_c = $temperatureAfter / 10.0
-                device_serial = ((& $Adb get-serialno) -join '').Trim()
-                device_model = ((& $Adb shell getprop ro.product.model) -join '').Trim()
-                android_version = ((& $Adb shell getprop ro.build.version.release) -join '').Trim()
-                android_api = ((& $Adb shell getprop ro.build.version.sdk) -join '').Trim()
-            } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runDirectory 'metadata.json') -Encoding utf8
-            Write-Output ("DONE  {0} at {1:F1} C" -f $runName, ($temperatureAfter / 10.0))
         }
     }
     finally {
@@ -203,3 +215,5 @@ for ($matrixIndex = 0; $matrixIndex -lt $matrix.Count; $matrixIndex++) {
 }
 
 Write-Output "Sequential Android benchmark matrix complete: $ResultsRoot"
+& (Join-Path $PSScriptRoot 'compare-color-override-performance.ps1') `
+    -ResultsRoot $ResultsRoot -RegressionThresholdPercent $RegressionThresholdPercent
