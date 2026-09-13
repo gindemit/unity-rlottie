@@ -29,7 +29,7 @@ public sealed class LottieSmokeController : MonoBehaviour
     [Serializable]
     private sealed class SmokeResult
     {
-        public int schemaVersion = 2;
+        public int schemaVersion = 3;
         public bool passed;
         public string platform;
         public string graphicsApi;
@@ -366,6 +366,7 @@ public sealed class LottieSmokeController : MonoBehaviour
             buttonLaterCapture.Succeeded ? DescribeTransition(buttonInitial, buttonLater) : buttonLaterCapture.Error);
 
         yield return ValidateCalibrationColors();
+        yield return ValidateSemanticColorOverrides();
         yield return RunLifecycleStress(imageAnimation.TextureUploadBackend);
 
         Debug.Log("[LottieSmoke] Smoke checks complete; writing result.");
@@ -474,6 +475,81 @@ public sealed class LottieSmokeController : MonoBehaviour
             {
                 animation.Dispose();
             }
+        }
+    }
+
+    private IEnumerator ValidateSemanticColorOverrides()
+    {
+        TextAsset json = Resources.Load<TextAsset>("semantic_palette");
+        if (json == null)
+        {
+            Record("semanticColorOverrides", false, "Missing semantic_palette resource.");
+            yield break;
+        }
+
+        LottieAnimation baseline = null;
+        LottieAnimation fill = null;
+        LottieAnimation stroke = null;
+        LottieAnimation batched = null;
+        try
+        {
+            baseline = LottieAnimation.LoadFromJsonData(json.text, string.Empty, 16, 16);
+            fill = LottieAnimation.LoadFromJsonData(json.text, string.Empty, 16, 16);
+            stroke = LottieAnimation.LoadFromJsonData(json.text, string.Empty, 16, 16);
+            batched = LottieAnimation.LoadFromJsonData(json.text, string.Empty, 16, 16,
+                new LottieAnimationOptions
+                {
+                    ColorOverrides = new[]
+                    {
+                        LottieColorOverride.Fill("**.palette.base", Color.green),
+                        LottieColorOverride.Stroke("**.palette.ink", Color.blue)
+                    }
+                });
+
+            baseline.DrawOneFrame(0);
+            fill.DrawOneFrame(0);
+            stroke.DrawOneFrame(0);
+            yield return new WaitForEndOfFrame();
+
+            fill.SetFillColor("**.palette.base", Color.green);
+            stroke.SetStrokeColor("**.palette.ink", Color.blue);
+            fill.DrawOneFrame(1);
+            stroke.DrawOneFrame(1);
+            batched.DrawOneFrame(0);
+            yield return new WaitForEndOfFrame();
+
+            var baselineCapture = new PixelCapture();
+            var fillCapture = new PixelCapture();
+            var strokeCapture = new PixelCapture();
+            var batchCapture = new PixelCapture();
+            yield return CaptureTexture(baseline.OutputTexture, baseline.TextureUploadBackend, baselineCapture);
+            yield return CaptureTexture(fill.OutputTexture, fill.TextureUploadBackend, fillCapture);
+            yield return CaptureTexture(stroke.OutputTexture, stroke.TextureUploadBackend, strokeCapture);
+            yield return CaptureTexture(batched.OutputTexture, batched.TextureUploadBackend, batchCapture);
+
+            bool captured = baselineCapture.Succeeded && fillCapture.Succeeded &&
+                strokeCapture.Succeeded && batchCapture.Succeeded;
+            bool passed = captured &&
+                baselineCapture.Signature.Hash != fillCapture.Signature.Hash &&
+                baselineCapture.Signature.Hash != strokeCapture.Signature.Hash &&
+                batchCapture.Signature.Hash != baselineCapture.Signature.Hash &&
+                batchCapture.Signature.Hash != fillCapture.Signature.Hash &&
+                batchCapture.Signature.Hash != strokeCapture.Signature.Hash;
+            string details = captured
+                ? "backend=" + batched.TextureUploadBackend +
+                    ", baseline=" + baselineCapture.Signature.Hash +
+                    ", fill=" + fillCapture.Signature.Hash +
+                    ", stroke=" + strokeCapture.Signature.Hash +
+                    ", batch=" + batchCapture.Signature.Hash
+                : baselineCapture.Error ?? fillCapture.Error ?? strokeCapture.Error ?? batchCapture.Error;
+            Record("semanticColorOverrides", passed, details);
+        }
+        finally
+        {
+            baseline?.Dispose();
+            fill?.Dispose();
+            stroke?.Dispose();
+            batched?.Dispose();
         }
     }
 
