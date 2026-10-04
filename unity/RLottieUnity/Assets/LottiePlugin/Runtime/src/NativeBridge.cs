@@ -15,6 +15,11 @@ namespace LottiePlugin
         Info = 3
     }
 
+    internal static class LottieLogSettings
+    {
+        internal static LottieLogLevel GlobalLevel = LottieLogLevel.Warning;
+    }
+
     /// <summary>
     /// Handles plugin initialization for iOS.
     /// On iOS with IL2CPP, static libraries don't get UnityPluginLoad called automatically.
@@ -51,12 +56,14 @@ namespace LottiePlugin
                 IntPtr loadFunc = lottie_get_plugin_load_func();
                 IntPtr unloadFunc = lottie_get_plugin_unload_func();
                 
-                Debug.Log($"[Lottie] Registering iOS plugin: loadFunc={loadFunc}, unloadFunc={unloadFunc}");
+                if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                    Debug.Log($"[Lottie] Registering iOS plugin: loadFunc={loadFunc}, unloadFunc={unloadFunc}");
                 
                 UnityRegisterRenderingPluginV5(loadFunc, unloadFunc);
                 s_Registered = true;
                 
-                Debug.Log("[Lottie] iOS plugin registered successfully");
+                if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                    Debug.Log("[Lottie] iOS plugin registered successfully");
             }
             catch (Exception ex)
             {
