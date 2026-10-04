@@ -146,6 +146,9 @@ namespace LottiePlugin
 
         static LottieAnimation()
         {
+            // Also apply the default to existing native libraries, which may
+            // have been built with a more verbose global log level.
+            NativeBridge.LottieSetGlobalLogLevel(LottieLogLevel.Warning);
             Application.quitting += DisposeAll;
 #if UNITY_EDITOR
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += DisposeAll;
@@ -463,12 +466,15 @@ namespace LottiePlugin
         }
 
         /// <summary>
-        /// Sets the global log level for all Lottie animations. This affects animations that don't have an instance-specific log level set.
+        /// Sets the native global log level at runtime. This controls messages without
+        /// an animation instance; use LogLevel or LottieAnimationOptions.LogLevel
+        /// for messages associated with a specific animation.
         /// </summary>
         /// <param name="logLevel">The global log level to set</param>
         public static void SetGlobalLogLevel(LottieLogLevel logLevel)
         {
             NativeBridge.LottieSetGlobalLogLevel(logLevel);
+            LottieLogSettings.GlobalLevel = logLevel;
         }
 
         private void RegisterAliveInstance()
