@@ -43,7 +43,8 @@ namespace LottiePlugin
                 if (registered && !sWebGLNativeUploadLogged)
                 {
                     sWebGLNativeUploadLogged = true;
-                    Debug.Log("[LottiePlugin] Unity-owned WebGL native upload enabled");
+                    if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                        Debug.Log("[LottiePlugin] Unity-owned WebGL native upload enabled");
                 }
                 return registered;
             }
@@ -180,7 +181,8 @@ namespace LottiePlugin
                     if (!sVulkanNativeUploadLogged)
                     {
                         sVulkanNativeUploadLogged = true;
-                        Debug.Log("[LottiePlugin] Vulkan native upload enabled");
+                        if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                            Debug.Log("[LottiePlugin] Vulkan native upload enabled");
                     }
                     return true;
                 }
@@ -241,7 +243,8 @@ namespace LottiePlugin
                     if (registered && !sOpenGLNativeUploadLogged)
                     {
                         sOpenGLNativeUploadLogged = true;
-                        Debug.Log("[LottiePlugin] Unity-owned OpenGL native upload enabled");
+                        if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                            Debug.Log("[LottiePlugin] Unity-owned OpenGL native upload enabled");
                     }
                     return registered;
                 }

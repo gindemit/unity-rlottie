@@ -4,8 +4,10 @@ using UnityEngine;
 
 public class UpdateLoggerLevel : MonoBehaviour
 {
+    [SerializeField] private LottiePlugin.LottieLogLevel _logLevel = LottiePlugin.LottieLogLevel.Warning;
+
     private void Awake()
     {
-        LottiePlugin.LottieAnimation.SetGlobalLogLevel(LottiePlugin.LottieLogLevel.Info);
+        LottiePlugin.LottieAnimation.SetGlobalLogLevel(_logLevel);
     }
 }
