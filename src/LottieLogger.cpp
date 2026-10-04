@@ -12,7 +12,7 @@
 #define LOTTIE_ANDROID_LOG_TAG "LottiePlugin"
 #endif
 
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
+static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_WARNING);
 static IUnityLog* sLog = nullptr;
 
 void LottieLoggerSetUnityLog(IUnityLog* log)
@@ -92,7 +92,7 @@ void LottieLogError(lottie_animation_wrapper* animation, const char* format, ...
 
 #else
 
-static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_INFO);
+static std::atomic<LottieLogLevel> sGlobalLogLevel(LOTTIE_LOG_WARNING);
 
 void LottieLoggerSetUnityLog(IUnityLog*) {}
 

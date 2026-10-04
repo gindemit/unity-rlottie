@@ -74,6 +74,24 @@ Here are the steps to use the `AnimatedImage` class in your Unity project:
     ```
 And that's it! You are now able to use Lottie animations in your Unity projects using the `AnimatedImage` class.
 
+## Logging
+
+The plugin logs warnings and errors by default. To change the global native log
+level at runtime, call:
+
+```csharp
+LottiePlugin.LottieAnimation.SetGlobalLogLevel(LottiePlugin.LottieLogLevel.Info);
+```
+
+Choose `Info` for diagnostic messages, `Error` for errors only, or `None` to
+silence native logging. This works with the native libraries supplied by the
+plugin; no native rebuild is needed. The global setting controls messages
+without a specific animation instance, including texture upload messages.
+For an individual animation, set `LottieAnimationOptions.LogLevel` when loading
+it or change its `LottieAnimation.LogLevel` property later. The `AnimatedImage`
+and `AnimatedButton` components also expose an individual Log Level setting in
+the Inspector.
+
 ## Example
 
 Here's an example of how to use the `AnimatedImage` class:
