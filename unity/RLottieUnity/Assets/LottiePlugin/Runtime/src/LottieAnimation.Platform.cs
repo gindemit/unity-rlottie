@@ -435,9 +435,10 @@ namespace LottiePlugin
                 // Allocate Unity's WebGL texture object once before requesting
                 // its native name. Per-frame Apply calls are avoided on success.
                 Texture.Apply(false, false);
-                _pixelData = default;
-                _lottieRenderData.buffer = null;
-                _ownsPixelData = false;
+                // The native upload event copies from the rlottie render-data
+                // surface into Unity's texture. Avoiding Texture2D.Apply does
+                // not remove the CPU raster surface itself.
+                AllocateCpuPixelData(width, height);
                 _usesUnityOwnedWebGLTexture = TryRegisterUnityOwnedWebGLTexture(width, height);
                 _usesCPURendering = !_usesUnityOwnedWebGLTexture;
                 TextureUploadBackend = _usesUnityOwnedWebGLTexture

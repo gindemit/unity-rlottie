@@ -173,6 +173,34 @@ namespace LottiePlugin.Tests.Runtime
             }
         }
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [UnityTest]
+        public IEnumerator NativeWebGLUploadRendersAVisibleFrame()
+        {
+            LottieAnimation animation = LottieAnimation.LoadFromJsonData(
+                _lottieAnimation.text,
+                string.Empty,
+                64,
+                64);
+
+            try
+            {
+                Assert.AreEqual(LottieTextureUploadBackend.NativeWebGL, animation.TextureUploadBackend,
+                    "The WebGL runtime test requires the native Unity-owned texture upload path.");
+
+                animation.DrawOneFrame(1);
+                yield return null;
+
+                Assert.IsTrue(HasVisibleOutputPixel(animation.OutputTexture),
+                    "Native WebGL upload produced a fully transparent frame.");
+            }
+            finally
+            {
+                animation.Dispose();
+            }
+        }
+#endif
+
         [UnityTest]
         public IEnumerator RepeatedManagedAsyncPrepareAndResultAdvancesFramesAndPresentsPixels()
         {
