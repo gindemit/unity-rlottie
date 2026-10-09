@@ -27,7 +27,7 @@ if ($results.Count -eq 0) {
 }
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $output | Out-Null
-$backend = if ($ExpectedGraphicsApi -eq 'Vulkan') { 'NativeVulkan' } else { 'NativeExternalTexture' }
+$backend = if ($ExpectedGraphicsApi -eq 'Vulkan') { 'NativeVulkan' } else { 'NativeOpenGL' }
 for ($index = 0; $index -lt $results.Count; $index++) {
     $destination = Join-Path $output "smoke-result-$index.json"
     & gcloud storage cp $results[$index] $destination "--project=$ProjectId"

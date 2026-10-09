@@ -1,0 +1,62 @@
+name: Windows HDRP rendering assertions
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: windows-hdrp-rendering-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: unity/6000.5.3f1-hdrp
+          submodules: recursive
+      - uses: actions/cache@v4
+        with:
+          path: unity/RLottieUnity/Library
+          key: hdrp-windows-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity/RLottieUnity
+          targetPlatform: StandaloneWindows64
+          buildMethod: RLottie.CI.BuildMatrix.Build
+          customParameters: >-
+            -ciTarget Windows64 -ciPipeline HDRP -ciGraphicsApi Direct3D11
+            -ciOutputPath /github/workspace/artifacts/RLottieSmoke.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-hdrp-player-${{ github.run_id }}
+          path: artifacts
+          if-no-files-found: error
+
+  render:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-hdrp-player-${{ github.run_id }}
+          path: artifacts
+      - shell: pwsh
+        run: >-
+          ./scripts/ci/run-windows-player-smoke.ps1
+          -Player artifacts/RLottieSmoke.exe -LogFile artifacts/Player.log
+          -ExpectedGraphicsApi Direct3D11 -RequireNativeUpload
+          -RequiredCheckNames exactColorCalibration,animationLifecycleStress
+          -RunSeconds 60
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-hdrp-results-${{ github.run_id }}
+          path: |
+            artifacts/Player.log
+            artifacts/Player.log.smoke.json
