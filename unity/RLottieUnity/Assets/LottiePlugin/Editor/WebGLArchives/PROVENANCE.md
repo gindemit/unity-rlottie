@@ -14,11 +14,17 @@ project's `Assets/LottiePlugin.GeneratedWebGL`.
 |---|---|---|---|
 | Legacy | Before `UNITY_6000_5_OR_NEWER` | `b3d32adefdcfab13612323900f31a0addeafd254959d69d0b9a7fe6c9399e6e1` | `754e15e226e819e83bc0d6e8e1ea22a8b1bf882c304ef1b2361bd4a2b7762cbb` |
 | WasmExceptions | `UNITY_6000_5_OR_NEWER` | `088d14b0909acdc6076e1ff1525e8a6d69094d284d4151fc03b6a6ee75504a51` | `b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da` |
+| Legacy2021 | Unity 2021 | `c57c5d811ebf986dfb1c6008cb319ad041ecba7c5a62a0b8d59e93bc2d9462ed` | `b5078d63c82615a8ad23940d5a67d49a6f01c0e40ebe3efea0142e16932b141c` |
+| Legacy2019 | Unity 2019 | `e03a47196fb953fd15904324c378d9a9b74394ab17c0dfe44136c1a3ff7418de` | `42dc8c94ed02a010e77f84707015822adc6b18381e94f23273ecd9facf58424a` |
 
 Both pairs were rebuilt on 2026-10-10 from source commit `e48599d`
 with rlottie dependency `e9bf55b` (Samsung upstream through `ea06d2f`).
 Legacy uses Unity 2022.3.62f3's bundled Emscripten toolchain; WasmExceptions
 uses Unity 6000.5.3f1's bundled Emscripten 4.0.20-git toolchain. The
+Legacy2021 pair uses the bundled Unity 2021.3.45f2 toolchain against the same
+native sources, because the Unity 2022 archives reference newer libc++ symbols
+that Unity 2021 cannot link. Legacy2019 uses Unity 2019.4.41f2's bundled
+Fastcomp compiler with `EMCC_WASM_BACKEND=0` against the same sources. The
 `LottiePlugin` CMake target was built with `RLOTTIE_WEB_ASSEMBLY=1`,
 `LOTTIE_MODULE=OFF`, `BUILD_SHARED_LIBS=OFF`, Release mode, and
 `RLOTTIE_WEBGL_WASM_EXCEPTIONS=OFF` for Legacy or `ON` for WasmExceptions.
