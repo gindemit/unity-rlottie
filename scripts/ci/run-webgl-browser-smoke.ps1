@@ -73,7 +73,7 @@ $serverProcess = Start-Process -FilePath 'node' `
     -PassThru -WindowStyle Hidden
 
 try {
-    $url = "http://127.0.0.1:$Port/"
+    $url = "http://127.0.0.1:$Port/?lottieSmoke=true"
     $browserArguments = @(
         '--headless=new',
         '--enable-logging=stderr',
