@@ -481,8 +481,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: unity/RLottieUnity/Library
-          key: unity-device-gate-${{ matrix.pipeline }}-${{ matrix.platform }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
-          restore-keys: unity-device-gate-${{ matrix.pipeline }}-${{ matrix.platform }}-
+          key: unity-device-gate-${{ runner.os }}-${{ matrix.pipeline }}-${{ matrix.platform }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
+          restore-keys: unity-device-gate-${{ runner.os }}-${{ matrix.pipeline }}-${{ matrix.platform }}-
 
       - name: Build player
         uses: game-ci/unity-builder@v4
