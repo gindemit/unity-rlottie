@@ -56,6 +56,12 @@ namespace RLottie.CI
                     target = target,
                     options = buildOptions
                 };
+#if UNITY_2021_2_OR_NEWER
+                if (target == BuildTarget.Android && GetBooleanArgument("-ciRunSmokeAutomatically", false))
+                {
+                    options.extraScriptingDefines = new[] { "LOTTIE_CI_SMOKE" };
+                }
+#endif
 
                 Debug.Log("RLottie CI build: target=" + target + ", output=" + outputPath +
                     ", development=" + developmentBuild + ", autoconnectProfiler=" + connectProfiler);
