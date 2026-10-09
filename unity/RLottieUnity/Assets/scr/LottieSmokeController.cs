@@ -1058,7 +1058,11 @@ public sealed class LottieSmokeController : MonoBehaviour
 
     private static bool IsAndroidSmokeRequested()
     {
+#if LOTTIE_CI_SMOKE && UNITY_ANDROID && !UNITY_EDITOR
+        return true;
+#else
         return GetAndroidBooleanExtra(AndroidRequestExtra);
+#endif
     }
 
     private static bool IsAndroidFpsOnlyRequested()
