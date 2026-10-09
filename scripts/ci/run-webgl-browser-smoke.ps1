@@ -1,8 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [string] $Unity,
-    [Parameter(Mandatory = $true)]
     [string] $ProjectPath,
     [ValidateSet('1', '2')]
     [string] $WebGLVersion,
@@ -16,8 +14,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'assert-smoke-result.ps1')
 
-foreach ($requiredPath in @($Unity, $ProjectPath, $Browser)) {
+$requiredPaths = @($Browser)
+if (-not $SkipBuild) {
+    if (-not $Unity -or -not $ProjectPath) {
+        throw 'Unity and ProjectPath are required when building the WebGL player.'
+    }
+    $requiredPaths += @($Unity, $ProjectPath)
+}
+foreach ($requiredPath in $requiredPaths) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Required path not found: $requiredPath"
     }
@@ -90,7 +96,7 @@ try {
     while (-not $browserProcess.HasExited -and [DateTime]::UtcNow -lt $deadline) {
         Start-Sleep -Milliseconds 500
         $completed = Select-String -LiteralPath $browserLog `
-            -SimpleMatch '[Lottie INFO] [Lottie] Frame rendered successfully' `
+            -SimpleMatch 'RLottieSmokeResultBase64:' `
             -Quiet -ErrorAction SilentlyContinue
         if ($completed) {
             break
@@ -127,5 +133,18 @@ foreach ($marker in $requiredMarkers) {
 if ($browserOutput.Contains('RuntimeError: abort') -or $browserOutput.Contains('Aborted(')) {
     throw "WebGL runtime aborted. See $browserLog"
 }
+
+$payload = [regex]::Match($browserOutput, 'RLottieSmokeResultBase64:([A-Za-z0-9+/=]+)')
+if (-not $payload.Success) {
+    throw "Browser did not report completed WebGL assertions. See $browserLog"
+}
+$json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload.Groups[1].Value))
+$resultPath = Join-Path $resolvedOutput 'smoke-result.json'
+[IO.File]::WriteAllText($resultPath, $json)
+$result = $json | ConvertFrom-Json
+$expectedApi = if ($WebGLVersion -eq '1') { 'OpenGLES2' } else { 'OpenGLES3' }
+Assert-LottieSmokeResult -Result $result -Platform WebGL `
+    -ExpectedGraphicsApi $expectedApi -ExpectedUploadBackend NativeWebGL `
+    -MinimumSchemaVersion 3 -RequiredCheckNames @('exactColorCalibration') -RequireNativeUpload
 
 Write-Output "WebGL $WebGLVersion browser smoke passed: $browserLog"
