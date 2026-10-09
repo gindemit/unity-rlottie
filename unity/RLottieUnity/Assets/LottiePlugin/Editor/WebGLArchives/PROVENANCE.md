@@ -12,17 +12,18 @@ project's `Assets/LottiePlugin.GeneratedWebGL`.
 
 | Variant | Unity selection | `libLottiePlugin.a.bytes` SHA-256 | `librlottie.a.bytes` SHA-256 |
 |---|---|---|---|
-| Legacy | Before `UNITY_6000_5_OR_NEWER` | `ad339f1cffb40a9fc17a201d0cc4fbfe2d1b4eb4561f4643229fa6612b68359d` | `5b1240fdcc79e8b23fad54063956fa2baf3c9be06696cef4d27aa33e785f11da` |
-| WasmExceptions | `UNITY_6000_5_OR_NEWER` | `9a32ad55afd774ccf6ddee4aaddead625697dddb021ce381bc8800e0b4519274` | `31bf7e54da95c553ef598640ede9faedee02cb6a74c7ab56d048c653c6e2d994` |
+| Legacy | Before `UNITY_6000_5_OR_NEWER` | `b3d32adefdcfab13612323900f31a0addeafd254959d69d0b9a7fe6c9399e6e1` | `754e15e226e819e83bc0d6e8e1ea22a8b1bf882c304ef1b2361bd4a2b7762cbb` |
+| WasmExceptions | `UNITY_6000_5_OR_NEWER` | `088d14b0909acdc6076e1ff1525e8a6d69094d284d4151fc03b6a6ee75504a51` | `b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da` |
 
-Both pairs were built from source commit `2921ac263c3538487708417d59381ea0d6d21a91`
-with rlottie dependency `3840c6e33e56b15df4e8b1b5d4639579b2d5677e`, CMake 4.4.2,
-and the Emscripten 4.0.20-git toolchain bundled with Unity 6000.5.3f1. The
+Both pairs were rebuilt on 2026-10-10 from source commit `e48599d`
+with rlottie dependency `e9bf55b` (Samsung upstream through `ea06d2f`).
+Legacy uses Unity 2022.3.62f3's bundled Emscripten toolchain; WasmExceptions
+uses Unity 6000.5.3f1's bundled Emscripten 4.0.20-git toolchain. The
 `LottiePlugin` CMake target was built with `RLOTTIE_WEB_ASSEMBLY=1`,
 `LOTTIE_MODULE=OFF`, `BUILD_SHARED_LIBS=OFF`, Release mode, and
 `RLOTTIE_WEBGL_WASM_EXCEPTIONS=OFF` for Legacy or `ON` for WasmExceptions.
 `llvm-nm` confirmed all three color API exports exist in both generated plugin
-archives. The source tree's default CMake `all` target also attempts to build
+archives in the original build. The source tree's default CMake `all` target also attempts to build
 rlottie's unrelated `lottie2gif.js` example, which fails under Unity's emsdk
 4.0.20; the named `LottiePlugin` target itself succeeds.
 
