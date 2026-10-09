@@ -121,8 +121,7 @@ $browserOutput = Get-Content -LiteralPath $browserLog -Raw
 $expectedContext = if ($WebGLVersion -eq '1') { 'Creating WebGL 1.0 context' } else { 'Creating WebGL 2.0 context' }
 $requiredMarkers = @(
     $expectedContext,
-    '[LottiePlugin] Unity-owned WebGL native upload enabled',
-    '[Lottie INFO] [Lottie] Frame rendered successfully'
+    'RLottieSmokeResultBase64:'
 )
 foreach ($marker in $requiredMarkers) {
     if (-not $browserOutput.Contains($marker)) {
