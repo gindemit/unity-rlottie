@@ -137,6 +137,13 @@ jobs:
             output: artifacts/android/RLottieSmoke.apk
             artifact_path: artifacts/android/RLottieSmoke.apk
             artifact: rlottie-android-${{ github.run_id }}
+          - name: WebGL 2
+            target_platform: WebGL
+            ci_target: WebGL
+            graphics_api: Auto
+            output: artifacts/webgl
+            artifact_path: artifacts/webgl
+            artifact: rlottie-webgl-${{ github.run_id }}
     permissions:
       contents: read
     steps:
@@ -173,6 +180,40 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact_path }}
           if-no-files-found: error
+
+  webgl_browser_smoke:
+    name: WebGL 2 browser rendering assertions
+    needs: build_players
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rlottie-webgl-${{ github.run_id }}
+          path: artifacts/webgl/player
+
+      - name: Run WebGL browser assertions
+        shell: pwsh
+        run: >-
+          ./scripts/ci/run-webgl-browser-smoke.ps1
+          -SkipBuild -WebGLVersion 2
+          -OutputDirectory artifacts/webgl
+          -VirtualTimeBudgetMilliseconds 120000
+
+      - name: Upload browser results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rlottie-webgl-smoke-${{ github.run_id }}
+          path: |
+            artifacts/webgl/browser.log
+            artifacts/webgl/smoke-result.json
+          if-no-files-found: warn
 
   linux_vulkan_smoke:
     name: Linux Vulkan native build and player smoke
