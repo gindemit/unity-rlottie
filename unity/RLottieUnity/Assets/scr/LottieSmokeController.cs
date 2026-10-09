@@ -218,6 +218,23 @@ public sealed class LottieSmokeController : MonoBehaviour
         }
 
         _resultPath = GetArgument(arguments, ResultArgument, string.Empty);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (string.IsNullOrEmpty(_resultPath))
+        {
+            Uri page;
+            if (Uri.TryCreate(Application.absoluteURL, UriKind.Absolute, out page))
+            {
+                foreach (string parameter in page.Query.TrimStart('?').Split('&'))
+                {
+                    if (parameter == "lottieSmoke=true")
+                    {
+                        _resultPath = Path.Combine(Application.persistentDataPath, DefaultResultFileName);
+                        break;
+                    }
+                }
+            }
+        }
+#endif
         if (string.IsNullOrEmpty(_resultPath) && Application.platform == RuntimePlatform.Android)
         {
             if (!IsAndroidSmokeRequested())
