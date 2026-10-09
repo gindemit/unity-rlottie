@@ -1,0 +1,101 @@
+name: Android rendering assertions
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: android-rendering-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Android ${{ matrix.api }} assertion player
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [Vulkan, OpenGLES3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/cache@v4
+        with:
+          path: unity/RLottieUnity/Library
+          key: android-assertions-${{ matrix.api }}-${{ hashFiles('unity/RLottieUnity/Packages/**', 'unity/RLottieUnity/ProjectSettings/**') }}
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity/RLottieUnity
+          targetPlatform: Android
+          buildMethod: RLottie.CI.BuildMatrix.Build
+          customParameters: >-
+            -ciTarget Android -ciPipeline Auto -ciGraphicsApi ${{ matrix.api }}
+            -ciRunSmokeAutomatically true
+            -ciOutputPath /github/workspace/artifacts/RLottieSmoke.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-assertions-${{ matrix.api }}-${{ github.run_id }}
+          path: artifacts/RLottieSmoke.apk
+          if-no-files-found: error
+
+  firebase:
+    name: Android ${{ matrix.api }} physical rendering assertions
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [Vulkan, OpenGLES3]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-assertions-${{ matrix.api }}-${{ github.run_id }}
+          path: artifacts
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Run physical-device test and collect application output
+        shell: bash
+        run: |
+          set -euo pipefail
+          device=$(gcloud firebase test android list-device-capacities \
+            --project="${{ vars.GCP_PROJECT_ID }}" --filter='capacity=High' --format=json --limit=1)
+          model=$(jq -r '.[0].model // empty' <<< "$device")
+          version=$(jq -r '.[0].version // empty' <<< "$device")
+          test -n "$model" && test -n "$version"
+          gcloud firebase test android run \
+            --project="${{ vars.GCP_PROJECT_ID }}" --type=robo \
+            --app=artifacts/RLottieSmoke.apk \
+            --device="model=$model,version=$version,locale=en,orientation=portrait" \
+            --timeout=5m \
+            --directories-to-pull=/sdcard/Android/data/com.DefaultCompany.LottiePlugin/files \
+            --results-dir="rlottie-assertions-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.api }}" \
+            --client-details="matrixLabel=RLottie-assertions-${{ matrix.api }}-${{ github.run_number }}" \
+            2>&1 | tee artifacts/firebase.log
+      - name: Assert Android rendering result
+        shell: pwsh
+        run: >-
+          ./scripts/ci/collect-firebase-smoke.ps1
+          -FirebaseLog artifacts/firebase.log
+          -ProjectId '${{ vars.GCP_PROJECT_ID }}'
+          -OutputDirectory artifacts/results
+          -ExpectedGraphicsApi ${{ matrix.api }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-rendering-results-${{ matrix.api }}-${{ github.run_id }}
+          path: |
+            artifacts/firebase.log
+            artifacts/results
+          if-no-files-found: warn
