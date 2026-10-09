@@ -2,9 +2,18 @@ name: Android rendering assertions
 
 on:
   workflow_dispatch:
+    inputs:
+      project_ref:
+        description: Unity project branch to validate
+        type: choice
+        default: dev
+        options:
+          - dev
+          - unity/6000.5.3f1
+          - unity/6000.5.3f1-urp
 
 concurrency:
-  group: android-rendering-${{ github.ref }}
+  group: android-rendering-${{ github.ref }}-${{ inputs.project_ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,6 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.project_ref }}
           submodules: recursive
       - uses: actions/cache@v4
         with:
