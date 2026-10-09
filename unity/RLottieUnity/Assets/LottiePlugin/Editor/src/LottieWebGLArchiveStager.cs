@@ -51,6 +51,10 @@ namespace RLottie
 
         private static readonly string LegacyPluginHash = "b3d32adefdcfab13612323900f31a0addeafd254959d69d0b9a7fe6c9399e6e1";
         private static readonly string LegacyRlottieHash = "754e15e226e819e83bc0d6e8e1ea22a8b1bf882c304ef1b2361bd4a2b7762cbb";
+        private static readonly string Legacy2021PluginHash = "c57c5d811ebf986dfb1c6008cb319ad041ecba7c5a62a0b8d59e93bc2d9462ed";
+        private static readonly string Legacy2021RlottieHash = "b5078d63c82615a8ad23940d5a67d49a6f01c0e40ebe3efea0142e16932b141c";
+        private static readonly string Legacy2019PluginHash = "e03a47196fb953fd15904324c378d9a9b74394ab17c0dfe44136c1a3ff7418de";
+        private static readonly string Legacy2019RlottieHash = "42dc8c94ed02a010e77f84707015822adc6b18381e94f23273ecd9facf58424a";
         private static readonly string WasmPluginHash = "088d14b0909acdc6076e1ff1525e8a6d69094d284d4151fc03b6a6ee75504a51";
         private static readonly string WasmRlottieHash = "b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da";
 
@@ -90,6 +94,14 @@ namespace RLottie
             const string variant = "WasmExceptions";
             string expectedPluginHash = WasmPluginHash;
             string expectedRlottieHash = WasmRlottieHash;
+#elif UNITY_2021_1_OR_NEWER && !UNITY_2022_1_OR_NEWER
+            const string variant = "Legacy2021";
+            string expectedPluginHash = Legacy2021PluginHash;
+            string expectedRlottieHash = Legacy2021RlottieHash;
+#elif UNITY_2019
+            const string variant = "Legacy2019";
+            string expectedPluginHash = Legacy2019PluginHash;
+            string expectedRlottieHash = Legacy2019RlottieHash;
 #else
             const string variant = "Legacy";
             string expectedPluginHash = LegacyPluginHash;
