@@ -662,6 +662,13 @@ public sealed class LottieSmokeController : MonoBehaviour
             Debug.LogException(exception);
         }
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Expose the completed assertions to browser runners without depending
+        // on IndexedDB persistence or console escaping of JSON strings.
+        Debug.Log("RLottieSmokeResultBase64:" + Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes(JsonUtility.ToJson(_result))));
+#endif
+
         if (_quitWhenComplete)
         {
             Application.Quit(_result.passed ? 0 : 1);
