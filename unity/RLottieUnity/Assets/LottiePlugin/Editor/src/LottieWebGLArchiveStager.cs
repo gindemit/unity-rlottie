@@ -49,10 +49,10 @@ namespace RLottie
             "  assetBundleName: \n" +
             "  assetBundleVariant: \n";
 
-        private static readonly string LegacyPluginHash = "ad339f1cffb40a9fc17a201d0cc4fbfe2d1b4eb4561f4643229fa6612b68359d";
-        private static readonly string LegacyRlottieHash = "5b1240fdcc79e8b23fad54063956fa2baf3c9be06696cef4d27aa33e785f11da";
-        private static readonly string WasmPluginHash = "9a32ad55afd774ccf6ddee4aaddead625697dddb021ce381bc8800e0b4519274";
-        private static readonly string WasmRlottieHash = "31bf7e54da95c553ef598640ede9faedee02cb6a74c7ab56d048c653c6e2d994";
+        private static readonly string LegacyPluginHash = "b3d32adefdcfab13612323900f31a0addeafd254959d69d0b9a7fe6c9399e6e1";
+        private static readonly string LegacyRlottieHash = "754e15e226e819e83bc0d6e8e1ea22a8b1bf882c304ef1b2361bd4a2b7762cbb";
+        private static readonly string WasmPluginHash = "088d14b0909acdc6076e1ff1525e8a6d69094d284d4151fc03b6a6ee75504a51";
+        private static readonly string WasmRlottieHash = "b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da";
 
         public int callbackOrder { get { return int.MinValue; } }
 
