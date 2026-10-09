@@ -422,7 +422,8 @@ jobs:
   build_render_pipeline_players:
     name: Build device gate - ${{ matrix.pipeline }} ${{ matrix.platform }}
     if: github.event_name == 'workflow_dispatch' && inputs.run_physical_firebase_device
-    runs-on: ubuntu-latest
+    # HDRP's Direct3D DXC shaders require the Windows Editor.
+    runs-on: ${{ matrix.pipeline == 'HDRP' && 'windows-2022' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       max-parallel: 1
