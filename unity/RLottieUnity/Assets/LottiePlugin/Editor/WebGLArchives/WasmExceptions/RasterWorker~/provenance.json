@@ -1,0 +1,27 @@
+{
+  "archiveSha256": "b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da",
+  "rendererSourceCommit": "e9bf55b786c33ad2291d35a0e6885dde5f988c1d",
+  "archiveSourceProvenanceSha256": "e032c36c89a6a24a99db6f6f23e637e4e4231e636cba3a31d1ae1ab02e2e4f0f",
+  "wrapperSha256": "66b1b10ce61d9e57618bebac2c1d54f58cbea299a31351b11c87de33367b4d66",
+  "toolchain": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 4.0.20-git",
+  "initialMemoryBytes": 16777216,
+  "maximumMemoryBytes": 134217728,
+  "files": [
+    {
+      "file": "worker.js",
+      "sha256": "be8ef64032b7d267a41ec66b16705348dc255586da48bea9342646180ff5e3bb"
+    },
+    {
+      "file": "raster.js",
+      "sha256": "7946bbe28cd9147a79d1f9b5bdb2b2b7d230ee2ca66bb4f14e1ad112d131c939"
+    },
+    {
+      "file": "raster.wasm",
+      "sha256": "db059d4907001d229adf561bb8cd9147672519b7151abc253caeef58ae4bb72d"
+    },
+    {
+      "file": "LICENSE.txt",
+      "sha256": "9295ce185b67450dfbf34a9f621786a99e5e6e26dbd27f65ef0ecd4fdad31909"
+    }
+  ]
+}
