@@ -9,19 +9,13 @@ namespace LottiePlugin.Editor
 {
     /// <summary>Use around BuildPipeline.BuildPlayer and call CopyTo after success.
     /// Parallel WebGL builds also pass LOTTIE_PARALLEL_PREPARATION in extraScriptingDefines.
-    /// Importer settings are restored even if the build fails.</summary>
+    /// The temporary Assets bridge is retired even if the build fails.</summary>
     public sealed class LottieRasterBuildScope : IDisposable
     {
-        private static string PluginPath
-        {
-            get
-            {
-                const string upmPath = "Packages/com.gindemit.rlottie/Plugins/WebGL/LottieRaster.jslib";
-                return AssetImporter.GetAtPath(upmPath) != null ? upmPath : "Assets/LottiePlugin/Plugins/WebGL/LottieRaster.jslib";
-            }
-        }
-        private readonly PluginImporter _importer;
-        private readonly bool _previous;
+        private const string GeneratedDirectory = "Assets/LottiePlugin.GeneratedRaster";
+        private const string Marker = ".lottie-raster-generated";
+        private const string Ownership = "LottiePlugin generated raster bridge; safe to clean.\n";
+        private const string BridgeName = "LottieRaster.jslib";
         private readonly bool _parallelWeb;
         private static bool sActive;
         private bool _disposed;
@@ -32,16 +26,43 @@ namespace LottiePlugin.Editor
             // Older bitcode/fastcomp variants retain a compatible serial route.
             _parallelWeb = parallel && target == BuildTarget.WebGL &&
                 (RLottie.LottieWebGLArchiveStager.SelectedVariant == "Legacy" || RLottie.LottieWebGLArchiveStager.SelectedVariant == "WasmExceptions");
-            _importer = AssetImporter.GetAtPath(PluginPath) as PluginImporter;
-            if (_importer == null) throw new InvalidOperationException("Lottie raster bridge importer is missing.");
-            _previous = _importer.GetCompatibleWithPlatform(BuildTarget.WebGL);
-            if (_parallelWeb) ValidatePayload();
-            if (_previous != _parallelWeb)
+            CleanupBridge();
+            try
             {
-                _importer.SetCompatibleWithPlatform(BuildTarget.WebGL, _parallelWeb);
-                _importer.SaveAndReimport();
+                if (_parallelWeb)
+                {
+                    ValidatePayload();
+                    // Git UPM is immutable. Stage into Assets just like the ABI-specific archives.
+                    Directory.CreateDirectory(GeneratedDirectory);
+                    File.WriteAllText(Path.Combine(GeneratedDirectory, Marker), Ownership);
+                    string bridge = Path.Combine(GeneratedDirectory, BridgeName);
+                    File.Copy(Path.Combine(RLottie.LottieWebGLArchiveStager.GetPackagePath(), "Plugins/WebGL", BridgeName), bridge);
+                    File.WriteAllText(bridge + ".meta", RLottie.LottieWebGLArchiveStager.PluginImporterTemplate
+                        .Replace("{GUID}", "0aa84ead8c514e75b7a3f57ef430f686"));
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                    RLottie.LottieWebGLArchiveStager.ConfigureStagedPlugin(bridge);
+                }
+                sActive = true;
             }
-            sActive = true;
+            catch { CleanupBridge(); throw; }
+        }
+        private static void CleanupBridge()
+        {
+            if (!Directory.Exists(GeneratedDirectory)) return;
+            string marker = Path.Combine(GeneratedDirectory, Marker);
+            if (!File.Exists(marker) || File.ReadAllText(marker) != Ownership)
+                throw new InvalidOperationException("Refusing to change unowned raster staging directory.");
+            string bridge = Path.Combine(GeneratedDirectory, BridgeName);
+            File.Delete(bridge);
+            File.Delete(bridge + ".meta");
+            // Preserve unrelated files even within an owned staging directory.
+            if (Directory.EnumerateFileSystemEntries(GeneratedDirectory).All(path => path == marker))
+            {
+                File.Delete(marker);
+                Directory.Delete(GeneratedDirectory);
+                File.Delete(GeneratedDirectory + ".meta");
+            }
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
         private static string Source
         {
@@ -95,11 +116,7 @@ namespace LottiePlugin.Editor
             _disposed = true;
             try
             {
-                if (_importer.GetCompatibleWithPlatform(BuildTarget.WebGL) != _previous)
-                {
-                    _importer.SetCompatibleWithPlatform(BuildTarget.WebGL, _previous);
-                    _importer.SaveAndReimport();
-                }
+                CleanupBridge();
             }
             finally { sActive = false; }
         }
