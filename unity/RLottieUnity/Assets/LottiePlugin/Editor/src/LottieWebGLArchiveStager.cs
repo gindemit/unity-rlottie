@@ -87,23 +87,36 @@ namespace RLottie
             }
         }
 
+        internal static string SelectedVariant
+        {
+            get
+            {
+#if UNITY_6000_5_OR_NEWER
+                return "WasmExceptions";
+#elif UNITY_2021_1_OR_NEWER && !UNITY_2022_1_OR_NEWER
+                return "Legacy2021";
+#elif UNITY_2019
+                return "Legacy2019";
+#else
+                return "Legacy";
+#endif
+            }
+        }
+
         private static void StageSelectedArchives()
         {
             string packagePath = GetPackagePath();
+            string variant = SelectedVariant;
 #if UNITY_6000_5_OR_NEWER
-            const string variant = "WasmExceptions";
             string expectedPluginHash = WasmPluginHash;
             string expectedRlottieHash = WasmRlottieHash;
 #elif UNITY_2021_1_OR_NEWER && !UNITY_2022_1_OR_NEWER
-            const string variant = "Legacy2021";
             string expectedPluginHash = Legacy2021PluginHash;
             string expectedRlottieHash = Legacy2021RlottieHash;
 #elif UNITY_2019
-            const string variant = "Legacy2019";
             string expectedPluginHash = Legacy2019PluginHash;
             string expectedRlottieHash = Legacy2019RlottieHash;
 #else
-            const string variant = "Legacy";
             string expectedPluginHash = LegacyPluginHash;
             string expectedRlottieHash = LegacyRlottieHash;
 #endif
@@ -156,7 +169,7 @@ namespace RLottie
             }
         }
 
-        private static string GetPackagePath()
+        internal static string GetPackagePath()
         {
             UnityEditor.PackageManager.PackageInfo package =
                 UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(LottieWebGLArchiveStager).Assembly);
