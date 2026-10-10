@@ -30,8 +30,9 @@ For WebGL, wrap the build in `LottiePlugin.Editor.LottieRasterBuildScope(target,
 parallel)`. If `BrowserWorkersIncluded`, add `LOTTIE_PARALLEL_PREPARATION` to
 `BuildPlayerOptions.extraScriptingDefines`; call `CopyTo(playerDirectory)` after
 the build succeeds and dispose the scope in a finally/using block. The scope
-validates the payload and selected archive hashes, restores bridge compatibility,
-and removes only known stale package sidecars when used for serial builds.
+validates the payload and selected archive hashes, stages the bridge into owned
+temporary Assets alongside Unity's selected archives, and retires that bridge
+even if the build fails. Serial scopes remove only known stale package sidecars.
 The default bridge importer excludes all platforms. Serial and Android builds
 ship no browser sidecar. Older Unity 2019/2021 archive variants currently use
 serial preparation and omit the browser symbol/payload. Explicit parallel
