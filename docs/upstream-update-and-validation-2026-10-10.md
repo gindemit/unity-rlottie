@@ -101,13 +101,26 @@ only failed job. Unity 6000.5.3f1 Android Built-in and URP player builds both
 passed. Its dependent render-pipeline Windows/Firebase jobs were skipped because
 of that failed build dependency. Windows pipeline runtime coverage was recovered
 with the local tests and successful dedicated HDRP cloud run described above.
-The separate physical Android assertion workflow passed for both graphics APIs;
-it uses the default Unity 2022.3.62f3 Built-in project. No new Unity 6000.5 URP
-Android runtime pass is claimed from its successful APK build alone.
+The separate physical Android assertion workflow passed for both graphics APIs
+using the default Unity 2022.3.62f3 Built-in project. Workflow commit `d07ac72`
+then added explicit project-branch selection to recover the skipped latest
+Android pipeline runtime checks independently of the expanded matrix.
+
+[Unity 6000.5.3f1 Built-in Android](https://github.com/gindemit/unity-rlottie/actions/runs/38005124842)
+passed both APK builds and both physical-device assertion jobs. Downloaded JSON
+results confirm 17/17 checks for Vulkan/NativeVulkan and OpenGLES3/NativeOpenGL,
+on the Fujitsu F-01L with an Adreno 506 GPU and Android 8.1/API 27.
+
+[Unity 6000.5.3f1 URP Android](https://github.com/gindemit/unity-rlottie/actions/runs/38005129059)
+also passed both APK builds and both physical-device assertion jobs. Downloaded
+JSON results confirm 17/17 checks for each graphics API with the same expected
+native backends on the Fujitsu F-01L. Latest Built-in and URP Android runtime
+coverage has therefore been recovered for both Vulkan and GLES3.
 
 The Windows-host HDRP correction also separates the expanded matrix's Unity
-Library cache by runner OS. Every launched workflow has finished; the corrected
-Android and dedicated Windows HDRP workflows are green.
+Library cache by runner OS. Every launched workflow has finished. The corrected
+Unity 2022 Android, latest Built-in Android, latest URP Android, and dedicated
+Windows HDRP workflows are green.
 
 ## Coverage boundaries
 
