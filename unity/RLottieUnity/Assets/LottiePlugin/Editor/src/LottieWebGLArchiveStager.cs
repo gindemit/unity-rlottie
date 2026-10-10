@@ -20,7 +20,7 @@ namespace RLottie
         private const string GeneratedRelativePath = "Assets/LottiePlugin.GeneratedWebGL";
         private const string OwnershipMarker = ".lottie-plugin-generated";
         private const string OwnershipValue = "LottiePlugin generated WebGL archive staging; safe to clean.\n";
-        private const string PluginImporterTemplate =
+        internal const string PluginImporterTemplate =
             "fileFormatVersion: 2\n" +
             "guid: {GUID}\n" +
             "PluginImporter:\n" +
@@ -151,7 +151,7 @@ namespace RLottie
             File.WriteAllText(destination + ".meta", PluginImporterTemplate.Replace("{GUID}", guid));
         }
 
-        private static void ConfigureStagedPlugin(string assetPath)
+        internal static void ConfigureStagedPlugin(string assetPath)
         {
             PluginImporter importer = AssetImporter.GetAtPath(assetPath) as PluginImporter;
             if (importer == null)
