@@ -3,7 +3,7 @@
   "rendererSourceCommit": "e9bf55b786c33ad2291d35a0e6885dde5f988c1d",
   "archiveSourceProvenanceSha256": "e032c36c89a6a24a99db6f6f23e637e4e4231e636cba3a31d1ae1ab02e2e4f0f",
   "wrapperSha256": "66b1b10ce61d9e57618bebac2c1d54f58cbea299a31351b11c87de33367b4d66",
-  "toolchain": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.8-git",
+  "toolchain": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.8 (3ff7eff373d31d8c0179895165462019221f192e)",
   "initialMemoryBytes": 16777216,
   "maximumMemoryBytes": 134217728,
   "files": [
@@ -13,11 +13,11 @@
     },
     {
       "file": "raster.js",
-      "sha256": "98566362ec8f24c012af034348e39e3cd9aa93110c2439b1220dc304f6c0f65d"
+      "sha256": "6708dd8afaf8ad18924cc370e174190109719a51c222884b15bf17dfc4d2324f"
     },
     {
       "file": "raster.wasm",
-      "sha256": "c2085b8c436d81063e80d604e47c9a14af8fbc6b387b1abbceeeff5615dae4a2"
+      "sha256": "5b0413c006f7621fc21b619efe36d07c86ab5cc7f42f50ad6ad034bac5317575"
     },
     {
       "file": "LICENSE.txt",
