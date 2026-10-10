@@ -12,6 +12,11 @@ on:
       - 'src/**'
       - 'scripts/build-raster-worker.py'
       - 'scripts/RasterWorker/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFrameCache.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFramePreparationPool.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieRasterBuildScope.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieWebGLArchiveStager.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/LottieRaster.jslib*'
   pull_request:
     branches:
       - dev
@@ -23,6 +28,11 @@ on:
       - 'src/**'
       - 'scripts/build-raster-worker.py'
       - 'scripts/RasterWorker/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFrameCache.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFramePreparationPool.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieRasterBuildScope.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieWebGLArchiveStager.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/LottieRaster.jslib*'
 jobs:
   build_windows:
     runs-on: windows-latest
