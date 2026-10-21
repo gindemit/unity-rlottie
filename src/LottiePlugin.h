@@ -165,6 +165,11 @@ extern "C" {
         int height);
     EXPORT_API int32_t lottie_is_opengl_upload_available(lottie_animation_wrapper* animation);
     EXPORT_API UnityRenderingEvent lottie_get_render_event_func(void);
+#if !defined(__EMSCRIPTEN__)
+    // Advisory queue snapshot, not a reservation. Later arrivals remain queued
+    // for the next pump frame; render-thread dequeue/lifetime checks still apply.
+    EXPORT_API int32_t lottie_get_pending_upload_count(void);
+#endif
 #if defined(__EMSCRIPTEN__)
     EXPORT_API void lottie_register_webgl_rendering_plugin(void);
     EXPORT_API int32_t lottie_register_unity_webgl_texture(
