@@ -15,6 +15,18 @@
   before finishing the task.
 - GitHub Actions for shared changes are expected to run from pushes to `dev`; verify the `dev` workflow run after pushing when CI status matters.
 
+## Native API contract
+
+- Ship C# and native libraries together with the current API on every supported
+  platform. Assume matching, up-to-date binaries; missing libraries or symbols
+  are integration errors that must surface.
+- Do not add missing-entry-point/library exception fallbacks, availability caches,
+  legacy polling, or platform exclusions solely to support outdated binaries.
+  This also applies to subagents and broad exception handlers around native calls.
+- Preserve real device/backend capability checks, native failure return values,
+  resource cleanup and recovery. iOS uses the native Metal renderer and pending
+  upload query through `__Internal`; WebGL uses its separate upload path.
+
 ## Adjacent Unity clones
 
 The parent directory contains separate repository clones for supported Unity versions and render pipelines. Prefer using the appropriate existing adjacent clone instead of creating temporary worktrees or switching this clone to a version/pipeline branch. Clone names follow `unity-rlottie-<version>`, `unity-rlottie-<version>-urp`, and `unity-rlottie-<version>-hdrp`; inspect the parent directory and use the newest installed version that matches the requested pipeline. Use this `unity-rlottie` clone for shared development work when no version/pipeline-specific clone is required.
