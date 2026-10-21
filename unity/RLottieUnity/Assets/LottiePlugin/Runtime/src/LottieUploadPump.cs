@@ -7,9 +7,6 @@ namespace LottiePlugin
     {
         private static LottieUploadPump sInstance;
         private static IntPtr sRenderEventFunc = IntPtr.Zero;
-#if (!UNITY_WEBGL && !UNITY_IOS) || UNITY_EDITOR
-        private bool _pendingCountAvailable = true;
-#endif
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         internal static void EnsureInstance()
@@ -61,23 +58,13 @@ namespace LottiePlugin
             }
 
             int budget = LottieScheduler.MaxUploadsPerFrame;
-#if (!UNITY_WEBGL && !UNITY_IOS) || UNITY_EDITOR
-            if (budget > 0 && _pendingCountAvailable)
+#if !UNITY_WEBGL || UNITY_EDITOR
+            if (budget > 0)
             {
-                try
-                {
-                    // This snapshot does not consume work. Async publications
-                    // after the poll and upload retries stay queued for the next
-                    // LateUpdate; no managed wakeup flag can lose them.
-                    budget = Math.Min(budget, NativeBridge.LottieGetPendingUploadCount());
-                }
-                catch (EntryPointNotFoundException)
-                {
-                    // Preserve compatibility with older native binaries, which
-                    // still require the original fixed-budget polling pump.
-                    _pendingCountAvailable = false;
-                    Debug.LogWarning("[Lottie] Native binary lacks the pending-upload query; using fixed-budget upload polling.");
-                }
+                // This snapshot does not consume work. Async publications
+                // after the poll and upload retries stay queued for the next
+                // LateUpdate; no managed wakeup flag can lose them.
+                budget = Math.Min(budget, NativeBridge.LottieGetPendingUploadCount());
             }
 #endif
             for (int i = 0; i < budget; i++)
