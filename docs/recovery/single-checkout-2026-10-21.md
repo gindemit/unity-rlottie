@@ -32,3 +32,15 @@ Existing native-library release workflows are still scoped to their historical
 release branches/manual triggers. A preservation push to main does not authorize
 a new package/release or claim a new native/platform qualification. Future build
 or workflow changes require their own checks on this canonical main source.
+
+## Completed checkout retirement
+
+All redundant plugin source clones are retired after verified private backup.
+The separate `C:/Work/git/gindemit/unity-rlottie/rlottie` vendor clone is also
+retired. Its branch tips and settings are backed up; the divergent historical
+shape branch is recovery history, not an active vendor modification.
+The required pinned dependency remains at
+`C:/Work/git/gindemit/unity-rlottie/unity-rlottie/dependency/rlottie`.
+Do not remove that submodule or change its pin to achieve a cosmetic clone count.
+The plugin's sole local working branch and GitHub default are now `main`.
+Historical remote branches/tags and private stashes remain recoverable.
