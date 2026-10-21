@@ -42,6 +42,19 @@ To install the Unity Lottie Animation to Texture2D plugin using the Unity Packag
 
 ## Quick Start
 
+### Native library contract
+
+Update the managed scripts and platform native libraries together. The managed
+code requires the current native API; missing libraries or exported functions
+are integration errors and must not be hidden with compatibility fallbacks.
+Contributors and subagents must follow this rule when changing native calls.
+Device/backend capability checks and recovery from reported upload failures
+remain part of normal rendering behavior.
+
+iOS uses native Metal rendering and polls the pending-upload count through
+`__Internal`, just like other native platforms. WebGL has a separate upload path
+and does not call that queue query.
+
 The `LottiePlugin.UI` namespace includes a `AnimatedImage` class which allows you to use Lottie animations as `RawImage` in your Unity game.
 Here are the steps to use the `AnimatedImage` class in your Unity project:
 

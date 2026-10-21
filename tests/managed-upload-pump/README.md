@@ -2,13 +2,14 @@
 
 Run `dotnet run --project tests/managed-upload-pump/UploadPumpTests.csproj`.
 Repeat with `-p:DefineConstants=UNITY_WEBGL` and `-p:DefineConstants=UNITY_IOS`
-to check that static-link players preserve their existing callback path.
+to check the separate WebGL callback path and native iOS queue polling.
 
 The harness compiles the actual `LottieUploadPump.cs` against small Unity and
 native bridge doubles. It verifies callback submission counts, frame caps,
-repeated polling after empty/retry snapshots, stable event ID and compatibility
-with older dynamically loaded native libraries. Static-link player doubles omit
-the new query so accidental imports from the pump fail compilation.
+repeated polling after empty/retry snapshots and stable event ID. The WebGL
+player double omits the native queue query so accidental calls fail compilation.
+The iOS double includes it and runs the same scheduling checks as the Editor
+and other native players.
 
 This is scheduling evidence only. The native ABI suite checks the DLL query
 export; the native queue fixture checks production queue code with a synthetic
@@ -16,10 +17,10 @@ lifetime registry, including deduplication, removal and modeled retry requeue.
 These tests do not prove GPU uploads, actual instance disposal, backend
 retry behavior, frame timing, visual continuity or IL2CPP player compatibility.
 
-The new query applies to dynamically loaded native players and the Editor.
-WebGL and iOS players retain fixed-budget polling so existing static libraries
-do not acquire an unsatisfied linker reference. Dynamic libraries without the
-new export also retain fixed-budget polling and emit one warning per pump.
+The query applies to all native players, including statically linked iOS, and
+the Editor. C# and native libraries must be delivered together with the current
+API; missing libraries or symbols are integration errors and propagate normally.
+WebGL retains fixed-budget polling for its separate upload queue.
 
 Arrivals after the snapshot and retried uploads can wait until the next
 `LateUpdate`. The snapshot is advisory: render-thread consumption may leave a
