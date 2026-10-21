@@ -276,6 +276,7 @@ int main()
     TestCompiledBackendCapabilities();
     TestRenderDataLifecycle();
     TestInvalidRenderLayouts();
+    Expect(lottie_get_pending_upload_count() == 0, "ABI queue query is available and initially empty");
     if (failures == 0)
     {
         std::puts("Native ABI tests passed.");
