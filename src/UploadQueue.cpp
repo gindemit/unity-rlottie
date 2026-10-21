@@ -109,6 +109,13 @@ lottie_animation_wrapper* DequeueUpload()
     return animation;
 }
 
+extern "C" EXPORT_API int32_t lottie_get_pending_upload_count(void)
+{
+    std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
+    // Enqueue caps the queue at kMaxPendingUploads (1024).
+    return static_cast<int32_t>(gPendingUploads.size());
+}
+
 void RemoveFromUploadQueue(lottie_animation_wrapper* animation)
 {
     std::lock_guard<std::mutex> lock(gPendingUploadsMutex);
