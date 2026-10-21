@@ -164,6 +164,11 @@ namespace LottiePlugin
 
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_render_event_func")]
         internal static extern IntPtr LottieGetRenderEventFunc();
+
+#if (!UNITY_WEBGL && !UNITY_IOS) || UNITY_EDITOR
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_pending_upload_count")]
+        internal static extern int LottieGetPendingUploadCount();
+#endif
 #endif
 
 #if UNITY_WEBGL && !UNITY_EDITOR

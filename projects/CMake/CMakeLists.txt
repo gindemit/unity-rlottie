@@ -270,6 +270,16 @@ if (BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     endif()
     target_link_libraries(LottiePluginNativeTests PRIVATE LottiePlugin)
     add_test(NAME LottiePlugin.NativeAbi COMMAND LottiePluginNativeTests)
+    find_package(Threads REQUIRED)
+    add_executable(LottieUploadQueueTests
+        ../../tests/native/UploadQueueTests.cpp
+        ../../src/UploadQueue.cpp)
+    target_compile_features(LottieUploadQueueTests PRIVATE cxx_std_17)
+    target_compile_definitions(LottieUploadQueueTests PRIVATE LOTTIE_PLUGIN_EXPORTS)
+    target_link_libraries(LottieUploadQueueTests PRIVATE Threads::Threads)
+    target_include_directories(LottieUploadQueueTests PRIVATE
+        ../../src "${RLOTTIE_ROOT}/inc" "${UNITY_PLUGINAPI_DIR}")
+    add_test(NAME LottiePlugin.UploadQueue COMMAND LottieUploadQueueTests)
 endif()
 
 # rlottie is built as a static library here, but its private ELF version-script
