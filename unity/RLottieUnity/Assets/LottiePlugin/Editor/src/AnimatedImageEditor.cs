@@ -20,6 +20,7 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty _playOnAwake;
         private SerializedProperty _loop;
         private SerializedProperty _stopOnLastFrame;
+        private SerializedProperty _logLevel;
 
         private AnimatedImage _image;
         private LottieAnimation _lottieAnimation;
@@ -39,6 +40,7 @@ namespace LottiePlugin.UI.Editor
             _playOnAwake = serializedObject.FindProperty("_playOnAwake");
             _loop = serializedObject.FindProperty("_loop");
             _stopOnLastFrame = serializedObject.FindProperty("_stopOnLastFrame");
+            _logLevel = serializedObject.FindProperty("_logLevel");
 
             CreateAnimationIfNecessaryAndAttachToGraphic();
             UpdateTheAnimationInfoBoxText();
@@ -98,6 +100,8 @@ namespace LottiePlugin.UI.Editor
             EditorGUILayout.PropertyField(_playOnAwake);
             EditorGUILayout.PropertyField(_loop);
             EditorGUILayout.PropertyField(_stopOnLastFrame);
+            EditorGUILayout.Space();
+            EditorGUILayout.PropertyField(_logLevel, new GUIContent("Log Level", "Controls verbosity of native plugin logging. Warning: only errors and warnings. Info: all messages including debug info."));
             EditorGUILayout.Space();
             EditorGUILayout.PropertyField(Started);
             EditorGUILayout.PropertyField(Paused);

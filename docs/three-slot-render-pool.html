@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>unity-rlottie CPU mailbox and GPU upload rings</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0c10;
+      --panel: #11151c;
+      --panel-2: #171c25;
+      --line: #2a3240;
+      --text: #f2f4f7;
+      --muted: #a7b0bf;
+      --cyan: #62d9ff;
+      --mint: #78f0bd;
+      --amber: #ffc66d;
+      --rose: #ff858f;
+      --violet: #b9a5ff;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 80% 0%, rgba(98, 217, 255, .12), transparent 32rem),
+        radial-gradient(circle at 10% 35%, rgba(185, 165, 255, .08), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select { font: inherit; }
+    a { color: var(--cyan); }
+    code { color: #d6e6ff; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .hero { padding: 72px 0 42px; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: .16em; font-size: 12px; font-weight: 800; }
+    h1 { margin: 14px 0 18px; max-width: 930px; font-size: clamp(38px, 7vw, 78px); line-height: .98; letter-spacing: -.055em; }
+    h2 { margin: 0 0 10px; font-size: clamp(25px, 3vw, 38px); letter-spacing: -.035em; }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+    p { margin: 0 0 12px; }
+    .lede { max-width: 850px; color: #cbd2dc; font-size: clamp(17px, 2vw, 21px); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+    .chip { border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; color: var(--muted); background: rgba(17, 21, 28, .72); }
+    .chip strong { color: var(--text); }
+    section { padding: 34px 0; }
+    .section-head { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 18px; }
+    .section-head p { color: var(--muted); max-width: 670px; }
+    .grid { display: grid; gap: 14px; }
+    .grid.three { grid-template-columns: repeat(3, 1fr); }
+    .grid.two { grid-template-columns: repeat(2, 1fr); }
+    .card { background: linear-gradient(145deg, rgba(23,28,37,.95), rgba(14,18,24,.95)); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: 0 18px 50px rgba(0,0,0,.16); }
+    .card p, .card li { color: var(--muted); }
+    .number { font: 800 42px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -.07em; color: var(--mint); }
+    .label { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    .callout { border-left: 3px solid var(--amber); background: rgba(255,198,109,.075); padding: 16px 18px; border-radius: 0 14px 14px 0; color: #e7d9bf; }
+    .callout strong { color: var(--amber); }
+    .toggle { display: inline-grid; grid-template-columns: repeat(3, 1fr); padding: 4px; background: #090b0f; border: 1px solid var(--line); border-radius: 12px; }
+    .toggle button { border: 0; border-radius: 9px; padding: 9px 16px; background: transparent; color: var(--muted); cursor: pointer; }
+    .toggle button.active { background: var(--cyan); color: #061018; font-weight: 800; }
+    .flow { display: grid; grid-template-columns: repeat(7, minmax(90px, 1fr)); gap: 8px; align-items: stretch; }
+    .node { position: relative; min-height: 120px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .node:not(:last-child)::after { content: "→"; position: absolute; right: -13px; top: 45%; z-index: 2; color: var(--cyan); font-weight: 900; }
+    .node b { display: block; margin-bottom: 6px; }
+    .node small { display: block; color: var(--muted); line-height: 1.35; }
+    .node.render { border-color: rgba(185,165,255,.5); }
+    .node.copy { border-color: rgba(255,133,143,.65); }
+    .node.own { border-color: rgba(120,240,189,.55); }
+    .node.gpu { border-color: rgba(98,217,255,.55); }
+    .copy-badge { display: inline-block; margin-top: 10px; padding: 3px 7px; border-radius: 7px; background: rgba(255,133,143,.14); color: var(--rose); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .state-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 14px; }
+    .state { padding: 11px; border: 1px solid var(--line); border-radius: 11px; text-align: center; background: #0c1016; }
+    .state:nth-child(1) { color: var(--muted); }
+    .state:nth-child(2) { color: var(--violet); }
+    .state:nth-child(3) { color: var(--mint); }
+    .state:nth-child(4) { color: var(--cyan); }
+    .calc { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+    .controls { display: grid; gap: 14px; }
+    label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+    input, select { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #0a0d12; color: var(--text); padding: 10px 11px; }
+    .dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .memory-bars { display: grid; gap: 16px; }
+    .metric-line { display: grid; grid-template-columns: 110px 1fr 100px; gap: 12px; align-items: center; }
+    .track { height: 18px; border-radius: 999px; background: #080a0d; overflow: hidden; border: 1px solid #232a35; }
+    .bar { height: 100%; width: 0; border-radius: inherit; transition: width .3s ease; }
+    .bar.current { background: linear-gradient(90deg, var(--violet), #7b65c9); }
+    .bar.rejected { background: linear-gradient(90deg, var(--rose), #be5963); }
+    .bar.proposed { background: linear-gradient(90deg, var(--mint), #3fbf91); }
+    .metric-value { text-align: right; font: 700 14px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .delta { margin-top: 18px; color: var(--muted); }
+    .delta strong { color: var(--text); }
+    .fine { color: var(--muted); font-size: 12px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; background: rgba(14,18,24,.9); }
+    th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: #cfd7e4; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; background: #141922; }
+    td { color: var(--muted); }
+    tr:last-child td { border-bottom: 0; }
+    td strong { color: var(--text); }
+    .tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 800; }
+    .tag.same { background: rgba(98,217,255,.12); color: var(--cyan); }
+    .tag.special { background: rgba(255,198,109,.12); color: var(--amber); }
+    .tag.none { background: rgba(167,176,191,.1); color: var(--muted); }
+    .steps { counter-reset: step; display: grid; gap: 10px; }
+    .step { display: grid; grid-template-columns: 38px 1fr; gap: 12px; align-items: start; }
+    .step::before { counter-increment: step; content: counter(step); width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); color: var(--cyan); font-weight: 800; }
+    .risk { color: var(--rose); }
+    .gain { color: var(--mint); }
+    footer { padding: 38px 0 70px; color: var(--muted); }
+    .hidden { display: none !important; }
+    @media (max-width: 900px) {
+      .grid.three, .grid.two, .calc { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .node { min-height: auto; }
+      .node:not(:last-child)::after { content: "↓"; right: 50%; top: auto; bottom: -18px; }
+      .section-head { align-items: start; flex-direction: column; }
+    }
+    @media (max-width: 560px) {
+      .wrap { width: min(100% - 20px, 1180px); }
+      .hero { padding-top: 46px; }
+      .card { padding: 16px; }
+      .state-row { grid-template-columns: repeat(2, 1fr); }
+      .metric-line { grid-template-columns: 82px 1fr; }
+      .metric-value { grid-column: 2; text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="eyebrow">Architecture explainer · validated dev snapshot · 13 Aug 2026</div>
+      <h1>Rasterize cached. Upload in rings.</h1>
+      <p class="lede">The final design separates CPU and GPU ownership: rlottie renders into one of two cacheable CPU mailbox slots. D3D12 and Vulkan then make one sequential copy into independent three-slot mapped upload rings. Immediate APIs consume the CPU slot directly.</p>
+      <div class="chips">
+        <span class="chip"><strong>CPU mailbox:</strong> 2 cacheable slots</span>
+        <span class="chip"><strong>D3D12/Vulkan:</strong> separate 3-slot GPU rings</span>
+        <span class="chip"><strong>Per-frame allocation:</strong> none</span>
+        <span class="chip"><strong>Managed/WebGL:</strong> stay on their existing model</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">The short answer</div><h2>Why two CPU slots and three GPU slots?</h2></div>
+          <p>The CPU only needs to overlap rendering with publication/upload copying. Explicit GPU APIs need a deeper ring because submitted copies outlive the CPU call.</p>
+        </div>
+        <div class="grid three">
+          <article class="card"><div class="number">2F</div><div class="label">plugin-owned native CPU mailbox</div><p>One slot may be <code>Rendering</code> while the other is <code>Ready</code> or being consumed. Publication is metadata-only.</p></article>
+          <article class="card"><div class="number">3</div><div class="label">explicit-API upload regions</div><p>D3D12 regions retire by frame fence; Vulkan transfer buffers retire by Unity safe-frame number.</p></article>
+          <article class="card"><div class="number">1×</div><div class="label">sequential explicit-API CPU copy</div><p>Cache-friendly memcpy or row copy replaces catastrophically slow rlottie blending in mapped upload memory.</p></article>
+        </div>
+        <div class="callout" style="margin-top:14px"><strong>Key correction:</strong> mapped upload memory is excellent for sequential copies but poor for rlottie’s read-modify-write blending. Direct rendering caused Android Vulkan 1024² frames to rise from roughly 11–15 ms to 165–200 ms and Windows D3D12 to fall from about 1393 FPS to 1.2 FPS.</div>
+      </div>
+    </section>
+
+    <section id="flow">
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Frame journey</div><h2>Old, rejected, and implemented</h2></div>
+          <div class="toggle" role="group" aria-label="Architecture view">
+            <button id="showCurrent" type="button">Before</button>
+            <button id="showRejected" type="button">Rejected direct-mapped</button>
+            <button id="showProposed" class="active" type="button">Implemented</button>
+          </div>
+        </div>
+
+        <div id="currentFlow" class="card">
+          <div class="flow">
+            <div class="node render"><b>Render buffer</b><small>rlottie writes one persistent CPU buffer.</small></div>
+            <div class="node render"><b>rlottie renders</b><small>Sync or worker-thread render writes BGRA pixels.</small></div>
+            <div class="node copy"><b>PublishUpload</b><small>Copies the entire completed frame under <code>uploadMutex</code>.</small><span class="copy-badge">full-frame copy</span></div>
+            <div class="node own"><b>Single vector</b><small><code>stagingBuffer</code> is resized once, then overwritten by every publication.</small></div>
+            <div class="node gpu"><b>Render callback</b><small>Copies only the pointer under lock, then backend upload usually reads after unlock.</small></div>
+            <div class="node copy"><b>API transfer</b><small>D3D12/Vulkan copy again into mapped upload memory; other APIs consume the pointer.</small></div>
+            <div class="node gpu"><b>Sampled texture</b><small>Unity displays the latest GPU-visible frame.</small></div>
+          </div>
+          <p class="fine" style="margin-top:14px">The race: publication could overwrite the single staging vector while an immediate backend was reading it. The path also paid one full-frame publication copy before any API-specific transfer.</p>
+        </div>
+
+        <div id="rejectedFlow" class="card hidden">
+          <div class="flow" style="grid-template-columns: repeat(5, minmax(110px, 1fr))">
+            <div class="node own"><b>Acquire mapped region</b><small>Select one of three D3D12/Vulkan upload regions.</small></div>
+            <div class="node render"><b>rlottie renders directly</b><small>Blending reads and writes uncached or write-combined mapped memory.</small></div>
+            <div class="node own"><b>Publish state</b><small>No publication copy; region becomes GPU-owned.</small></div>
+            <div class="node gpu"><b>GPU copy</b><small>Copy mapped region into Unity's sampled texture.</small></div>
+            <div class="node own"><b>Fence retirement</b><small>Fence or safe frame eventually permits reuse.</small></div>
+          </div>
+          <p class="fine" style="margin-top:14px"><strong class="risk">Why it failed:</strong> eliminating a sequential copy placed rlottie’s destination-dependent rasterizer on memory optimized for streaming writes. The saved copy was much cheaper than the resulting cache penalty.</p>
+        </div>
+
+        <div id="proposedFlow" class="card hidden">
+          <div class="flow" style="grid-template-columns: repeat(7, minmax(90px, 1fr))">
+            <div class="node own"><b>Acquire CPU slot</b><small>Select one of two cacheable slots and mark it <code>Rendering</code>.</small></div>
+            <div class="node render"><b>rlottie rasterizes</b><small>All blending stays in normal cacheable CPU memory.</small></div>
+            <div class="node own"><b>Publish metadata</b><small><code>Rendering → Ready</code>; no publication copy.</small></div>
+            <div class="node own"><b>Claim newest</b><small>Render thread selects newest ready frame and may coalesce stale work.</small></div>
+            <div class="node copy"><b>Backend consumes</b><small>Immediate API uses it directly; D3D12/Vulkan copy once into a free GPU ring slot.</small></div>
+            <div class="node own"><b>Release CPU slot</b><small>Free immediately after API consumption or explicit-ring copy.</small></div>
+            <div class="node gpu"><b>GPU retirement</b><small>Only D3D12/Vulkan ring slots wait for fence or safe frame.</small></div>
+          </div>
+          <div class="state-row"><div class="state">Free</div><div class="state">Rendering</div><div class="state">Ready</div><div class="state">Uploading</div></div>
+          <p class="fine" style="margin-top:14px">CPU and GPU lifetime are deliberately separate. If an explicit backend cannot accept a copy, the CPU slot returns to <code>Ready</code> and is retried without falsely advancing its uploaded version.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="memory">
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Memory model</div><h2>Calculate the persistent frame storage</h2></div>
+          <p>Compare the unsafe pre-pool path, rejected direct-mapped pool, and implemented cacheable mailbox. Sampled GPU texture storage, allocator overhead, driver-private copies, mipmaps, and compressed animation data are excluded.</p>
+        </div>
+        <div class="calc">
+          <div class="card controls">
+            <label>Platform path
+              <select id="platform">
+                <option value="generic">D3D11 / Windows OpenGL / Metal</option>
+                <option value="d3d12">D3D12 native</option>
+                <option value="vulkan">Unity-owned Vulkan native</option>
+                <option value="linuxgl">Linux Unity-owned OpenGL</option>
+                <option value="androidgles">Android Unity-owned OpenGL ES</option>
+                <option value="managed">Managed Apply fallback</option>
+                <option value="webgl">WebGL managed / shader</option>
+              </select>
+            </label>
+            <div class="dimensions">
+              <label>Width <input id="width" type="number" min="1" max="16384" value="1024"></label>
+              <label>Height <input id="height" type="number" min="1" max="16384" value="1024"></label>
+            </div>
+            <label>Active animations <input id="instances" type="number" min="1" max="10000" value="1"></label>
+            <label>D3D12 row alignment
+              <select id="alignment"><option value="256">256 bytes</option><option value="512">512 bytes</option></select>
+            </label>
+            <p class="fine">F = width × height × 4 bytes. P is one aligned D3D12 footprint. V is estimated as F here; real Vulkan allocation requirements can make V larger.</p>
+          </div>
+          <div class="card">
+            <div class="memory-bars">
+              <div class="metric-line"><strong>Before</strong><div class="track"><div id="currentBar" class="bar current"></div></div><div id="currentValue" class="metric-value"></div></div>
+              <div class="metric-line"><strong>Rejected</strong><div class="track"><div id="rejectedBar" class="bar rejected"></div></div><div id="rejectedValue" class="metric-value"></div></div>
+              <div class="metric-line"><strong>Implemented</strong><div class="track"><div id="proposedBar" class="bar proposed"></div></div><div id="proposedValue" class="metric-value"></div></div>
+            </div>
+            <p id="delta" class="delta"></p>
+            <div id="formula" class="callout" style="margin-top:16px"></div>
+          </div>
+        </div>
+        <div class="grid three" style="margin-top:14px">
+          <div class="card"><h3>512 × 512</h3><p><strong>F = 1 MiB.</strong> Plugin-owned immediate native remains 2 MiB. D3D12 is 2F + 3P.</p></div>
+          <div class="card"><h3>1024 × 1024</h3><p><strong>F = 4 MiB.</strong> Vulkan estimate is 20 MiB before, 16 MiB direct-mapped, and 24 MiB implemented when V = F.</p></div>
+          <div class="card"><h3>1920 × 1080</h3><p><strong>F = 7.91 MiB.</strong> Android GLES uses 4F = 31.64 MiB: Unity view, two mailbox slots, and RGBA scratch.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="platforms">
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Platform differences</div><h2>Same protocol, different storage</h2></div>
+          <p>All native paths share the two-slot CPU mailbox. Only storage retained after the backend call—and Android GLES format conversion—differs.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Path</th><th>Implemented consumption</th><th>CPU slot release</th><th>Before → rejected → implemented*</th><th>Platform-specific impact</th></tr></thead>
+            <tbody>
+              <tr><td><strong>D3D11</strong><br>Windows</td><td>Map dynamic texture, row copy from cacheable slot, unmap.</td><td>After <code>Unmap</code>.</td><td>2F → 3F → 2F <span class="tag same">restored</span></td><td>No GPU ring in plugin state; driver staging remains opaque.</td></tr>
+              <tr><td><strong>D3D12</strong><br>Windows</td><td>Sequential row copy into one of three mapped, padded upload-heap regions; command-list texture copy.</td><td>Immediately after CPU row copy.</td><td>2F+3P → 3P → 2F+3P <span class="tag special">cacheable raster</span></td><td>Each GPU region has its own Unity frame-fence value. Resource state is requested through Unity before recording.</td></tr>
+              <tr><td><strong>Windows OpenGL</strong></td><td><code>glTexSubImage2D</code> reads the stable cacheable slot.</td><td>When the GL call returns.</td><td>2F → 3F → 2F <span class="tag same">restored</span></td><td>Plugin-owned texture; desktop BGRA upload remains direct.</td></tr>
+              <tr><td><strong>Linux OpenGL</strong></td><td><code>glTexSubImage2D</code> reads the mailbox; persistent RGBA scratch is used if conversion is required.</td><td>When the GL call returns.</td><td>2F → 4F → 3F <span class="tag special">Unity view retained</span></td><td>Figures exclude the optional F conversion scratch from every column.</td></tr>
+              <tr><td><strong>Android OpenGL ES</strong></td><td>Convert mailbox BGRA into persistent RGBA scratch; upload into Unity-owned RGBA texture.</td><td>After conversion and <code>glTexSubImage2D</code>.</td><td>2F → 3F → 4F <span class="tag special">correctness path</span></td><td>Avoids dummy GL names, recursive framebuffer sampling, and Mali BGRA-to-RGBA upload rejection.</td></tr>
+              <tr><td><strong>Metal</strong><br>macOS/iOS</td><td><code>replaceRegion</code> consumes the cacheable CPU slot.</td><td>When <code>replaceRegion</code> returns.</td><td>2F → 3F → 2F <span class="tag same">restored</span></td><td>Driver-private transfer storage is excluded.</td></tr>
+              <tr><td><strong>Vulkan</strong><br>Windows/Linux/Android</td><td>One sequential memcpy into a free mapped transfer slot, flush if non-coherent, then <code>vkCmdCopyBufferToImage</code>.</td><td>Immediately after memcpy.</td><td>2F+3V → F+3V → 3F+3V <span class="tag special">Unity view retained</span></td><td>Three GPU slots retire independently by Unity safe-frame number. Retry preserves the ready CPU frame.</td></tr>
+              <tr><td><strong>Managed Apply / WebGL</strong></td><td>rlottie writes the Unity raw texture view; managed code calls <code>Texture2D.Apply()</code>.</td><td>No native mailbox acquired.</td><td>F → F → F <span class="tag none">unchanged</span></td><td>Fallback remains functional; WebGL shader mode also owns excluded GPU target storage.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fine" style="margin-top:10px">*F = tightly packed frame bytes. P = D3D12 footprint bytes per region. V = Vulkan allocation bytes per transfer slot. The Unity-owned Vulkan figures include its readable F-sized raw-data view retained for live managed fallback.</p>
+      </div>
+    </section>
+
+    <section id="impact">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Engineering impact</div><h2>What changed</h2></div><p>The public rendering behavior stays compatible; ownership, retry semantics, and backend storage changed internally.</p></div>
+        <div class="grid two">
+          <div class="card">
+            <h3>Shared core</h3>
+            <div class="steps">
+              <div class="step"><p>Two cacheable CPU slots carry dimensions, stride, version, storage, and <code>Free / Rendering / Ready / Uploading</code> ownership.</p></div>
+              <div class="step"><p>Sync and async rendering acquire a CPU slot. Managed Apply/WebGL routes return <code>ExternalBuffer</code> and keep their Unity-owned memory behavior.</p></div>
+              <div class="step"><p>The render thread claims the newest ready slot, coalesces stale ready work, and rechecks after clearing the queued flag.</p></div>
+              <div class="step"><p>Backend outcomes distinguish accepted work from retry. A missing D3D12 command context or full explicit ring restores <code>Ready</code> without losing a static frame.</p></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Behavioral contracts</h3>
+            <ul>
+              <li><strong>Backpressure:</strong> if both CPU slots are busy, skip/retry without allocating another frame buffer.</li>
+              <li><strong>Newest frame wins:</strong> a ready frame may be replaced before upload, but rendering and uploading slots are immutable.</li>
+              <li><strong>Explicit APIs:</strong> CPU ownership ends after the sequential ring copy; GPU ownership ends only at fence/safe-frame retirement.</li>
+              <li><strong>Texture ownership:</strong> plugin-owned native paths avoid a managed frame buffer. Unity-owned OpenGL/Vulkan paths retain their raw-data view only for live fallback continuity.</li>
+              <li><strong>Resize/restart:</strong> create a new pool, retire the old one only after workers and GPU references are safe.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="grid three" style="margin-top:14px">
+          <div class="card"><h3 class="gain">Rendering upside</h3><p>Publication becomes metadata-only, render/upload overlap is safe, and rlottie remains in cacheable memory. Immediate APIs have no extra copy; explicit APIs have one sequential copy.</p></div>
+          <div class="card"><h3>Expected visual result</h3><p>No intentional image-quality change. Same BGRA pixels, same sampled texture, and same frame-coalescing policy—only ownership and transfer staging change.</p></div>
+          <div class="card"><h3 class="risk">Main risks</h3><p>Retry lost wakeups, stale slot reuse, D3D12 state/fence mistakes, Vulkan safe-frame retirement, GLES channel conversion, and resize/dispose races.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="decision">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Architecture decision</div><h2>Why the hybrid design won</h2></div></div>
+        <div class="grid two">
+          <article class="card"><h3>Keep: two-slot cacheable mailbox</h3><p>It prevents publication overwrite, has no per-frame allocation, removes the old publication copy, and gives rlottie fast read/write memory.</p><span class="tag same">implemented CPU ownership</span></article>
+          <article class="card"><h3>Keep: explicit three-slot GPU rings</h3><p>They protect submitted D3D12/Vulkan copies until fence/safe-frame completion without forcing CPU rasterization to share GPU upload memory.</p><span class="tag same">implemented GPU ownership</span></article>
+        </div>
+        <div class="callout" style="margin-top:14px"><strong>Rejected:</strong> a single three-slot pool backed by mapped GPU memory conflated CPU and GPU lifetime. It minimized copies but maximized raster cost. The final architecture keeps the ownership benefit while placing each workload in the memory type it prefers.</div>
+      </div>
+    </section>
+
+    <section id="validation">
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Validation</div><h2>What passed, and what remains</h2></div></div>
+        <div class="grid three">
+          <div class="card"><h3>Windows</h3><p>Unity 2022.3 passed 14/14 rendered-player checks on D3D11, D3D12, OpenGL Core, and real native Vulkan. PlayMode passed 8/8. No D3D12 device removal or pool exhaustion occurred.</p></div>
+          <div class="card"><h3>Android Vulkan</h3><p>Samsung SM-N975F/Mali-G76 passed 14/14 at sustained 29–30 FPS (33.4–34.5 ms), with native Vulkan selected and no mailbox/ring exhaustion.</p></div>
+          <div class="card"><h3>Remaining breadth</h3><p>Continue Apple Metal, WebGL browser, multiple Android GPU vendors, Gamma/Linear, resize/restart, and supported Unity-version coverage. OpenGL Core's single startup GL error reproduces before this change.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">Source snapshot: <a href="texture-upload-platform-matrix.md">platform matrix and audit</a> · <a href="../src/UploadPipeline.cpp">current publication pipeline</a> · <a href="../src/InstanceRegistry.h">instance storage</a> · <a href="../src/VulkanBackend.cpp">Vulkan slots</a> · <a href="../src/D3D12Backend_win.cpp">D3D12 upload ring</a></div>
+  </footer>
+
+  <script>
+    const currentButton = document.getElementById('showCurrent');
+    const rejectedButton = document.getElementById('showRejected');
+    const proposedButton = document.getElementById('showProposed');
+    const currentFlow = document.getElementById('currentFlow');
+    const rejectedFlow = document.getElementById('rejectedFlow');
+    const proposedFlow = document.getElementById('proposedFlow');
+
+    function showFlow(selected) {
+      const isCurrent = selected === 'current';
+      const isRejected = selected === 'rejected';
+      const isProposed = selected === 'proposed';
+      currentFlow.classList.toggle('hidden', !isCurrent);
+      rejectedFlow.classList.toggle('hidden', !isRejected);
+      proposedFlow.classList.toggle('hidden', !isProposed);
+      currentButton.classList.toggle('active', isCurrent);
+      rejectedButton.classList.toggle('active', isRejected);
+      proposedButton.classList.toggle('active', isProposed);
+      currentButton.setAttribute('aria-pressed', String(isCurrent));
+      rejectedButton.setAttribute('aria-pressed', String(isRejected));
+      proposedButton.setAttribute('aria-pressed', String(isProposed));
+    }
+    currentButton.addEventListener('click', () => showFlow('current'));
+    rejectedButton.addEventListener('click', () => showFlow('rejected'));
+    proposedButton.addEventListener('click', () => showFlow('proposed'));
+    showFlow('proposed');
+
+    const fields = ['platform', 'width', 'height', 'instances', 'alignment'].map(id => document.getElementById(id));
+    const platform = fields[0];
+    const alignmentControl = fields[4];
+
+    function mib(bytes) { return `${(bytes / 1048576).toFixed(bytes < 10485760 ? 2 : 1)} MiB`; }
+    function updateMemory() {
+      const width = Math.max(1, Number(fields[1].value) || 1);
+      const height = Math.max(1, Number(fields[2].value) || 1);
+      const count = Math.max(1, Number(fields[3].value) || 1);
+      const alignment = Number(fields[4].value);
+      const F = width * height * 4;
+      const pitch = Math.ceil((width * 4) / alignment) * alignment;
+      const P = pitch * height;
+      let current = 2 * F;
+      let rejected = 3 * F;
+      let proposed = 2 * F;
+      let explanation = '<strong>Immediate native:</strong> before 2F, rejected direct pool 3F, implemented two-slot cacheable mailbox 2F.';
+      alignmentControl.disabled = platform.value !== 'd3d12';
+
+      if (platform.value === 'd3d12') {
+        current = 2 * F + 3 * P;
+        rejected = 3 * P;
+        proposed = 2 * F + 3 * P;
+        explanation = `<strong>D3D12:</strong> before and implemented use 2F cacheable CPU storage plus three padded upload regions (3P). Rejected direct rendering used only 3P. P uses ${pitch}-byte row pitch × ${height} rows.`;
+      } else if (platform.value === 'vulkan') {
+        current = 2 * F + 3 * F;
+        rejected = F + 3 * F;
+        proposed = 3 * F + 3 * F;
+        explanation = '<strong>Unity-owned Vulkan estimate:</strong> before 2F+3V; rejected F+3V; implemented 3F+3V. The extra retained F is Unity raw memory for live managed fallback. This estimate uses V=F.';
+      } else if (platform.value === 'linuxgl') {
+        current = 2 * F;
+        rejected = 4 * F;
+        proposed = 3 * F;
+        explanation = '<strong>Linux Unity-owned OpenGL:</strong> before 2F, rejected F Unity view + 3F direct CPU pool, implemented F Unity view + 2F mailbox. Add another F to every value when persistent BGRA-to-RGBA conversion scratch is required.';
+      } else if (platform.value === 'androidgles') {
+        current = 2 * F;
+        rejected = 3 * F;
+        proposed = 4 * F;
+        explanation = '<strong>Android GLES:</strong> before 2F, rejected three-slot CPU pool 3F, implemented 4F = Unity-owned RGBA raw view + two BGRA mailbox slots + persistent RGBA conversion scratch.';
+      } else if (platform.value === 'managed') {
+        current = F;
+        rejected = F;
+        proposed = F;
+        explanation = '<strong>Managed fallback:</strong> one Unity raw-data frame. It does not acquire native mailbox or upload-ring slots.';
+      } else if (platform.value === 'webgl') {
+        current = F;
+        rejected = F;
+        proposed = F;
+        explanation = '<strong>WebGL:</strong> unchanged CPU frame storage. Shader mode additionally owns GPU texture/render-target storage, excluded from this calculator.';
+      }
+
+      current *= count;
+      rejected *= count;
+      proposed *= count;
+      const max = Math.max(current, rejected, proposed, 1);
+      document.getElementById('currentBar').style.width = `${current / max * 100}%`;
+      document.getElementById('rejectedBar').style.width = `${rejected / max * 100}%`;
+      document.getElementById('proposedBar').style.width = `${proposed / max * 100}%`;
+      document.getElementById('currentValue').textContent = mib(current);
+      document.getElementById('rejectedValue').textContent = mib(rejected);
+      document.getElementById('proposedValue').textContent = mib(proposed);
+      const difference = proposed - current;
+      const word = difference > 0 ? 'increase' : difference < 0 ? 'decrease' : 'change';
+      document.getElementById('delta').innerHTML = `<strong>${mib(Math.abs(difference))} implemented-vs-before ${word}</strong> across ${count} active animation${count === 1 ? '' : 's'}; one tightly packed frame is ${mib(F)}.`;
+      document.getElementById('formula').innerHTML = explanation;
+    }
+    fields.forEach(field => field.addEventListener('input', updateMemory));
+    updateMemory();
+  </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+﻿"animation","mean_batch_ms_average","p95_batch_ms_average","mean_load_ms_average","renders_per_second_average"
+"A - Stitches","5.5514828125","8.156778125","7.1943390625","239.3590625"
+"B - Vector felt","6.097978125","8.80528125","6.373246875","207.81484375"
+"C - Hybrid felt PNG","6.2533109375","8.98576875","13.6953234375","221.43515625"

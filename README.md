@@ -1,7 +1,11 @@
 # Unity Lottie Animation Plugin
 ![GitHub release](https://img.shields.io/github/release/gindemit/unity-rlottie.svg)
-![Unity version](https://img.shields.io/badge/unity-2019.4%2B-green.svg)
+![Unity version](https://img.shields.io/badge/unity-2022.3+-green.svg)
 ![License](https://img.shields.io/github/license/gindemit/unity-rlottie.svg)
+
+> 🧪 **EXPERIMENTAL RELEASE AVAILABLE!**  
+> We need your help testing [v0.5.0-experimental.1](https://github.com/gindemit/unity-rlottie/releases/tag/0.5.0-experimental.1) which introduces native rendering features and WebGL support!  
+> This release moves texture updates to the native plugin layer for better performance. Please test and report any issues you encounter.
 
 Welcome to the **Unity Lottie Animation** plugin! This Unity library enables you to play Lottie animations as Texture2D in your Unity projects. It's a powerful and easy-to-use solution that leverages Samsung's [rlottie](https://github.com/Samsung/rlottie) library to bring smooth Lottie animations to your games and applications.
 
@@ -38,6 +42,19 @@ To install the Unity Lottie Animation to Texture2D plugin using the Unity Packag
 
 ## Quick Start
 
+### Native library contract
+
+Update the managed scripts and platform native libraries together. The managed
+code requires the current native API; missing libraries or exported functions
+are integration errors and must not be hidden with compatibility fallbacks.
+Contributors and subagents must follow this rule when changing native calls.
+Device/backend capability checks and recovery from reported upload failures
+remain part of normal rendering behavior.
+
+iOS uses native Metal rendering and polls the pending-upload count through
+`__Internal`, just like other native platforms. WebGL has a separate upload path
+and does not call that queue query.
+
 The `LottiePlugin.UI` namespace includes a `AnimatedImage` class which allows you to use Lottie animations as `RawImage` in your Unity game.
 Here are the steps to use the `AnimatedImage` class in your Unity project:
 
@@ -69,6 +86,24 @@ Here are the steps to use the `AnimatedImage` class in your Unity project:
     animatedImage.Stop();
     ```
 And that's it! You are now able to use Lottie animations in your Unity projects using the `AnimatedImage` class.
+
+## Logging
+
+The plugin logs warnings and errors by default. To change the global native log
+level at runtime, call:
+
+```csharp
+LottiePlugin.LottieAnimation.SetGlobalLogLevel(LottiePlugin.LottieLogLevel.Info);
+```
+
+Choose `Info` for diagnostic messages, `Error` for errors only, or `None` to
+silence native logging. This works with the native libraries supplied by the
+plugin; no native rebuild is needed. The global setting controls messages
+without a specific animation instance, including texture upload messages.
+For an individual animation, set `LottieAnimationOptions.LogLevel` when loading
+it or change its `LottieAnimation.LogLevel` property later. The `AnimatedImage`
+and `AnimatedButton` components also expose an individual Log Level setting in
+the Inspector.
 
 ## Example
 
@@ -116,6 +151,13 @@ Check out the 'Scene UI' Sample in Unity Package manager.
 8. Hit play in Unity editor
 
 https://github.com/gindemit/unity-rlottie/assets/5675979/3301d00e-fc9e-49c0-bc7f-7408f1f72ce4
+
+## Documentation
+
+* [Texture upload paths and Vulkan native-upload analysis](docs/texture-upload-platform-matrix.md)
+* [Markers, CPU rasterization, and shared frame caches](docs/markers-and-shared-frame-cache.md)
+* [Runtime fill/stroke color overrides and semantic palette slots](docs/runtime-color-overrides.md)
+* [Marker/cache implementation validation (2026-09-11)](docs/marker-frame-cache-validation-2026-09-11.md)
 
 ## Support
 

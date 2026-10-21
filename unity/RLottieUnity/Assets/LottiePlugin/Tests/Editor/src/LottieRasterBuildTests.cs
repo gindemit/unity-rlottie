@@ -1,0 +1,60 @@
+using System;
+using System.IO;
+using LottiePlugin.Editor;
+using NUnit.Framework;
+using UnityEditor;
+
+namespace LottiePlugin.Tests.Editor
+{
+    public sealed class LottieRasterBuildTests
+    {
+        [Test]
+        public void ParallelThenSerialRestoresImporterAndRemovesOnlyOwnedSidecars()
+        {
+            string path = AssetImporter.GetAtPath("Packages/com.gindemit.rlottie/Plugins/WebGL/LottieRaster.jslib") != null
+                ? "Packages/com.gindemit.rlottie/Plugins/WebGL/LottieRaster.jslib" : "Assets/LottiePlugin/Plugins/WebGL/LottieRaster.jslib";
+            var importer = (PluginImporter)AssetImporter.GetAtPath(path);
+            bool before = importer.GetCompatibleWithPlatform(BuildTarget.WebGL);
+            string output = Path.Combine(Path.GetTempPath(), "lottie-raster-build-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                using (var parallel = new LottieRasterBuildScope(BuildTarget.WebGL, true))
+                {
+#if UNITY_2021_1_OR_NEWER && !UNITY_2022_1_OR_NEWER || UNITY_2019
+                    Assert.IsFalse(parallel.BrowserWorkersIncluded);
+#else
+                    Assert.IsTrue(parallel.BrowserWorkersIncluded);
+                    var staged = (PluginImporter)AssetImporter.GetAtPath("Assets/LottiePlugin.GeneratedRaster/LottieRaster.jslib");
+                    Assert.IsNotNull(staged);
+                    Assert.IsTrue(staged.GetCompatibleWithPlatform(BuildTarget.WebGL));
+                    Assert.IsFalse(staged.GetCompatibleWithAnyPlatform());
+                    Assert.AreEqual(File.ReadAllText(path), File.ReadAllText(staged.assetPath));
+                    File.WriteAllText("Assets/LottiePlugin.GeneratedRaster/unrelated.txt", "preserve");
+                    parallel.CopyTo(output);
+                    Assert.IsTrue(File.Exists(Path.Combine(output, "LottieRaster/raster.wasm")));
+                    File.WriteAllText(Path.Combine(output, "LottieRaster/unrelated.txt"), "preserve");
+#endif
+                }
+                Assert.AreEqual(before, importer.GetCompatibleWithPlatform(BuildTarget.WebGL));
+#if !(UNITY_2021_1_OR_NEWER && !UNITY_2022_1_OR_NEWER) && !UNITY_2019
+                Assert.IsNull(AssetImporter.GetAtPath("Assets/LottiePlugin.GeneratedRaster/LottieRaster.jslib"));
+                Assert.AreEqual("preserve", File.ReadAllText("Assets/LottiePlugin.GeneratedRaster/unrelated.txt"));
+                File.Delete("Assets/LottiePlugin.GeneratedRaster/unrelated.txt");
+#endif
+                using (var serial = new LottieRasterBuildScope(BuildTarget.WebGL, false))
+                {
+                    Assert.IsFalse(serial.BrowserWorkersIncluded);
+                    Assert.IsFalse(importer.GetCompatibleWithPlatform(BuildTarget.WebGL));
+                    serial.CopyTo(output);
+                }
+                Assert.AreEqual(before, importer.GetCompatibleWithPlatform(BuildTarget.WebGL));
+                Assert.IsFalse(Directory.Exists("Assets/LottiePlugin.GeneratedRaster"));
+                Assert.IsFalse(File.Exists(Path.Combine(output, "LottieRaster/raster.wasm")));
+#if !(UNITY_2021_1_OR_NEWER && !UNITY_2022_1_OR_NEWER) && !UNITY_2019
+                Assert.AreEqual("preserve", File.ReadAllText(Path.Combine(output, "LottieRaster/unrelated.txt")));
+#endif
+            }
+            finally { if (Directory.Exists(output)) Directory.Delete(output, true); }
+        }
+    }
+}

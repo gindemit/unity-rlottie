@@ -1,4 +1,3 @@
-using System.IO;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,30 +17,27 @@ namespace LottiePlugin.Sample.SceneUI.UI
 
         private LottiePlugin.LottieAnimation _lottieAnimation;
         private bool _ignoreSliderCallback;
-        private string[] _animationPaths;
+        private TextAsset[] _animations;
 
-        internal void Init(string[] animationPaths, string[] animations)
+        internal void Init(TextAsset[] animations)
         {
-            if (animationPaths == null ||
-                animations == null ||
-                animations.Length != animationPaths.Length)
+            if (animations == null)
             {
-                throw new System.ArgumentException(nameof(animationPaths));
+                throw new System.ArgumentException(nameof(animations));
             }
-            _animationPaths = animationPaths;
+            _animations = animations;
             _animationDropdown.onValueChanged.AddListener(OnAnimationDropdownValueChanged);
             _playPositionSlider.onValueChanged.AddListener(OnPlayPositionSliderValueChanged);
             _playPauseButton.OnClick.AddListener(OnPlayPauseButtonClick);
             _nextAnimationButton.OnClick.AddListener(OnNextAnimationClick);
-            OnAnimationDropdownValueChanged(0);
 
-            TMP_Dropdown.OptionData[] options = new TMP_Dropdown.OptionData[animations.Length];
             _animationDropdown.options.Clear();
             for (int i = 0; i < animations.Length; ++i)
             {
                 _animationDropdown.options.Add(
-                    new TMP_Dropdown.OptionData(animations[i]));
+                    new TMP_Dropdown.OptionData(animations[i].name));
             }
+            OnAnimationDropdownValueChanged(0);
     }
         public void Dispose()
         {
@@ -74,13 +70,13 @@ namespace LottiePlugin.Sample.SceneUI.UI
 
         private void OnAnimationDropdownValueChanged(int newValue)
         {
-            string targetFilePath = _animationPaths[newValue];
+            TextAsset animationAsset = _animations[newValue];
             if (_lottieAnimation != null)
             {
                 _lottieAnimation.Dispose();
                 _lottieAnimation = null;
             }
-            _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonFile(targetFilePath, 512, 512);
+            _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonData(animationAsset.text, string.Empty, 512, 512);
             _animationImage.texture = _lottieAnimation.Texture;
             _frameRateText.text = _lottieAnimation.FrameRate.ToString();
             _totalFramesCountText.text = _lottieAnimation.TotalFramesCount.ToString();

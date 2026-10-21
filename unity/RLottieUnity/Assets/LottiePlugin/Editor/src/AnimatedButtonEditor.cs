@@ -20,6 +20,7 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty _ignoreInputWhileAnimatingProperty;
         private SerializedProperty _onClickProperty;
         private SerializedProperty _statesProperty;
+        private SerializedProperty _logLevel;
         //Selectable
         private SerializedProperty m_InteractableProperty;
         private SerializedProperty m_NavigationProperty;
@@ -43,6 +44,7 @@ namespace LottiePlugin.UI.Editor
             _ignoreInputWhileAnimatingProperty = serializedObject.FindProperty("_ignoreInputWhileAnimating");
             _onClickProperty = serializedObject.FindProperty("_onClick");
             _statesProperty = serializedObject.FindProperty("_states");
+            _logLevel = serializedObject.FindProperty("_logLevel");
 
             m_InteractableProperty = serializedObject.FindProperty("m_Interactable");
             m_NavigationProperty = serializedObject.FindProperty("m_Navigation");
@@ -141,6 +143,8 @@ namespace LottiePlugin.UI.Editor
             {
                 EditorGUILayout.HelpBox("You must have a target graphic set in order to use the animated button.", MessageType.Error);
             }
+            EditorGUILayout.Space();
+            EditorGUILayout.PropertyField(_logLevel, new GUIContent("Log Level", "Controls verbosity of native plugin logging. Warning: only errors and warnings. Info: all messages including debug info."));
             EditorGUILayout.Space();
             _statesList.DoLayoutList();
             EditorGUILayout.Space();

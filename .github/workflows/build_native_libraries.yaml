@@ -2,18 +2,39 @@ name: Build and Test
 
 on:
   push:
-    branches: [dev]
+    branches:
+      - dev
+      - codex/remove-texture.apply-and-move-updates-to-native
     paths:
+      - '.github/workflows/build_native_libraries.yaml'
       - 'dependency/**'
       - 'projects/**'
       - 'src/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/**'
+      - 'scripts/build-raster-worker.py'
+      - 'scripts/RasterWorker/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFrameCache.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFramePreparationPool.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieRasterBuildScope.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieWebGLArchiveStager.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/LottieRaster.jslib*'
   pull_request:
-    branches: [dev]
+    branches:
+      - dev
+      - codex/remove-texture.apply-and-move-updates-to-native
     paths:
+      - '.github/workflows/build_native_libraries.yaml'
       - 'dependency/**'
       - 'projects/**'
       - 'src/**'
-
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/**'
+      - 'scripts/build-raster-worker.py'
+      - 'scripts/RasterWorker/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFrameCache.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/src/LottieFramePreparationPool.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieRasterBuildScope.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/LottieWebGLArchiveStager.cs'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/LottieRaster.jslib*'
 jobs:
   build_windows:
     runs-on: windows-latest
@@ -23,11 +44,18 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Checkout Vulkan headers
+        uses: actions/checkout@v4
+        with:
+          repository: KhronosGroup/Vulkan-Headers
+          ref: v1.3.296
+          path: dependency/Vulkan-Headers
+
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./build_x86    -A Win32 -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
-          cmake -S . -B ./build_x86_64 -A x64   -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON
+          cmake -S . -B ./build_x86    -A Win32 -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="${{ github.workspace }}/dependency/unity-pluginapi"
+          cmake -S . -B ./build_x86_64 -A x64   -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="${{ github.workspace }}/dependency/unity-pluginapi"
           cmake --build ./build_x86 --config Release
           cmake --build ./build_x86_64 --config Release
 
@@ -53,10 +81,8 @@ jobs:
           java-version: '17'
           distribution: 'adopt'
 
-      - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v1.14
-        with:
-          cmake-version: '3.25.2'
+      - name: Verify runner CMake
+        run: cmake --version
 
       - name: Set execution permissions for gradlew
         run: chmod +x projects/AndroidStudio/gradlew
@@ -88,10 +114,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v1.14
-        with:
-          cmake-version: '3.29.6'
+      - name: Verify runner CMake
+        run: cmake --version
 
       - name: Build
         shell: bash
@@ -100,15 +124,15 @@ jobs:
           cd projects/CMake
 
           # 1) Build universal (optional, kept because it’s already there)
-          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          cmake -S . -B ./buildOSX -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildOSX --config Release 
 
           # 2) Build arm64 only
-          cmake -S . -B ./buildOSX_arm64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake -S . -B ./buildOSX_arm64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=arm64 -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildOSX_arm64 --config Release
 
           # 3) Build x86_64 only
-          cmake -S . -B ./buildOSX_x86_64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=x86_64
+          cmake -S . -B ./buildOSX_x86_64 -G Xcode -DRLOTTIE_OSX=1 -DCMAKE_OSX_ARCHITECTURES=x86_64 -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildOSX_x86_64 --config Release
 
           # 4) Find actual outputs produced by Xcode/CMake
@@ -158,15 +182,13 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v1.14
-        with:
-          cmake-version: '3.29.6'
+      - name: Verify runner CMake
+        run: cmake --version
 
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1
+          cmake -S . -B ./buildIOS -G Xcode -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake -DPLATFORM=OS64 -DRLOTTIE_IOS=1 -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildIOS --config Release --target LottiePlugin
           brew install tree
           tree ../../out
@@ -187,10 +209,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v1.14
-        with:
-          cmake-version: '3.29.6'
+      - name: Verify runner CMake
+        run: cmake --version
 
       - name: Build (iOS Simulator x86_64)
         shell: bash
@@ -203,7 +223,9 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=../../dependency/cmake-ios-toolchain/ios.toolchain.cmake \
             -DPLATFORM=SIMULATOR64 \
             -DARCHS=x86_64 \
-            -DRLOTTIE_IOS=1
+            -DRLOTTIE_IOS=1 \
+            -DUSE_UNITY_PLUGINAPI=ON \
+            -DUNITY_PLUGINAPI_DIR="$GITHUB_WORKSPACE/dependency/unity-pluginapi"
           cmake --build ./buildIOSSim_x64 --config Release --target LottiePlugin
           brew install tree
           tree ../../out || true
@@ -225,22 +247,23 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install CMake
-        run: sudo apt-get install cmake
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential mesa-common-dev libgl1-mesa-dev tree
 
       - name: Build
         run: |
           cd projects/CMake
-          cmake -S . -B ./buildLinux -G "Unix Makefiles" -DRLOTTIE_LINUX=1
+          cmake -S . -B ./buildLinux -G "Unix Makefiles" -DRLOTTIE_LINUX=1 -DCMAKE_BUILD_TYPE=Release -DUSE_UNITY_PLUGINAPI=ON -DUNITY_PLUGINAPI_DIR="${GITHUB_WORKSPACE}/dependency/unity-pluginapi"
           cmake --build ./buildLinux --config Release
-          tree ../../out
+          tree ../../out || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
-          path: |
-            out/Plugins/Linux/x86_64/libLottiePlugin.so
+          path: out/Release/Plugins/Linux/x86_64/
 
   build_webgl:
     runs-on: ubuntu-latest
@@ -254,12 +277,12 @@ jobs:
         run: |
           sed -i '/add_subdirectory[[:space:]]*(example)/d' dependency/rlottie/CMakeLists.txt
 
-      - name: Install Emscripten 3.1.39
+      - name: Install Emscripten 3.1.8
         run: |
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk
-          ./emsdk install 3.1.39
-          ./emsdk activate 3.1.39
+          ./emsdk install 3.1.8
+          ./emsdk activate 3.1.8
           source ./emsdk_env.sh
           emcc -v || true
 
@@ -287,6 +310,33 @@ jobs:
           path: |
             out/Plugins/WebGL/libLottiePlugin.a
             out/Plugins/WebGL/librlottie.a
+
+  build_raster_workers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Link sidecars from the ABI-selected delivered archives
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          for entry in Legacy:3.1.8 WasmExceptions:4.0.20; do
+            variant=${entry%%:*}
+            version=${entry##*:}
+            emsdk/emsdk install "$version"
+            emsdk/emsdk activate "$version"
+            source emsdk/emsdk_env.sh
+            flags=()
+            if [ "$variant" = WasmExceptions ]; then flags+=(--wasm-exceptions); fi
+            python3 scripts/build-raster-worker.py --archive "unity/RLottieUnity/Assets/LottiePlugin/Editor/WebGLArchives/$variant/librlottie.a.bytes" --emcc emsdk/upstream/emscripten/emcc --output "out/RasterWorkers/$variant/RasterWorker~" "${flags[@]}"
+          done
+          node --test scripts/test-raster-bridge.mjs scripts/test-raster-content.mjs
+        env:
+          LOTTIE_WORKER_ROOT: ${{ github.workspace }}/out/RasterWorkers/WasmExceptions/RasterWorker~
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LottieRasterWorkers
+          path: out/RasterWorkers/
 
   # run_tests_and_build_unity_ubuntulatest:
   #   needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl]
@@ -348,7 +398,7 @@ jobs:
   #         customParameters: -logFile -
             
   commit_and_push_native_libraries:
-    needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl, build_ios_simulator_x64]
+    needs: [build_windows, build_android, build_macos, build_ios, build_linux, build_webgl, build_ios_simulator_x64, build_raster_workers]
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'push' ||
@@ -401,7 +451,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: LottiePluginLinuxArtifacts
-          path: out/Plugins/Linux
+          path: out/Plugins/Linux/x86_64
 
       - name: Download artifacts webgl
         uses: actions/download-artifact@v4
@@ -409,10 +459,16 @@ jobs:
           name: LottiePluginWebGLArtifacts
           path: out/Plugins/WebGL
 
+      - name: Download raster workers
+        uses: actions/download-artifact@v4
+        with:
+          name: LottieRasterWorkers
+          path: out/RasterWorkers
+
       - name: Commit and push native libraries
         env:
           MY_SECRET: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || (github.ref_name == 'dev' && 'development' || github.ref_name) }}
+          TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           TARGET_REPOSITORY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
         run: |
           cp -f out/Plugins/Windows/x86/LottiePlugin.dll unity/RLottieUnity/Assets/LottiePlugin/Plugins/Windows/x86/LottiePlugin.dll
@@ -428,21 +484,42 @@ jobs:
           mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64
           cp -f out/Plugins/iOS/x86_64/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64/libLottiePlugin.a
           cp -f out/Plugins/iOS/x86_64/librlottie.a     unity/RLottieUnity/Assets/LottiePlugin/Plugins/iOS/x86_64/librlottie.a
-          cp -f out/Plugins/Linux/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
+          cp -f out/Plugins/Linux/x86_64/libLottiePlugin.so unity/RLottieUnity/Assets/LottiePlugin/Plugins/Linux/x86_64/libLottiePlugin.so
           mkdir -p unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL
           cp -f out/Plugins/WebGL/libLottiePlugin.a unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/libLottiePlugin.a
           cp -f out/Plugins/WebGL/librlottie.a     unity/RLottieUnity/Assets/LottiePlugin/Plugins/WebGL/librlottie.a
+          for variant in Legacy WasmExceptions; do
+            mkdir -p "unity/RLottieUnity/Assets/LottiePlugin/Editor/WebGLArchives/$variant/RasterWorker~"
+            cp -f "out/RasterWorkers/$variant/RasterWorker~"/* "unity/RLottieUnity/Assets/LottiePlugin/Editor/WebGLArchives/$variant/RasterWorker~/"
+          done
+          release_tag="0.5.0-dev.${{ github.run_number }}"
+          python3 - "$release_tag" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          path = Path("unity/RLottieUnity/Assets/LottiePlugin/package.json")
+          data = json.loads(path.read_text())
+          data["version"] = sys.argv[1]
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
           git add .
           git status
           git config --global user.email "konstantin.gindemit@gmail.com"
           git config --global user.name "Konstantin Gindemit"
           git remote -v
-          git commit --allow-empty -m "[skip ci] New native libraries version: 0.5.0-dev.${{ github.run_number }}"
-          git tag -a 0.5.0-dev.${{ github.run_number }} -m "[skip ci] New native libraries version: 0.5.0-dev.${{ github.run_number }}"
+          # Let the generated-binary commit trigger the platform matrix. Its
+          # concurrency group cancels the source-commit run that still embeds
+          # the previous native libraries, while this workflow's path filter
+          # prevents a native-build recursion.
+          git commit --allow-empty -m "New native libraries version: ${release_tag}"
+          if git rev-parse --verify --quiet "refs/tags/${release_tag}" >/dev/null; then
+            echo "::warning::Tag ${release_tag} already exists; leaving it unchanged."
+          else
+            git tag -a "${release_tag}" -m "New native libraries version: ${release_tag}"
+          fi
           git config -l | grep 'http\..*\.extraheader' | cut -d= -f1 | xargs -L1 git config --unset-all
           echo "Trying to push..."
           git remote set-url origin https://token:$MY_SECRET@github.com/${TARGET_REPOSITORY}.git
           echo "Pushing to ${TARGET_REPOSITORY}:${TARGET_BRANCH}"
           git push origin HEAD:${TARGET_BRANCH}
           git push origin --tags
-

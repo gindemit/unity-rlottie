@@ -7,21 +7,25 @@ namespace LottiePlugin.Support
         public static byte[] LoadFileFromStreamingAssets(string streamingAssetsFilePath)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            var loadingRequest = UnityEngine.Networking.UnityWebRequest.Get(streamingAssetsFilePath);
-            loadingRequest.SendWebRequest();
-            while (!loadingRequest.isDone)
+            using (var loadingRequest = UnityEngine.Networking.UnityWebRequest.Get(streamingAssetsFilePath))
             {
-                if (loadingRequest.isNetworkError)
+                loadingRequest.SendWebRequest();
+                while (!loadingRequest.isDone)
                 {
-                    break;
                 }
+
+#if UNITY_2020_2_OR_NEWER
+                bool failed = loadingRequest.result != UnityEngine.Networking.UnityWebRequest.Result.Success;
+#else
+                bool failed = loadingRequest.isNetworkError || loadingRequest.isHttpError;
+#endif
+                if (failed)
+                {
+                    throw new System.InvalidOperationException(
+                        $"Failed to load file at path \"{streamingAssetsFilePath}\", responseCode: \"{loadingRequest.responseCode}\", error: \"{loadingRequest.error}\"");
+                }
+                return loadingRequest.downloadHandler.data;
             }
-            if (!loadingRequest.isDone)
-            {
-                throw new System.InvalidOperationException(
-                    $"Failed to load file at path \"{streamingAssetsFilePath}\", responseCode: \"{loadingRequest.responseCode}\"");
-            }
-            return loadingRequest.downloadHandler.data;
 #else
             return File.ReadAllBytes(streamingAssetsFilePath);
 #endif
