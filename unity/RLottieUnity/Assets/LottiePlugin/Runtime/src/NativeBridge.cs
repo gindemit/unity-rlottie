@@ -51,37 +51,23 @@ namespace LottiePlugin
             if (s_Registered)
                 return;
 
-            try
-            {
-                IntPtr loadFunc = lottie_get_plugin_load_func();
-                IntPtr unloadFunc = lottie_get_plugin_unload_func();
-                
-                if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
-                    Debug.Log($"[Lottie] Registering iOS plugin: loadFunc={loadFunc}, unloadFunc={unloadFunc}");
-                
-                UnityRegisterRenderingPluginV5(loadFunc, unloadFunc);
-                s_Registered = true;
-                
-                if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
-                    Debug.Log("[Lottie] iOS plugin registered successfully");
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[Lottie] Failed to register iOS plugin: {ex.Message}");
-            }
+            IntPtr loadFunc = lottie_get_plugin_load_func();
+            IntPtr unloadFunc = lottie_get_plugin_unload_func();
+
+            if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                Debug.Log($"[Lottie] Registering iOS plugin: loadFunc={loadFunc}, unloadFunc={unloadFunc}");
+
+            UnityRegisterRenderingPluginV5(loadFunc, unloadFunc);
+            s_Registered = true;
+
+            if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                Debug.Log("[Lottie] iOS plugin registered successfully");
 #elif UNITY_WEBGL && !UNITY_EDITOR
             if (s_WebGLRegistered)
                 return;
 
-            try
-            {
-                NativeBridge.LottieRegisterWebGLRenderingPlugin();
-                s_WebGLRegistered = true;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[LottiePlugin] WebGL rendering plug-in registration failed; Texture2D.Apply will be used ({ex.GetType().Name})");
-            }
+            NativeBridge.LottieRegisterWebGLRenderingPlugin();
+            s_WebGLRegistered = true;
 #endif
         }
     }
@@ -165,10 +151,8 @@ namespace LottiePlugin
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_render_event_func")]
         internal static extern IntPtr LottieGetRenderEventFunc();
 
-#if (!UNITY_WEBGL && !UNITY_IOS) || UNITY_EDITOR
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_pending_upload_count")]
         internal static extern int LottieGetPendingUploadCount();
-#endif
 #endif
 
 #if UNITY_WEBGL && !UNITY_EDITOR
