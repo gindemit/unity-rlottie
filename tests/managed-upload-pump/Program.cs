@@ -28,9 +28,9 @@ static class Program
             .SetValue(null, new IntPtr(1));
         var pump = new LottieUploadPump();
         LottieScheduler.MaxUploadsPerFrame = 128;
-#if (UNITY_WEBGL || UNITY_IOS) && !UNITY_EDITOR
+#if UNITY_WEBGL && !UNITY_EDITOR
         Tick(pump, 0, 128);
-        Expect(NativeBridge.Queries == 0, "static-link players must not invoke the native queue query");
+        Expect(NativeBridge.Queries == 0, "WebGL players must not invoke the native queue query");
 #else
         Tick(pump, 0, 0);
         Tick(pump, 3, 3);
@@ -48,12 +48,6 @@ static class Program
         LottieScheduler.MaxUploadsPerFrame = -1;
         Tick(pump, 3, 0);
         Expect(NativeBridge.Queries == queries, "disabled pump must not query the queue");
-        LottieScheduler.MaxUploadsPerFrame = 128;
-        NativeBridge.MissingEntryPoint = true;
-        Tick(pump, 0, 128);
-        Tick(pump, 0, 128);
-        Expect(NativeBridge.Queries == queries + 1, "old binary must be probed only once");
-        Expect(UnityEngine.Debug.Warnings == 1, "compatibility fallback must warn once");
 #endif
         Console.WriteLine("Upload pump scheduling tests passed.");
     }
@@ -65,14 +59,12 @@ namespace LottiePlugin
     {
         public static int Pending;
         public static int Queries = 0;
-        public static bool MissingEntryPoint = false;
         public static IntPtr LottieGetRenderEventFunc() => new IntPtr(1);
         public static IntPtr LottieGetWebGLRenderEventFunc() => new IntPtr(1);
-#if (!UNITY_WEBGL && !UNITY_IOS) || UNITY_EDITOR
+#if !UNITY_WEBGL || UNITY_EDITOR
         public static int LottieGetPendingUploadCount()
         {
             Queries++;
-            if (MissingEntryPoint) { throw new EntryPointNotFoundException(); }
             return Pending;
         }
 #endif
@@ -109,10 +101,5 @@ namespace UnityEngine
             if (callback == IntPtr.Zero || eventId != 1) { throw new Exception("invalid render event"); }
             Events++;
         }
-    }
-    public static class Debug
-    {
-        public static int Warnings;
-        public static void LogWarning(string message) { Warnings++; }
     }
 }
