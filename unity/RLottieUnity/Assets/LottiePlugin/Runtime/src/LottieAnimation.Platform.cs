@@ -30,32 +30,21 @@ namespace LottiePlugin
 
         private bool TryRegisterUnityOwnedWebGLTexture(uint width, uint height)
         {
-            try
+            NativeBridge.LottieRegisterWebGLRenderingPlugin();
+            _nativeTexturePtr = Texture.GetNativeTexturePtr();
+            bool registered = _nativeTexturePtr != IntPtr.Zero &&
+                NativeBridge.LottieRegisterUnityWebGLTexture(
+                    _animationWrapperIntPtr,
+                    _nativeTexturePtr,
+                    (int)width,
+                    (int)height) != 0;
+            if (registered && !sWebGLNativeUploadLogged)
             {
-                NativeBridge.LottieRegisterWebGLRenderingPlugin();
-                _nativeTexturePtr = Texture.GetNativeTexturePtr();
-                bool registered = _nativeTexturePtr != IntPtr.Zero &&
-                    NativeBridge.LottieRegisterUnityWebGLTexture(
-                        _animationWrapperIntPtr,
-                        _nativeTexturePtr,
-                        (int)width,
-                        (int)height) != 0;
-                if (registered && !sWebGLNativeUploadLogged)
-                {
-                    sWebGLNativeUploadLogged = true;
-                    if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
-                        Debug.Log("[LottiePlugin] Unity-owned WebGL native upload enabled");
-                }
-                return registered;
+                sWebGLNativeUploadLogged = true;
+                if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                    Debug.Log("[LottiePlugin] Unity-owned WebGL native upload enabled");
             }
-            catch (EntryPointNotFoundException)
-            {
-                return false;
-            }
-            catch (DllNotFoundException)
-            {
-                return false;
-            }
+            return registered;
         }
 
         private void UseWebGLManagedTextureUploadFallback(string reason)
@@ -174,27 +163,15 @@ namespace LottiePlugin
 #if !(UNITY_WEBGL && !UNITY_EDITOR)
         private bool TryEnableNativeVulkanUpload()
         {
-            try
+            if (NativeBridge.LottieSupportsNativeVulkanUpload() != 0)
             {
-                if (NativeBridge.LottieSupportsNativeVulkanUpload() != 0)
+                if (!sVulkanNativeUploadLogged)
                 {
-                    if (!sVulkanNativeUploadLogged)
-                    {
-                        sVulkanNativeUploadLogged = true;
-                        if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
-                            Debug.Log("[LottiePlugin] Vulkan native upload enabled");
-                    }
-                    return true;
+                    sVulkanNativeUploadLogged = true;
+                    if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                        Debug.Log("[LottiePlugin] Vulkan native upload enabled");
                 }
-            }
-            catch (EntryPointNotFoundException)
-            {
-                // Older native plugins do not expose Vulkan upload capability.
-            }
-            catch (DllNotFoundException)
-            {
-                // Preserve the existing managed upload path when the native
-                // plugin is not available yet (for example during import).
+                return true;
             }
 
             LogVulkanApplyFallback();
@@ -231,38 +208,27 @@ namespace LottiePlugin
                 return false;
             }
 
-            try
+            if (_usesUnityOwnedOpenGLTexture)
             {
-                if (_usesUnityOwnedOpenGLTexture)
-                {
-                    bool registered = NativeBridge.LottieRegisterUnityOpenGLTexture(
-                        _animationWrapperIntPtr,
-                        _nativeTexturePtr,
-                        (int)width,
-                        (int)height) != 0;
-                    if (registered && !sOpenGLNativeUploadLogged)
-                    {
-                        sOpenGLNativeUploadLogged = true;
-                        if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
-                            Debug.Log("[LottiePlugin] Unity-owned OpenGL native upload enabled");
-                    }
-                    return registered;
-                }
-
-                return NativeBridge.LottieRegisterUnityVulkanTexture(
+                bool registered = NativeBridge.LottieRegisterUnityOpenGLTexture(
                     _animationWrapperIntPtr,
                     _nativeTexturePtr,
                     (int)width,
                     (int)height) != 0;
+                if (registered && !sOpenGLNativeUploadLogged)
+                {
+                    sOpenGLNativeUploadLogged = true;
+                    if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
+                        Debug.Log("[LottiePlugin] Unity-owned OpenGL native upload enabled");
+                }
+                return registered;
             }
-            catch (EntryPointNotFoundException)
-            {
-                return false;
-            }
-            catch (DllNotFoundException)
-            {
-                return false;
-            }
+
+            return NativeBridge.LottieRegisterUnityVulkanTexture(
+                _animationWrapperIntPtr,
+                _nativeTexturePtr,
+                (int)width,
+                (int)height) != 0;
         }
 #endif
 
@@ -603,19 +569,7 @@ namespace LottiePlugin
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             LottieUploadPump.EnsureInstance();
-            int uploadAvailable;
-            try
-            {
-                uploadAvailable = NativeBridge.LottieIsWebGLUploadAvailable(_animationWrapperIntPtr);
-            }
-            catch (EntryPointNotFoundException)
-            {
-                uploadAvailable = 0;
-            }
-            catch (DllNotFoundException)
-            {
-                uploadAvailable = 0;
-            }
+            int uploadAvailable = NativeBridge.LottieIsWebGLUploadAvailable(_animationWrapperIntPtr);
 
             if (uploadAvailable == 0)
             {
@@ -652,19 +606,7 @@ namespace LottiePlugin
 
             if (_usesUnityOwnedOpenGLTexture)
             {
-                int uploadAvailable;
-                try
-                {
-                    uploadAvailable = NativeBridge.LottieIsOpenGLUploadAvailable(_animationWrapperIntPtr);
-                }
-                catch (EntryPointNotFoundException)
-                {
-                    uploadAvailable = 0;
-                }
-                catch (DllNotFoundException)
-                {
-                    uploadAvailable = 0;
-                }
+                int uploadAvailable = NativeBridge.LottieIsOpenGLUploadAvailable(_animationWrapperIntPtr);
 
                 if (uploadAvailable == 0)
                 {
