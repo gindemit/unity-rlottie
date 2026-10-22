@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace LottiePlugin
@@ -20,25 +21,21 @@ namespace LottiePlugin
     /// <summary>Validated standard Lottie markers and deterministic clip-to-frame mapping.</summary>
     public sealed class LottieMarkerSet
     {
-        private readonly Dictionary<string, LottieMarker> _byName;
+        private static readonly ConditionalWeakTable<string, ParsedDocument> sParsed =
+            new ConditionalWeakTable<string, ParsedDocument>();
+        private static readonly object sParsedLock = new object();
+
+        private readonly ParsedDocument _document;
         private readonly Func<bool> _ownerDisposed;
 
-        public double FrameRate { get; private set; }
-        public double TimelineInPoint { get; private set; }
-        public IReadOnlyList<LottieMarker> Markers { get; private set; }
+        public double FrameRate { get { return _document.FrameRate; } }
+        public double TimelineInPoint { get { return _document.InPoint; } }
+        public IReadOnlyList<LottieMarker> Markers { get { return _document.Markers; } }
 
-        private LottieMarkerSet(double frameRate, double inPoint, List<LottieMarker> markers,
-            Func<bool> ownerDisposed)
+        private LottieMarkerSet(ParsedDocument document, Func<bool> ownerDisposed)
         {
-            FrameRate = frameRate;
-            TimelineInPoint = inPoint;
-            Markers = new ReadOnlyCollection<LottieMarker>(markers);
+            _document = document;
             _ownerDisposed = ownerDisposed;
-            _byName = new Dictionary<string, LottieMarker>(StringComparer.Ordinal);
-            foreach (LottieMarker marker in markers)
-            {
-                _byName.Add(marker.Name, marker);
-            }
         }
 
         public static LottieMarkerSet Parse(string jsonData, long totalFramesCount)
@@ -52,6 +49,21 @@ namespace LottiePlugin
             if (totalFramesCount <= 0 || totalFramesCount > int.MaxValue)
                 throw new ArgumentOutOfRangeException(nameof(totalFramesCount));
 
+            // Keyed by string instance: owners that keep their JSON string share one parse.
+            ParsedDocument document;
+            if (sParsed.TryGetValue(jsonData, out document) && document.TotalFramesCount == totalFramesCount)
+                return new LottieMarkerSet(document, ownerDisposed);
+            document = ParseDocument(jsonData, totalFramesCount);
+            lock (sParsedLock)
+            {
+                sParsed.Remove(jsonData);
+                sParsed.Add(jsonData, document);
+            }
+            return new LottieMarkerSet(document, ownerDisposed);
+        }
+
+        private static ParsedDocument ParseDocument(string jsonData, long totalFramesCount)
+        {
             var root = JsonSubsetParser.Parse(jsonData) as Dictionary<string, object>;
             if (root == null) throw new FormatException("The Lottie document root must be an object.");
             double frameRate = RequiredFiniteNumber(root, "fr");
@@ -100,14 +112,14 @@ namespace LottiePlugin
                     });
                 }
             }
-            return new LottieMarkerSet(frameRate, inPoint, markers, ownerDisposed);
+            return new ParsedDocument(totalFramesCount, frameRate, inPoint, markers);
         }
 
         public bool TryGet(string name, out LottieMarker marker)
         {
             ThrowIfDisposed();
             if (name == null) { marker = default(LottieMarker); return false; }
-            return _byName.TryGetValue(name, out marker);
+            return _document.ByName.TryGetValue(name, out marker);
         }
 
         public LottieMarker Get(string name)
@@ -115,7 +127,7 @@ namespace LottiePlugin
             ThrowIfDisposed();
             if (name == null) throw new ArgumentNullException(nameof(name));
             LottieMarker marker;
-            if (!_byName.TryGetValue(name, out marker))
+            if (!_document.ByName.TryGetValue(name, out marker))
                 throw new KeyNotFoundException("No Lottie marker named '" + name + "' exists.");
             return marker;
         }
@@ -136,6 +148,28 @@ namespace LottiePlugin
         private void ThrowIfDisposed()
         {
             if (_ownerDisposed != null && _ownerDisposed()) throw new ObjectDisposedException(nameof(LottieAnimation));
+        }
+
+        private sealed class ParsedDocument
+        {
+            public readonly long TotalFramesCount;
+            public readonly double FrameRate;
+            public readonly double InPoint;
+            public readonly ReadOnlyCollection<LottieMarker> Markers;
+            public readonly Dictionary<string, LottieMarker> ByName;
+
+            public ParsedDocument(long totalFramesCount, double frameRate, double inPoint, List<LottieMarker> markers)
+            {
+                TotalFramesCount = totalFramesCount;
+                FrameRate = frameRate;
+                InPoint = inPoint;
+                Markers = new ReadOnlyCollection<LottieMarker>(markers);
+                ByName = new Dictionary<string, LottieMarker>(StringComparer.Ordinal);
+                foreach (LottieMarker marker in markers)
+                {
+                    ByName.Add(marker.Name, marker);
+                }
+            }
         }
 
         private static double RequiredFiniteNumber(Dictionary<string, object> values, string key)
