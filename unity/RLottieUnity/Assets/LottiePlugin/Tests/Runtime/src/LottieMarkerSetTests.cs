@@ -29,6 +29,22 @@ namespace LottiePlugin.Tests.Runtime
             Assert.Throws<KeyNotFoundException>(() => markers.Get("missing"));
         }
 
+        [Test]
+        public void SameJsonInstanceSharesOneParse()
+        {
+            string json = Resources.Load<TextAsset>("marker_nonzero_ip").text;
+            LottieMarkerSet first = LottieMarkerSet.Parse(json, 11);
+            LottieMarkerSet second = LottieMarkerSet.Parse(json, 11);
+            LottieMarkerSet copy = LottieMarkerSet.Parse(new string(json.ToCharArray()), 11);
+
+            Assert.AreSame(first.Markers, second.Markers);
+            Assert.AreNotSame(first.Markers, copy.Markers);
+            CollectionAssert.AreEqual(copy.Markers, second.Markers);
+            Assert.AreEqual(copy.Frame("idle", 1), second.Frame("idle", 1));
+            Assert.AreEqual(10, LottieMarkerSet.Parse(json, 11).Get("point").FirstRenderFrame);
+            Assert.AreEqual(4, LottieMarkerSet.Parse(json, 5).Get("point").FirstRenderFrame);
+        }
+
         [TestCase("{\"ip\":0,\"op\":2,\"markers\":[]}")]
         [TestCase("{\"fr\":0,\"ip\":0,\"op\":2,\"markers\":[]}")]
         [TestCase("{\"fr\":30,\"ip\":0,\"op\":2,\"markers\":[{\"cm\":\"x\",\"tm\":0}]}")]
