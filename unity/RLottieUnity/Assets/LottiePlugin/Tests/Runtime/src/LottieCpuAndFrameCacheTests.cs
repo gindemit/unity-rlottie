@@ -31,6 +31,20 @@ namespace LottiePlugin.Tests.Runtime
         }
 
         [Test]
+        public void RasterizersFromSameJsonShareMarkersButNotDisposal()
+        {
+            string json = WithMarker(Resources.Load<TextAsset>("device_color_calibration_alpha").text, "all", 0, 120);
+            using (var small = LottieCpuRasterizer.LoadFromJsonData(json, string.Empty, 32, 32))
+            using (var large = LottieCpuRasterizer.LoadFromJsonData(json, string.Empty, 64, 64))
+            {
+                Assert.AreSame(small.Markers.Markers, large.Markers.Markers);
+                small.Dispose();
+                Assert.Throws<ObjectDisposedException>(() => small.Markers.Get("all"));
+                Assert.AreEqual(0, large.Markers.Get("all").FirstRenderFrame);
+            }
+        }
+
+        [Test]
         public void SemanticFillAndStrokeOverridesMatchAcrossPublicAndBatchApis()
         {
             TextAsset source = Resources.Load<TextAsset>("semantic_palette");
