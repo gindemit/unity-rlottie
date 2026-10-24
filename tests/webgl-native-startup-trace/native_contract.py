@@ -78,6 +78,13 @@ def main():
     end = api.index('#endif', first) + len('#endif')
     export_slice = 'extern "C" {\n' + api[start:end] + '\n}\n'
     assert export_slice.count('EXPORT_API int32_t lottie_webgl_trace_') == 5
+    pending_export = re.search(
+        r'    EXPORT_API int32_t lottie_get_webgl_pending_upload_count\(void\)\s*\{[^}]*\}', api)
+    pending_declaration = re.search(
+        r'    EXPORT_API int32_t lottie_get_webgl_pending_upload_count\(void\);', header)
+    if not pending_export or not pending_declaration:
+        raise ValueError('Actual WebGL pending-count ABI not found')
+    export_slice += 'extern "C" {\n' + pending_export.group(0) + '\n}\n'
     (output / 'native_exports.inc').write_text(export_slice, encoding='utf-8')
     stub = '''// HOST STUB: not Unity's full LottiePlugin.h. ABI structs below are exact source slices.
 #pragma once

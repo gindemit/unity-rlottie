@@ -119,6 +119,32 @@ int main()
     std::puts("NativeWebGLTrace host contracts: 1 case PASS (unsupported threaded mode, stub-only)");
     return 0;
 #endif
+    Reset();
+    Check(lottie_get_webgl_pending_upload_count()==0,"empty WebGL pending export"); ++cases;
+    RegisterWebGLRenderingPlugin();
+    lottie_animation_wrapper secondAnimation;
+    Check(RegisterUnityTextureWebGL(&animation,reinterpret_cast<void*>(7),2,2) &&
+        RegisterUnityTextureWebGL(&secondAnimation,reinterpret_cast<void*>(8),2,2),"two pending-test registrations");
+    Check(lottie_get_webgl_pending_upload_count()==0,"registration alone is not pending"); ++cases;
+    Check(RequestTextureUploadWebGL(&animation,&data) && RequestTextureUploadWebGL(&animation,&data),"replacement requests");
+    watchAllocations=true;
+    Check(lottie_get_webgl_pending_upload_count()==1 && lottie_get_webgl_pending_upload_count()==1,
+        "repeated counts do not consume or double-count replacements");
+    watchAllocations=false;
+    Check(allocations==0 && callCount==0 && contextQueries==0,"pending query has no allocation/GL/context work"); ++cases;
+    Check(RequestTextureUploadWebGL(&secondAnimation,&data) && lottie_get_webgl_pending_upload_count()==2,
+        "multiple pending states"); ++cases;
+    GetWebGLRenderEventFunc()(1);
+    Check(lottie_get_webgl_pending_upload_count()==1,"callback consumes exactly one pending state"); ++cases;
+    Check(RegisterUnityTextureWebGL(&secondAnimation,reinterpret_cast<void*>(9),2,2) &&
+        lottie_get_webgl_pending_upload_count()==0,"replacement registration clears pending"); ++cases;
+    Check(RequestTextureUploadWebGL(&secondAnimation,&data),"request before retirement");
+    UnregisterUnityTextureWebGL(&secondAnimation);
+    Check(lottie_get_webgl_pending_upload_count()==0,"retired pending state removed"); ++cases;
+    Check(RequestTextureUploadWebGL(&animation,&data),"request before upload failure");
+    isTexture=false; GetWebGLRenderEventFunc()(1);
+    Check(lottie_get_webgl_pending_upload_count()==0 && !IsWebGLUploadAvailable(&animation),
+        "failed consumed upload remains unavailable, not pending"); ++cases;
     Reset(); BaselineSetup();
     watchAllocations=true; GetWebGLRenderEventFunc()(1); watchAllocations=false;
     Check(std::strcmp(calls,"IbaEBAUEAB")==0,"ordinary/unselected exact GL order and two error reads");

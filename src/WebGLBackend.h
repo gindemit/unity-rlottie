@@ -16,6 +16,8 @@ bool RequestTextureUploadWebGL(
     lottie_animation_wrapper* animation,
     lottie_render_data* renderData);
 bool IsWebGLUploadAvailable(lottie_animation_wrapper* animation);
+// Advisory non-consuming snapshot; later requests remain pending for the next pump tick.
+int32_t GetWebGLPendingUploadCount();
 UnityRenderingEvent GetWebGLRenderEventFunc();
 
 #if defined(LOTTIE_WEBGL_NATIVE_STATE_TRACE)

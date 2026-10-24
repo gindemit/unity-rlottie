@@ -436,6 +436,14 @@ bool RequestTextureUploadWebGL(
     return true;
 }
 
+int32_t GetWebGLPendingUploadCount()
+{
+    const size_t count = static_cast<size_t>(std::count_if(gTextures.begin(), gTextures.end(),
+        [](const WebGLTextureState& state) { return state.pending; }));
+    return static_cast<int32_t>(std::min(count,
+        static_cast<size_t>(std::numeric_limits<int32_t>::max())));
+}
+
 bool IsWebGLUploadAvailable(lottie_animation_wrapper* animation)
 {
     WebGLTextureState* state = FindState(animation);

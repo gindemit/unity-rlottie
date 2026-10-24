@@ -381,6 +381,11 @@ extern "C"
         return RequestTextureUploadWebGL(animation, render_data) ? 1 : 0;
     }
 
+    EXPORT_API int32_t lottie_get_webgl_pending_upload_count(void)
+    {
+        return GetWebGLPendingUploadCount();
+    }
+
     EXPORT_API int32_t lottie_is_webgl_upload_available(lottie_animation_wrapper* animation)
     {
         return IsWebGLUploadAvailable(animation) ? 1 : 0;

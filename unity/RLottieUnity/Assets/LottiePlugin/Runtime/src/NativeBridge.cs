@@ -192,6 +192,9 @@ namespace LottiePlugin
             IntPtr animationWrapper,
             IntPtr renderData);
 
+        [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_get_webgl_pending_upload_count")]
+        internal static extern int LottieGetWebGLPendingUploadCount();
+
         [DllImport(PLUGIN_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_is_webgl_upload_available")]
         internal static extern int LottieIsWebGLUploadAvailable(IntPtr animationWrapper);
 

@@ -67,15 +67,17 @@ namespace LottiePlugin
             }
 
             int budget = LottieScheduler.MaxUploadsPerFrame;
-#if !UNITY_WEBGL || UNITY_EDITOR
             if (budget > 0)
             {
                 // This snapshot does not consume work. Async publications
                 // after the poll and upload retries stay queued for the next
                 // LateUpdate; no managed wakeup flag can lose them.
+#if UNITY_WEBGL && !UNITY_EDITOR
+                budget = Math.Min(budget, NativeBridge.LottieGetWebGLPendingUploadCount());
+#else
                 budget = Math.Min(budget, NativeBridge.LottieGetPendingUploadCount());
-            }
 #endif
+            }
             for (int i = 0; i < budget; i++)
             {
                 // Vulkan configures this stable event ID to execute outside a

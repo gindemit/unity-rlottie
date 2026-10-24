@@ -218,6 +218,8 @@ extern "C" {
     EXPORT_API int32_t lottie_request_webgl_texture_upload(
         lottie_animation_wrapper* animation,
         lottie_render_data* render_data);
+    // Advisory count of pending WebGL states; never consumes uploads.
+    EXPORT_API int32_t lottie_get_webgl_pending_upload_count(void);
     EXPORT_API int32_t lottie_is_webgl_upload_available(lottie_animation_wrapper* animation);
     EXPORT_API UnityRenderingEvent lottie_get_webgl_render_event_func(void);
 #endif
