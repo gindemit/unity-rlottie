@@ -217,6 +217,30 @@ namespace RLottie.Tests.Editor
             Assert.Throws<BuildFailedException>(() => new LottieWebGLDiagnosticManifest().VerifyDescriptor(path, item));
         }
 
+        [Test]
+        public void MemberUndefinedReferencesDefinedInSameArchiveAreNotExternalDependencies()
+        {
+            var defined = new System.Collections.Generic.HashSet<string> { "internal_trace_call" };
+            var permitted = new System.Collections.Generic.HashSet<string> { "existing_external" };
+            var raw = new[] { "internal_trace_call", "existing_external" };
+            Assert.DoesNotThrow(() => LottieWebGLDiagnosticManifest.ValidateExternalDependencies(raw, defined, permitted));
+            Assert.That(raw, Is.EqualTo(new[] { "internal_trace_call", "existing_external" }));
+            Assert.Throws<BuildFailedException>(() => LottieWebGLDiagnosticManifest.ValidateExternalDependencies(
+                new[] { "internal_trace_call", "new_external" }, defined, permitted));
+        }
+
+        [Test]
+        public void NmOnlyAllowsExactInputArchiveEmptyMemberDiagnostics()
+        {
+            const string archive = "C:/evidence/libLottiePlugin.trace.a";
+            Assert.DoesNotThrow(() => LottieWebGLDiagnosticManifest.ValidateNmDiagnostics(
+                archive + "[InstanceRegistry.cpp.o]: no symbols\r\n" + archive + "[UploadQueue.cpp.o]: no symbols\n", archive));
+            foreach (string line in new[] { archive + "[]: no symbols", archive + "[../file.o]: no symbols",
+                "C:/other/archive.a[file.o]: no symbols", archive + "[file.o]: no symbols; extra", "llvm-nm: error", archive + "[file.o]: warning",
+                archive + "[UnobservedMember.cpp.o]: no symbols" })
+                Assert.Throws<BuildFailedException>(() => LottieWebGLDiagnosticManifest.ValidateNmDiagnostics(line, archive));
+        }
+
         private LottieWebGLDiagnosticManifest Manifest()
         {
             var manifest = new LottieWebGLDiagnosticManifest { Root = mPayload, Hash = new string('a', 64), SourceCommit = new string('b', 40),

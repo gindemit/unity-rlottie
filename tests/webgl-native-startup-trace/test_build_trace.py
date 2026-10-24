@@ -51,6 +51,19 @@ class BuildReceiptContracts(unittest.TestCase):
             descriptor = build.descriptor(path, 'empty.cpp', allow_empty=True)
             self.assertEqual(descriptor, {'path': 'empty.cpp', 'bytes': 0, 'sha256': build.sha(b'')})
 
+    def test_member_references_resolve_against_actual_archive_definitions(self):
+        self.assertEqual(build.unreviewed_external(['internal', 'external'], ['internal'], ['external']), set())
+        self.assertEqual(build.unreviewed_external(['unexpected'], [], []), {'unexpected'})
+
+    def test_only_observed_archive_qualified_empty_member_diagnostics_are_allowed(self):
+        archive = Path('C:/evidence/plugin.a')
+        build.validate_nm_stderr(archive.as_posix() + '[InstanceRegistry.cpp.o]: no symbols\n', archive)
+        for stderr in ['other.a[InstanceRegistry.cpp.o]: no symbols',
+                       archive.as_posix() + '[unknown.cpp.o]: no symbols', 'error: invalid archive',
+                       ' ' + archive.as_posix() + '[InstanceRegistry.cpp.o]: no symbols']:
+            with self.assertRaises(ValueError):
+                build.validate_nm_stderr(stderr, archive)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -224,11 +224,21 @@ containing that exact sorted inventory. No commands from receipts are executed.
   equal the manifest/configuration. `emittedArchives` is a nonempty array of
   absolute external-build descriptors for every emitted `.a`, including rebuilt
   rlottie. `build` is command. `undefinedSymbols` contains exactly three undefined
-  nmRuns, in baseline-plugin, diagnostic-plugin, baseline-rlottie order. Diagnostic
+  nmRuns, in baseline-plugin, diagnostic-plugin, baseline-rlottie order. Retain
+  raw per-member undefined inventories. Subtract the diagnostic archive's actual
+  defined inventory before checking external dependencies: another member can
+  resolve an undefined reference within the same archive. Remaining diagnostic
   undefined names must be a subset of both baseline inventories' union plus the
   four selected diagnostic APIs `emscripten_webgl_get_current_context`,
   `emscripten_webgl_get_context_attributes`, `emscripten_is_webgl_context_lost`,
   `emscripten_get_heap_size`. Any other addition stops for evidence review.
+  Successful llvm-nm stderr may contain only exact input-archive-qualified
+  `archive[member]: no symbols` lines for the observed empty/platform-disabled
+  members: `InstanceRegistry.cpp.o`, `UploadQueue.cpp.o`, `UploadPipeline.cpp.o`,
+  `TextureBackend.cpp.o`, `VulkanBackend.cpp.o`, `UnityIntegration.cpp.o`,
+  `UnityExports.cpp.o`, `lottieproxymodel.cpp.o`, `vdebug.cpp.o`,
+  `vdrawhelper_neon.cpp.o`, `vdrawhelper_sse2.cpp.o`. Preserve those diagnostics
+  in the external logs; any other stderr/member or nonzero exit rejects.
 - `webgl-native-state-trace.exports.json`: exact keys `schema`, `sourceCommit`,
   `llvmNm`, `added`, `baselineInventorySha256`, `diagnosticInventorySha256`, `runs`.
   Schema is `lottie.webgl.native-state-trace.exports/1`. Shared identity,

@@ -157,6 +157,10 @@ namespace RLottie
             "lottie_webgl_trace_arm", "lottie_webgl_trace_copy", "lottie_webgl_trace_issue",
             "lottie_webgl_trace_register", "lottie_webgl_trace_request"
         };
+        private static readonly string[] EmptySymbolMembers = {
+            "InstanceRegistry.cpp.o", "UploadQueue.cpp.o", "UploadPipeline.cpp.o", "TextureBackend.cpp.o", "VulkanBackend.cpp.o",
+            "UnityIntegration.cpp.o", "UnityExports.cpp.o", "lottieproxymodel.cpp.o", "vdebug.cpp.o", "vdrawhelper_neon.cpp.o", "vdrawhelper_sse2.cpp.o"
+        };
         internal string Root, Path, Hash, Plugin, Rlottie, SourceCommit;
         internal readonly Dictionary<string, string> VerifiedFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         internal readonly List<string> ProtectedRoots = new List<string>();
@@ -238,7 +242,7 @@ namespace RLottie
             if (!baselineSet.IsSubsetOf(diagnosticSet) || baselineSet.Any(x => x.StartsWith("lottie_webgl_trace_", StringComparison.Ordinal)) ||
                 !diagnosticSet.Where(x => x.StartsWith("lottie_webgl_trace_", StringComparison.Ordinal)).OrderBy(x => x, StringComparer.Ordinal).SequenceEqual(AddedSymbols))
                 throw new BuildFailedException("Ordinary symbols were lost or native trace symbols differ.");
-            result.ValidateReceipts(data, project, unityRoot, configurationReceipt, buildReceipt, exportsReceipt, baselinePlugin, baselineRlottie);
+            result.ValidateReceipts(data, project, unityRoot, configurationReceipt, buildReceipt, exportsReceipt, baselinePlugin, baselineRlottie, diagnosticSet);
             result.Revalidate();
             return result;
         }
@@ -260,7 +264,7 @@ namespace RLottie
         }
 
         private void ValidateReceipts(Dictionary<string, object> manifest, string project, string unityRoot,
-            string configPath, string buildPath, string exportPath, string baselinePlugin, string baselineRlottie)
+            string configPath, string buildPath, string exportPath, string baselinePlugin, string baselineRlottie, HashSet<string> diagnosticDefined)
         {
             var toolchain = DiagnosticJson.Object(manifest["toolchain"]);
             var configuration = ReadReceipt(configPath, "lottie.webgl.native-state-trace.configuration/1",
@@ -345,7 +349,7 @@ namespace RLottie
             }
             var permitted = new HashSet<string>(inventories[0].Concat(inventories[2]), StringComparer.Ordinal);
             permitted.UnionWith(new[] { "emscripten_webgl_get_current_context", "emscripten_webgl_get_context_attributes", "emscripten_is_webgl_context_lost", "emscripten_get_heap_size" });
-            if (inventories[1].Any(x => !permitted.Contains(x))) throw new BuildFailedException("Diagnostic native archive adds an unreviewed external dependency.");
+            ValidateExternalDependencies(inventories[1], diagnosticDefined, permitted);
             var exports = ReadReceipt(exportPath, "lottie.webgl.native-state-trace.exports/1", "sourceCommit", "llvmNm", "added", "baselineInventorySha256", "diagnosticInventorySha256", "runs");
             Same(exports["sourceCommit"], manifest["sourceCommit"]); Same(exports["llvmNm"], toolchain["llvmNm"]);
             var expected = DiagnosticJson.Object(manifest["exports"]);
@@ -358,6 +362,14 @@ namespace RLottie
                 ValidateSymbolRun(run, llvmNm, archivePaths[i], "--defined-only");
                 Same(run["inventorySha256"], expected[i == 0 ? "baselineInventorySha256" : "diagnosticInventorySha256"]);
             }
+        }
+
+        internal static void ValidateExternalDependencies(IEnumerable<string> rawUndefined, ISet<string> diagnosticDefined, ISet<string> permitted)
+        {
+            // llvm-nm reports undefined references per archive member. Another member
+            // can define them; only unresolved archive-level names are dependencies.
+            if (rawUndefined.Any(x => !diagnosticDefined.Contains(x) && !permitted.Contains(x)))
+                throw new BuildFailedException("Diagnostic native archive adds an unreviewed external dependency.");
         }
 
         private void ProtectRoot(string root)
@@ -563,8 +575,24 @@ namespace RLottie
                 var error = process.StandardError.ReadToEndAsync();
                 if (!process.WaitForExit(30000)) { process.Kill(); throw new BuildFailedException("llvm-nm timed out."); }
                 string text = output.GetAwaiter().GetResult(), stderr = error.GetAwaiter().GetResult();
-                if (process.ExitCode != 0 || !string.IsNullOrWhiteSpace(stderr)) throw new BuildFailedException("llvm-nm failed: " + stderr);
+                if (process.ExitCode != 0) throw new BuildFailedException("llvm-nm failed: " + stderr);
+                ValidateNmDiagnostics(stderr, archive);
                 return NormalizeSymbols(text, allowEmpty);
+            }
+        }
+
+        internal static void ValidateNmDiagnostics(string stderr, string archive)
+        {
+            string prefix = archive + "[", suffix = "]: no symbols";
+            foreach (string value in stderr.Split('\n'))
+            {
+                string line = value.EndsWith("\r", StringComparison.Ordinal) ? value.Substring(0, value.Length - 1) : value;
+                if (line.Length == 0) continue;
+                if (!line.StartsWith(prefix, StringComparison.Ordinal) || !line.EndsWith(suffix, StringComparison.Ordinal))
+                    throw new BuildFailedException("Unexpected llvm-nm diagnostic: " + line);
+                string member = line.Substring(prefix.Length, line.Length - prefix.Length - suffix.Length);
+                if (!EmptySymbolMembers.Contains(member, StringComparer.Ordinal))
+                    throw new BuildFailedException("Unexpected llvm-nm archive member diagnostic: " + line);
             }
         }
 

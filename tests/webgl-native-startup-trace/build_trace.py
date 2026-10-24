@@ -26,6 +26,11 @@ ADDED = sorted('lottie_webgl_trace_' + name for name in ('arm', 'copy', 'issue',
 NEW_UNDEFINED = {'emscripten_webgl_get_current_context', 'emscripten_webgl_get_context_attributes',
                  'emscripten_is_webgl_context_lost', 'emscripten_get_heap_size'}
 ABI_FLAGS = ['-fwasm-exceptions', '-sSUPPORT_LONGJMP=wasm', '-sWASM_LEGACY_EXCEPTIONS=1']
+# Actual Unity LLVM v2 observations: empty/platform-disabled WebGL units.
+EMPTY_MEMBERS = {'InstanceRegistry.cpp.o', 'UploadQueue.cpp.o', 'UploadPipeline.cpp.o',
+                 'TextureBackend.cpp.o', 'VulkanBackend.cpp.o', 'UnityIntegration.cpp.o',
+                 'UnityExports.cpp.o', 'lottieproxymodel.cpp.o', 'vdebug.cpp.o',
+                 'vdrawhelper_neon.cpp.o', 'vdrawhelper_sse2.cpp.o'}
 
 
 def sha(data):
@@ -94,6 +99,17 @@ def inventory_hash(symbols):
     return sha(('\n'.join(symbols) + ('\n' if symbols else '')).encode('utf-8'))
 
 
+def validate_nm_stderr(stderr, archive):
+    expected = {Path(archive).as_posix() + '[' + member + ']: no symbols' for member in EMPTY_MEMBERS}
+    if any(line not in expected for line in stderr.splitlines() if line):
+        raise ValueError('Unexpected llvm-nm diagnostic; preserve external log')
+
+
+def unreviewed_external(undefined, defined, baseline):
+    # Per-member undefined references can resolve in another archive member.
+    return set(undefined) - set(defined) - set(baseline) - NEW_UNDEFINED
+
+
 def argv_strings(argv):
     return [value.as_posix() if isinstance(value, Path) else str(value) for value in argv]
 
@@ -160,7 +176,7 @@ def main():
     args.output.mkdir(parents=True)
     args.build.mkdir(parents=True)
 
-    def run(argv, label, cwd=args.build):
+    def run(argv, label, cwd=args.build, nm_archive=None):
         argv = argv_strings(argv)
         completed = subprocess.run(argv, cwd=cwd, env=env,
                                    capture_output=True, text=True, timeout=1200)
@@ -168,6 +184,8 @@ def main():
         log.write_text(completed.stdout + completed.stderr, encoding='utf-8', newline='\n')
         if completed.returncode:
             raise RuntimeError('Failed ' + label + '; preserve external log: ' + str(log))
+        if nm_archive is not None:
+            validate_nm_stderr(completed.stderr, nm_archive)
         return completed.stdout, {'argv': argv, 'exit': 0,
                                   'output': descriptor(log, log.name)}
 
@@ -243,7 +261,7 @@ def main():
     def nm(path, undefined, label):
         argv = [tool_paths['llvmNm'], '--undefined-only' if undefined else '--defined-only',
                 '--extern-only', '--format=posix', path]
-        text, _ = run(argv, label)
+        text, _ = run(argv, label, nm_archive=path)
         symbols = normalize_symbols(text, allow_empty=undefined)
         return symbols, {'archiveSha256': descriptor(path)['sha256'], 'argv': argv_strings(argv),
                          'exit': 0, 'inventorySha256': inventory_hash(symbols), **({'symbols': symbols} if undefined else {})}
@@ -258,7 +276,8 @@ def main():
     undefined = [nm(path, True, label)[1] for path, label in
                  [(plugin_baseline, 'baseline-undefined'), (diag_path, 'diagnostic-undefined'),
                   (rlottie_baseline, 'rlottie-undefined')]]
-    if not set(undefined[1]['symbols']) <= set(undefined[0]['symbols']) | set(undefined[2]['symbols']) | NEW_UNDEFINED:
+    if unreviewed_external(undefined[1]['symbols'], defined_diag,
+                           set(undefined[0]['symbols']) | set(undefined[2]['symbols'])):
         raise ValueError('Unexpected new native dependency; retain output for review')
     emitted_archives = [descriptor(path) for path in sorted(args.build.rglob('*.a'))]
     if not emitted_archives or not any('rlottie' in item['path'] for item in emitted_archives):
