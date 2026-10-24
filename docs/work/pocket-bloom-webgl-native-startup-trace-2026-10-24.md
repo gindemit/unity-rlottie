@@ -1,5 +1,43 @@
 # Pocket Bloom WebGL native startup observation
 
+## Reviewed consumer diagnostic adoption — resumed 2026-10-24
+
+After the actual isolated native payload and strict manifest validation pass,
+ROOT may pin consumer `Packages/manifest.json` to immutable `ca46187a19dd60a4a7593a27c3473810ec8edd15`
+and let Unity generate `Packages/packages-lock.json`. Only
+`Assets/Editor/GardenPreviewBuilder.cs` and
+`Assets/Scripts/Garden/GardenWebAllocationProbe.cs` are additional writable files.
+Preserve all six unrelated owner deltas and ordinary archive/package identities.
+
+The builder selects the public transactional diagnostic wrapper only for an exact,
+unique pair of manifest/hash options on a Development CrazyGames Player WebGL
+build. Reject malformed/duplicate selections before scene/projection mutation;
+add the trace define only to that build's extra scripting defines. Skip the
+ordinary output-directory creation in the selected branch so wrapper preflight
+comes first. Absent selection keeps ordinary BuildPipeline behavior unchanged.
+This distinguishes CLI syntax validation before existing game-build projection
+from complete manifest validation before any native staging cleanup/mutation.
+The existing game scene/settings projection runs under ROOT's external exact-byte
+backup/restore harness; a wrapper rejection must still restore those inputs.
+ROOT also validates the actual payload read-only before adoption. Do not claim
+that no game projection occurred merely because native staging was rejected.
+For this selected diagnostic only, require the existing Player scene and skip
+`CampaignPackageTestResourceProjection`: manifest source verification must still
+see the six renderer test JSON resources and metadata. These unused root resource
+keys do not collide with namespaced game loads; keep test assemblies excluded.
+Inventory the retained resources. Normal builds retain their existing projection.
+This larger diagnostic payload is not a release, size or loading/performance
+qualification artifact. The outer harness restores exact importer metadata and
+ProjectSettings bytes rather than relying only on logical importer restoration.
+The explicit existing probe Snapshot may log the public native-state JSON only
+inside the full WebGL/non-Editor/Development/trace compile guard and after its
+existing overlap/readiness/bounds checks. No automatic export or graphics fix.
+
+Require independent source review, actual imported Editor compilation, active
+Release probe equivalence, exact native/package binding and actual Development
+build/staging rollback receipts. The current normal `0734ec2` ZIP stays immutable;
+diagnostic builds and source pushes do not qualify it or activate public gates.
+
 ## Owner-requested wrap-up checkpoint
 
 The owner requested task-by-task continuation on 2026-10-24. The implementation
