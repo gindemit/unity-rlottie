@@ -323,6 +323,38 @@ extern "C"
     }
 
 #if defined(__EMSCRIPTEN__)
+#if defined(LOTTIE_WEBGL_NATIVE_STATE_TRACE)
+    EXPORT_API int32_t lottie_webgl_trace_arm(uint32_t abi, uint32_t header_bytes,
+        uint32_t record_bytes, uint32_t arm_unity_frame)
+    {
+        return WebGLTraceArm(abi, header_bytes, record_bytes, arm_unity_frame);
+    }
+    EXPORT_API int32_t lottie_webgl_trace_register(lottie_animation_wrapper* animation,
+        void* native_texture, int32_t width, int32_t height, uint32_t animation_id,
+        uint32_t generation, uint32_t texture_token, uint32_t registration_attempt,
+        uint32_t unity_frame, uint32_t origin)
+    {
+        return WebGLTraceRegister(animation, native_texture, width, height, animation_id,
+            generation, texture_token, registration_attempt, unity_frame, origin);
+    }
+    EXPORT_API int32_t lottie_webgl_trace_request(lottie_animation_wrapper* animation,
+        lottie_render_data* render_data, uint32_t animation_id, uint32_t generation,
+        uint32_t request_sequence, uint32_t unity_frame)
+    {
+        return WebGLTraceRequest(animation, render_data, animation_id, generation, request_sequence, unity_frame);
+    }
+    EXPORT_API int32_t lottie_webgl_trace_issue(uint32_t event_token, uint32_t unity_frame)
+    {
+        return WebGLTraceIssue(event_token, unity_frame);
+    }
+    EXPORT_API int32_t lottie_webgl_trace_copy(uint32_t abi, uint32_t header_bytes,
+        uint32_t record_bytes, void* header, uint32_t header_capacity_bytes,
+        void* records, uint32_t record_capacity, uint32_t record_capacity_bytes)
+    {
+        return WebGLTraceCopy(abi, header_bytes, record_bytes, header, header_capacity_bytes,
+            records, record_capacity, record_capacity_bytes);
+    }
+#endif
     EXPORT_API void lottie_register_webgl_rendering_plugin(void)
     {
         RegisterWebGLRenderingPlugin();

@@ -171,6 +171,43 @@ extern "C" {
     EXPORT_API int32_t lottie_get_pending_upload_count(void);
 #endif
 #if defined(__EMSCRIPTEN__)
+#if defined(LOTTIE_WEBGL_NATIVE_STATE_TRACE)
+    // v1 caller-owned, little-endian primitive ABI. Never export native pointers.
+    struct LottieWebGLTraceHeader
+    {
+        uint32_t magic, abiVersion, headerBytes, recordBytes, capacity;
+        uint32_t storedRecords, returnedRecords, callbacksDropped, registrationsRejected;
+        uint32_t callbacksTotal, registrationsTotal, requestsTotal, requestsRejected, eventsIssuedTotal;
+        uint32_t preArmStateDetected, lateArmTotal, unmatchedEventsTotal, identityOverflowTotal, flags;
+        uint32_t armUnityFrame, firstSequence, lastSequence;
+        uint32_t registrationMetadataLossTotal, requestMetadataLossTotal;
+        uint32_t reserved0, reserved1, reserved2, reserved3, reserved4, reserved5, reserved6, reserved7;
+    };
+    struct LottieWebGLTraceRecord
+    {
+        uint32_t recordBytes, abiVersion, sequence, registrationUnityFrame, outcome, validFlags, reservedB, animationId;
+        uint32_t generation, registrationAttempt, registrationOrigin, requestSequence, requestUnityFrame;
+        uint32_t eventToken, eventUnityFrame, callbackSequence;
+        uint32_t textureToken, width, height, pendingBefore, pendingAfter, availableBefore, availableAfter, contextStatus;
+        uint32_t contextMajor, contextMinor, contextLost, isTextureResult, previousTextureRelation;
+        uint32_t previousUnpackAlignment, pixelUnpackBufferBound, unpackRowLength, unpackSkipRows, unpackSkipPixels;
+        uint32_t reservedC, reservedD, checkedUploadError, checkedUploadErrorValid, restorationCompleted, firstDrainedError;
+        uint32_t drainedErrorCount, reserved0, reserved1, reserved2, reserved3, reserved4, reserved5, reserved6;
+    };
+    EXPORT_API int32_t lottie_webgl_trace_arm(uint32_t abi, uint32_t header_bytes,
+        uint32_t record_bytes, uint32_t arm_unity_frame);
+    EXPORT_API int32_t lottie_webgl_trace_register(lottie_animation_wrapper* animation,
+        void* native_texture, int32_t width, int32_t height, uint32_t animation_id,
+        uint32_t generation, uint32_t texture_token, uint32_t registration_attempt,
+        uint32_t unity_frame, uint32_t origin);
+    EXPORT_API int32_t lottie_webgl_trace_request(lottie_animation_wrapper* animation,
+        lottie_render_data* render_data, uint32_t animation_id, uint32_t generation,
+        uint32_t request_sequence, uint32_t unity_frame);
+    EXPORT_API int32_t lottie_webgl_trace_issue(uint32_t event_token, uint32_t unity_frame);
+    EXPORT_API int32_t lottie_webgl_trace_copy(uint32_t abi, uint32_t header_bytes,
+        uint32_t record_bytes, void* header, uint32_t header_capacity_bytes,
+        void* records, uint32_t record_capacity, uint32_t record_capacity_bytes);
+#endif
     EXPORT_API void lottie_register_webgl_rendering_plugin(void);
     EXPORT_API int32_t lottie_register_unity_webgl_texture(
         lottie_animation_wrapper* animation,

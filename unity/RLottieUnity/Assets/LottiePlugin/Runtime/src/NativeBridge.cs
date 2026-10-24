@@ -63,6 +63,9 @@ namespace LottiePlugin
             if (LottieLogSettings.GlobalLevel >= LottieLogLevel.Info)
                 Debug.Log("[Lottie] iOS plugin registered successfully");
 #elif UNITY_WEBGL && !UNITY_EDITOR
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+            LottieWebGLNativeStateTrace.EnsureInitialized();
+#endif
             if (s_WebGLRegistered)
                 return;
 
@@ -102,6 +105,21 @@ namespace LottiePlugin
     }
     internal static class NativeBridge
     {
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_webgl_trace_arm")]
+        internal static extern int LottieWebGLTraceArm(uint abi, uint headerBytes, uint recordBytes, uint unityFrame);
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_webgl_trace_register")]
+        internal static extern int LottieWebGLTraceRegister(IntPtr animation, IntPtr texture, int width, int height,
+            uint animationId, uint generation, uint textureToken, uint attempt, uint unityFrame, uint origin);
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_webgl_trace_request")]
+        internal static extern int LottieWebGLTraceRequest(IntPtr animation, IntPtr renderData,
+            uint animationId, uint generation, uint sequence, uint unityFrame);
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_webgl_trace_issue")]
+        internal static extern int LottieWebGLTraceIssue(uint eventToken, uint unityFrame);
+        [DllImport("__Internal", CallingConvention = CallingConvention.Cdecl, EntryPoint = "lottie_webgl_trace_copy")]
+        internal static extern int LottieWebGLTraceCopy(uint abi, uint headerBytes, uint recordBytes,
+            IntPtr header, uint headerCapacityBytes, IntPtr records, uint recordCapacity, uint recordCapacityBytes);
+#endif
 #if (UNITY_WEBGL || UNITY_IOS) && !UNITY_EDITOR
         private const string PLUGIN_NAME = "__Internal";
 #else

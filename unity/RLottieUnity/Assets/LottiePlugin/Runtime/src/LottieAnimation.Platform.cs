@@ -8,6 +8,14 @@ namespace LottiePlugin
 {
     public sealed partial class LottieAnimation
     {
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+        private LottieWebGLNativeStateTrace.Identity _webGLTraceIdentity;
+
+        public static string GetWebGLNativeStateTraceJson()
+        {
+            return LottieWebGLNativeStateTrace.ExportJson();
+        }
+#endif
 #if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD
         [Serializable]
         private struct WebGLUploadDiagnosticEvent
@@ -139,14 +147,25 @@ namespace LottiePlugin
 
         private bool TryRegisterUnityOwnedWebGLTexture(uint width, uint height)
         {
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+            bool traceSelected = LottieWebGLNativeStateTrace.EnsureInitialized();
+#endif
             NativeBridge.LottieRegisterWebGLRenderingPlugin();
             _nativeTexturePtr = Texture.GetNativeTexturePtr();
             bool registered = _nativeTexturePtr != IntPtr.Zero &&
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+                (traceSelected ? LottieWebGLNativeStateTrace.Register(ref _webGLTraceIdentity,
+                    _animationWrapperIntPtr, _nativeTexturePtr, (int)width, (int)height, _webGLTraceIdentity.origin == 3) :
+#endif
                 NativeBridge.LottieRegisterUnityWebGLTexture(
                     _animationWrapperIntPtr,
                     _nativeTexturePtr,
                     (int)width,
-                    (int)height) != 0;
+                    (int)height)
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+                )
+#endif
+                != 0;
             if (registered && !sWebGLNativeUploadLogged)
             {
                 sWebGLNativeUploadLogged = true;
@@ -497,6 +516,9 @@ namespace LottiePlugin
 
         private unsafe void PlatformCreateRenderDataTexture(uint width, uint height)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+            LottieWebGLNativeStateTrace.TextureCreated(ref _webGLTraceIdentity);
+#endif
 #if UNITY_WEBGL && !UNITY_EDITOR
             _useShaderConversion = LottieWebGLSettings.UseShaderConversion;
             var webGLDeviceType = UnityEngine.SystemInfo.graphicsDeviceType;
@@ -682,6 +704,9 @@ namespace LottiePlugin
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
             LottieUploadPump.EnsureInstance();
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+            bool traceSelected = LottieWebGLNativeStateTrace.EnsureInitialized();
+#endif
             int uploadAvailable = NativeBridge.LottieIsWebGLUploadAvailable(_animationWrapperIntPtr);
 #if DEVELOPMENT_BUILD
             if (sWebGLUploadDiagnostics != null) sWebGLUploadDiagnostics.uploadChecks++;
@@ -702,6 +727,9 @@ namespace LottiePlugin
                     // Make this frame visible and let Unity recreate the GPU
                     // object, if needed, before caching its native texture name.
                     Texture.Apply(false, false);
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+                    if (traceSelected) _webGLTraceIdentity.origin = 3;
+#endif
 #if DEVELOPMENT_BUILD
                     ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.ReregisterAttempt);
 #endif
@@ -727,9 +755,18 @@ namespace LottiePlugin
             }
 
             _webGLReregisterAttempted = false;
-            if (NativeBridge.LottieRequestWebGLTextureUpload(
+            if (
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+                (traceSelected ? LottieWebGLNativeStateTrace.Request(ref _webGLTraceIdentity,
+                    _animationWrapperIntPtr, _lottieRenderDataIntPtr) :
+#endif
+                NativeBridge.LottieRequestWebGLTextureUpload(
                     _animationWrapperIntPtr,
-                    _lottieRenderDataIntPtr) == 0)
+                    _lottieRenderDataIntPtr)
+#if DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+                )
+#endif
+                == 0)
             {
 #if DEVELOPMENT_BUILD
                 if (sWebGLUploadDiagnostics != null) sWebGLUploadDiagnostics.requestRejections++;

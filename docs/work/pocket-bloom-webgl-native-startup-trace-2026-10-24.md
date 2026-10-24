@@ -1,5 +1,35 @@
 # Pocket Bloom WebGL native startup observation
 
+## Owner-requested wrap-up checkpoint
+
+The owner requested task-by-task continuation on 2026-10-24. The implementation
+checkpoint is unfinished source backup, not permission to activate a diagnostic
+package or build. Consumer remains `0734ec2`, renderer pin remains `def31c353`;
+ordinary native archives and package versions are unchanged.
+
+Managed helper/pump host contracts pass 134 assertions and 18 compile-off token
+comparisons; runtime-core host compilation against installed Unity references
+passes. Evidence is external `native-trace-managed-host/result.json`. These use
+native/Unity stubs and do not establish constructor/recovery or IL2CPP execution.
+Root reviewed the guarded managed source and matched all five source hashes.
+
+Native source, ABI exports, bounded callback storage and external-output CMake
+branch are drafted. Four host attempts in external `native-state-trace-host-v1`
+through `v4` all failed before test execution (host headers, then linker launch).
+No native host case passed; latest CMake protections are untested. Root's source
+review preserves the baseline error-drain/upload/check/restore order; it is not
+native compilation or runtime proof. CMake line endings were normalized to LF.
+
+Editor manifest/wrapper/staging work is a separate unfinished checkpoint, reviewed
+only as source backup. Editor tests and the new manifest's `.meta` are absent;
+source/receipt contents are not fully validated, explicit WebGL2 build validation
+and complete protected-root exclusions remain unfinished. Do not adopt or call
+it until strict parsing, all-before-mutation validation, exact rollback,
+compilation and actual Unity importer/build tests pass. No native Wasm
+build, archive receipt/manifest assembly, consumer adoption, staging, graphics
+trace, allocation comparison or release qualification has occurred in this step.
+Continue the requirements below without treating source backup as completion.
+
 Root-selected local engineering follow-up under the owner's ongoing CrazyGames
 acceptance goal. This order selects a separate diagnostic path, not a rendering
 fix, production archive replacement, package publication or release acceptance.

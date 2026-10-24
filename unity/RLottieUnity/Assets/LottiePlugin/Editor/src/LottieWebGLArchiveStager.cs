@@ -17,9 +17,9 @@ namespace RLottie
     /// </summary>
     internal sealed class LottieWebGLArchiveStager : IPreprocessBuildWithReport, IPostprocessBuildWithReport
     {
-        private const string GeneratedRelativePath = "Assets/LottiePlugin.GeneratedWebGL";
-        private const string OwnershipMarker = ".lottie-plugin-generated";
-        private const string OwnershipValue = "LottiePlugin generated WebGL archive staging; safe to clean.\n";
+        internal const string GeneratedRelativePath = "Assets/LottiePlugin.GeneratedWebGL";
+        internal const string OwnershipMarker = ".lottie-plugin-generated";
+        internal const string OwnershipValue = "LottiePlugin generated WebGL archive staging; safe to clean.\n";
         internal const string PluginImporterTemplate =
             "fileFormatVersion: 2\n" +
             "guid: {GUID}\n" +
@@ -62,6 +62,10 @@ namespace RLottie
 
         public void OnPreprocessBuild(BuildReport report)
         {
+#if UNITY_6000_5_OR_NEWER
+            // Diagnostic preflight owns its transaction. Never enter ordinary cleanup on rejection.
+            if (LottieWebGLDiagnosticBuild.Preprocess(report)) return;
+#endif
             CleanupGeneratedFiles();
             if (report.summary.platform != BuildTarget.WebGL)
             {
@@ -81,6 +85,9 @@ namespace RLottie
 
         public void OnPostprocessBuild(BuildReport report)
         {
+#if UNITY_6000_5_OR_NEWER
+            if (LottieWebGLDiagnosticBuild.IsActive) return;
+#endif
             if (report.summary.platform == BuildTarget.WebGL)
             {
                 CleanupGeneratedFiles();

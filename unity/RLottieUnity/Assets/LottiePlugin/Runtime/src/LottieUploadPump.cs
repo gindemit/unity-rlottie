@@ -11,6 +11,9 @@ namespace LottiePlugin
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         internal static void EnsureInstance()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+            LottieWebGLNativeStateTrace.EnsureInitialized();
+#endif
             if (sInstance != null)
             {
                 return;
@@ -25,6 +28,9 @@ namespace LottiePlugin
 
         private void Awake()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+            LottieWebGLNativeStateTrace.EnsureInitialized();
+#endif
             if (sInstance != null && sInstance != this)
             {
                 DestroyImmediate(gameObject);
@@ -44,6 +50,9 @@ namespace LottiePlugin
 
         private void LateUpdate()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+            bool traceSelected = LottieWebGLNativeStateTrace.EnsureInitialized();
+#endif
             if (sRenderEventFunc == IntPtr.Zero)
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -71,7 +80,11 @@ namespace LottiePlugin
             {
                 // Vulkan configures this stable event ID to execute outside a
                 // render pass. The callback dequeues one upload per event.
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD && LOTTIE_WEBGL_NATIVE_STATE_TRACE
+                GL.IssuePluginEvent(sRenderEventFunc, traceSelected ? LottieWebGLNativeStateTrace.IssueEvent() : 1);
+#else
                 GL.IssuePluginEvent(sRenderEventFunc, 1);
+#endif
             }
         }
 
