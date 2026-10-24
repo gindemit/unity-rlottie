@@ -20,7 +20,7 @@ from native_contract import external_fresh
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = 'webgl-native-state-trace.'
-BASE_PLUGIN = '088d14b0909acdc6076e1ff1525e8a6d69094d284d4151fc03b6a6ee75504a51'
+BASE_PLUGIN = '65f22f125419daa0b035167485cc56589501449f0d10e6a57071a5dff9a658db'
 BASE_RLOTTIE = 'b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da'
 ADDED = sorted('lottie_webgl_trace_' + name for name in ('arm', 'copy', 'issue', 'register', 'request'))
 NEW_UNDEFINED = {'emscripten_webgl_get_current_context', 'emscripten_webgl_get_context_attributes',

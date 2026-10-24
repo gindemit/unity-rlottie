@@ -152,7 +152,7 @@ namespace RLottie
 
     internal sealed class LottieWebGLDiagnosticManifest
     {
-        internal const string PluginHash = "088d14b0909acdc6076e1ff1525e8a6d69094d284d4151fc03b6a6ee75504a51";
+        internal const string PluginHash = "65f22f125419daa0b035167485cc56589501449f0d10e6a57071a5dff9a658db";
         internal const string RlottieHash = "b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da";
         internal static readonly string[] AddedSymbols = {
             "lottie_webgl_trace_arm", "lottie_webgl_trace_copy", "lottie_webgl_trace_issue",

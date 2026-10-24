@@ -1,5 +1,34 @@
 # WebGL archive provenance
 
+## Current pending-event revision — 2026-10-24
+
+The four plugin archives below supersede the dated plugin hashes later in this
+document. They are ordinary, trace-disabled builds of source `88a506b715bd0830bd788bec78dc6c96dbcb8ef2`,
+dependency `e9bf55b786c33ad2291d35a0e6885dde5f988c1d`, for the reviewed pending-event
+order in `docs/recovery/webgl-pending-events-2026-10-24.md`. Each adds exactly
+`lottie_get_webgl_pending_upload_count` to the ordinary C API. No old C export is
+removed. The existing rlottie archive bytes, sidecars, GUIDs and inactive
+Plugins/WebGL archives are retained unchanged.
+
+| Variant | Installed Unity toolchain | Plugin SHA-256 |
+|---|---|---|
+| WasmExceptions | 6000.5.3f1 | `65f22f125419daa0b035167485cc56589501449f0d10e6a57071a5dff9a658db` |
+| Legacy | 2022.3.62f3 | `d84c5244be266431a6759f40605cef89fbebda08497c1f04216d7192659a4ad8` |
+| Legacy2021 | 2021.3.45f2 | `86c1c10be8541dee23cf9b98f47edd9cecfd1547ac571adcadb0840851a2458c` |
+| Legacy2019 | 2019.4.41f2 | `4894f1ca6be1a8c873e59589b17deb5e5de4d56f6da13086155b43ca48595010` |
+
+External compile commands, source hashes, logs and symbol inventories are under
+`C:/Users/khind/Documents/Codex/evidence/crazygames-analytics-2026-10-23/resume-owner-2026-10-24/native-<Variant>/`.
+All use Release, WebAssembly ON, native trace OFF, the named LottiePlugin target;
+only WasmExceptions enables Wasm exceptions. Legacy2019 uses Fastcomp backend0
+and an external cache. Current ordinary staging and diagnostic validation pins
+move together to this baseline. Prior diagnostic manifests retain their old
+baseline and must fail current validation; their original receipts remain intact.
+Native build/export checks do not establish player linking or device acceptance.
+
+## Historical archive delivery — 2026-10-10
+
+
 The ABI-specific archives were first introduced by upstream commit `d91e616`
 (`Support Unity 6000.5 WebGL exception ABI`). Inspection of that commit's
 archives found they lacked C API exports referenced by the package's current
