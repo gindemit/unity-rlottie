@@ -82,6 +82,14 @@ Upstream implementation scope, after the contract freeze:
 - `tests/native/`, a scoped `tests/webgl-native-startup-trace/` contract/build
   harness, and this owning document. Add no unrelated test/build framework.
 
+The selected executable producer is `tests/webgl-native-startup-trace/build_trace.py`
+with bounded parser/output tests in `test_build_trace.py`. ROOT alone runs its
+explicit `--execute` after the serialized native-build lease. It requires clean
+committed `main`, fresh external build/output directories, the installed Unity
+6000.5.3f1 toolchain, CMake and Ninja; it builds only `LottiePlugin`, preserves the
+immutable production pair and emits the ABI-defined receipt chain. Its tests do
+not authorize a native build, Unity staging, adoption or release qualification.
+
 Package paths are under `unity/RLottieUnity/Assets/LottiePlugin/`. No production
 binary/archive, package-version/tag, dependency or PackageCache edits are allowed.
 Any additional writable path needs a reviewed owning amendment before editing.

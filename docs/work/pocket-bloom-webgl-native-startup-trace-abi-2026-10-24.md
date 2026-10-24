@@ -165,6 +165,80 @@ Manifest JSON is strict UTF-8 with no BOM, duplicate properties, unknown propert
 
 Receipt dependency order is acyclic. First finalize the immutable native-build receipt and native symbol/exports receipt using native sources, tools, flags, inputs and archive hashes only: neither contains a final manifest hash, consumer build GUID or downstream receipt hash. Then create the manifest referencing those finalized sibling receipts. Finally, downstream preflight, staging, consumer-build and runtime-export binding receipts record the exact manifest-file SHA256 and actual consumer identity externally. Never add a downstream receipt back into the manifest or mutate a finalized native receipt to include downstream data.
 
+### Selected receipt producer and exact v1 receipt schemas
+
+`tests/webgl-native-startup-trace/build_trace.py` is the selected producer. ROOT
+runs it only after source review/commit and a serialized native-build lease. It
+requires clean `main`, explicit installed tool paths, fresh disjoint external
+build/output directories, installed `.emscripten` with `FROZEN_CACHE = True`,
+`EM_FROZEN_CACHE=1`, and no inherited C/C++/linker/EMCC flags. It configures Ninja
+with `CMAKE_BUILD_TYPE=Release`, WebAssembly, WasmExceptions, trace ON, testing OFF
+and compile-command export ON, then builds only `LottiePlugin`. Native Release
+optimization is independent from the required downstream Development player.
+It copies the original baseline rlottie into the payload; any rebuilt dependency
+archive remains separately identified. No Unity invocation or staging occurs.
+
+All receipt objects reject duplicate/unknown/missing keys and use the manifest's
+strict UTF-8, integer, lowercase SHA and descriptor rules. `command` means exactly
+`{argv: string[], exit: 0, output: descriptor}`; output names a nonempty sibling
+log. Configure/build argv begin with the actual approved CMake executable and
+build selects exactly the literal `LottiePlugin` target. `nmRun` means exactly
+`{archiveSha256, argv: string[], exit: 0, inventorySha256}`; argv is the installed
+llvm-nm followed by `--defined-only` or `--undefined-only`, `--extern-only`,
+`--format=posix` and the actual absolute archive path. Inventories use distinct
+ordinal-sorted names, one UTF-8 LF after each name; an empty undefined inventory
+hashes empty bytes. Undefined runs additionally require `symbols: string[]`
+containing that exact sorted inventory. No commands from receipts are executed.
+
+- `webgl-native-state-trace.configuration.json`: exact keys `schema`,
+  `sourceCommit`, `rlottieCommit`, `sourceInputs`, `compilerFlags`, `tools`,
+  `unityVersion`, `emscriptenVersion`, `cmakeVersion`, `ninjaVersion`, `emConfig`,
+  `compiler`, `python`, `compilerWrapper`, `cacheRoot`, `sysroot`, `frozenCache`,
+  `compileCommands`, `dependencies`, `cmakeCache`, `configure`. Schema is
+  `lottie.webgl.native-state-trace.configuration/1`. Identities, inputs, flags and
+  versions equal the manifest. `tools` has exactly the six manifest tool
+  descriptors excluding configurationReceipt. `emConfig`, `compiler`, `python`,
+  `compilerWrapper` are absolute installed Unity descriptors for `.emscripten`,
+  `llvm/clang++.exe`, embedded `python/python.exe`, `emscripten/emcc.py`.
+  `cacheRoot` and `sysroot` are absolute installed Emscripten cache/sysroot paths;
+  `frozenCache` is boolean true. `configure` is command. The three sibling
+  descriptors name `webgl-native-state-trace.compile-commands.json` (actual CMake
+  JSON array, each entry exactly directory/command/file and optional output),
+  `webgl-native-state-trace.dependencies.json` (sorted array of absolute
+  descriptors from actual compile sources plus retained Ninja header dependencies,
+  including generated and sysroot inputs), and
+  `webgl-native-state-trace.cmake-cache.txt` (verbatim actual CMake cache).
+  `sourceInputs` also binds all tracked package C#, meta, asmdef and JSON files;
+  the consumer checks those available within its adopted immutable package.
+  `compilerFlags` is the sorted distinct actual plugin command option-token
+  inventory excluding `-c` and `-o`; complete commands preserve order, argument
+  values and per-source differences. Every plugin command must carry trace and
+  frozen ABI flags; no effective compiler command may carry pthread flags.
+- `webgl-native-state-trace.native-build-receipt.json`: exact keys `schema`,
+  `sourceCommit`, `rlottieCommit`, `configurationReceipt`, `plugin`, `rlottie`,
+  `emittedArchives`, `build`, `undefinedSymbols`. Schema is
+  `lottie.webgl.native-state-trace.native-build/1`. Shared descriptors/identities
+  equal the manifest/configuration. `emittedArchives` is a nonempty array of
+  absolute external-build descriptors for every emitted `.a`, including rebuilt
+  rlottie. `build` is command. `undefinedSymbols` contains exactly three undefined
+  nmRuns, in baseline-plugin, diagnostic-plugin, baseline-rlottie order. Diagnostic
+  undefined names must be a subset of both baseline inventories' union plus the
+  four selected diagnostic APIs `emscripten_webgl_get_current_context`,
+  `emscripten_webgl_get_context_attributes`, `emscripten_is_webgl_context_lost`,
+  `emscripten_get_heap_size`. Any other addition stops for evidence review.
+- `webgl-native-state-trace.exports.json`: exact keys `schema`, `sourceCommit`,
+  `llvmNm`, `added`, `baselineInventorySha256`, `diagnosticInventorySha256`, `runs`.
+  Schema is `lottie.webgl.native-state-trace.exports/1`. Shared identity,
+  executable descriptor and inventories equal the manifest. `runs` contains
+  exactly the baseline-plugin then diagnostic-plugin defined nmRuns. Baseline
+  defined names must be retained and the five trace exports must match exactly.
+
+Configuration precedes native/exports receipts, which precede the final manifest.
+The payload root can retain the initial isolated CMake output subdirectory;
+only the final exact manifest pair is selected. Build logs and failed outputs
+remain external evidence. A generated manifest is evidence awaiting ROOT review,
+not adoption or graphics acceptance.
+
 Do not put a manifest's own hash inside itself. Manifest hash is identity, **not** approval: ROOT must select the exact reviewed SHA out of band, pass it to the scoped build context as the trusted expected hash, and compare it before parsing/use. The proposed CLI hash companion is `-lottieWebGLNativeStateTraceManifestSha256 <64-lowercase-hex>`; it is mandatory with the path, forbidden alone, single-occurrence and not implemented today. An attacker-authored self-consistent manifest must not select arbitrary code.
 
 ## Preflight, staging and exact rollback
