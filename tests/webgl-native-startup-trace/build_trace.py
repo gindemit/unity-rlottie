@@ -32,10 +32,10 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def descriptor(path, relative=None):
+def descriptor(path, relative=None, allow_empty=False):
     path = Path(path)
     data = path.read_bytes()
-    if not data or len(data) > 2147483647:
+    if (not data and not allow_empty) or len(data) > 2147483647:
         raise ValueError('Empty or oversized input: ' + str(path))
     return {'path': path.as_posix() if relative is None else relative,
             'sha256': sha(data), 'bytes': len(data)}
@@ -223,9 +223,10 @@ def main():
                         if name.endswith('CMakeLists.txt') or Path(name).suffix in {'.cmake', '.in'})
     source_paths.update(name for name in tracked if name.startswith('unity/RLottieUnity/Assets/LottiePlugin/') and
                         Path(name).suffix in {'.cs', '.meta', '.asmdef', '.json'})
-    source_inputs = [descriptor(ROOT / name, name) for name in sorted(source_paths)]
+    source_inputs = [descriptor(ROOT / name, name, allow_empty=True) for name in sorted(source_paths)]
     compile_descriptor = write_json(args.output / (PREFIX + 'compile-commands.json'), commands)
-    deps_descriptor = write_json(args.output / (PREFIX + 'dependencies.json'), [descriptor(path) for path in sorted(dependencies)])
+    deps_descriptor = write_json(args.output / (PREFIX + 'dependencies.json'),
+                                 [descriptor(path, allow_empty=True) for path in sorted(dependencies)])
     cache_name = PREFIX + 'cmake-cache.txt'
     shutil.copyfile(args.build / 'CMakeCache.txt', args.output / cache_name)
     configuration = {'schema': 'lottie.webgl.native-state-trace.configuration/1', 'sourceCommit': source_commit,

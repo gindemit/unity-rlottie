@@ -42,6 +42,15 @@ class BuildReceiptContracts(unittest.TestCase):
             self.assertEqual(descriptor['sha256'], build.sha(path.read_bytes()))
             self.assertEqual(json.loads(path.read_bytes())['symbols'], ['a'])
 
+    def test_empty_compiled_source_is_explicitly_allowed_only_for_source_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'empty.cpp'
+            path.write_bytes(b'')
+            with self.assertRaises(ValueError):
+                build.descriptor(path)
+            descriptor = build.descriptor(path, 'empty.cpp', allow_empty=True)
+            self.assertEqual(descriptor, {'path': 'empty.cpp', 'bytes': 0, 'sha256': build.sha(b'')})
+
 
 if __name__ == '__main__':
     unittest.main()

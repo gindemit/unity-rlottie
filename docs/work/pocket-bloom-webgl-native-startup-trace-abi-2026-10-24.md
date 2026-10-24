@@ -208,6 +208,9 @@ containing that exact sorted inventory. No commands from receipts are executed.
   descriptors from actual compile sources plus retained Ninja header dependencies,
   including generated and sysroot inputs), and
   `webgl-native-state-trace.cmake-cache.txt` (verbatim actual CMake cache).
+  Only sourceInputs and compiled dependency descriptors permit zero-byte source
+  files with the exact empty-byte SHA256; archives, tools, logs and receipt files
+  remain strictly positive in length.
   `sourceInputs` also binds all tracked package C#, meta, asmdef and JSON files;
   the consumer checks those available within its adopted immutable package.
   `compilerFlags` is the sorted distinct actual plugin command option-token

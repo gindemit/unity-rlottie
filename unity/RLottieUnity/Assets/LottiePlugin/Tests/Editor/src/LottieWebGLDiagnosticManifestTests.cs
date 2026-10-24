@@ -207,6 +207,16 @@ namespace RLottie.Tests.Editor
             Assert.Throws<BuildFailedException>(() => LottieWebGLDiagnosticManifest.ValidateCompileCommand(command + " -sUSE_PTHREADS=1", false));
         }
 
+        [Test]
+        public void EmptySourceIsValidButEmptyArchiveToolOrReceiptIsRejected()
+        {
+            string path = Path.Combine(mPayload, "empty.cpp"); File.WriteAllBytes(path, new byte[0]);
+            var item = new System.Collections.Generic.Dictionary<string, object> {
+                { "path", path }, { "sha256", DiagnosticPaths.Hash(path) }, { "bytes", 0L } };
+            Assert.DoesNotThrow(() => new LottieWebGLDiagnosticManifest().VerifyDescriptor(path, item, true));
+            Assert.Throws<BuildFailedException>(() => new LottieWebGLDiagnosticManifest().VerifyDescriptor(path, item));
+        }
+
         private LottieWebGLDiagnosticManifest Manifest()
         {
             var manifest = new LottieWebGLDiagnosticManifest { Root = mPayload, Hash = new string('a', 64), SourceCommit = new string('b', 40),

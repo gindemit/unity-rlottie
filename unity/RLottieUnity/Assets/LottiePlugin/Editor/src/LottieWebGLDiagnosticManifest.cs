@@ -253,7 +253,7 @@ namespace RLottie
                 if (!relative.StartsWith(prefix, StringComparison.Ordinal)) continue;
                 string suffix = relative.Substring(prefix.Length); DiagnosticPaths.Relative(suffix);
                 string path = System.IO.Path.Combine(package, suffix); DiagnosticPaths.NoLinks(path);
-                VerifyDescriptor(path, item); found.Add(suffix);
+                VerifyDescriptor(path, item, true); found.Add(suffix);
             }
             foreach (string name in new[] { "NativeBridge.cs", "LottieAnimation.Platform.cs", "LottieUploadPump.cs", "LottieWebGLNativeStateTrace.cs" })
                 if (!found.Contains("Runtime/src/" + name)) throw new BuildFailedException("Compiled source inventory omits an adopted managed trace source.");
@@ -304,7 +304,7 @@ namespace RLottie
             if (dependencies.Count == 0) throw new BuildFailedException("Compiled dependencies are absent.");
             foreach (var value in dependencies)
             {
-                VerifyAbsolute(value, null);
+                VerifyAbsolute(value, null, true);
                 string path = DiagnosticJson.Text(DiagnosticJson.Object(value), "path");
                 for (string current = System.IO.Path.GetDirectoryName(path); !string.IsNullOrEmpty(current); current = System.IO.Path.GetDirectoryName(current))
                     if (Directory.Exists(System.IO.Path.Combine(current, ".git")) || File.Exists(System.IO.Path.Combine(current, ".git")))
@@ -390,17 +390,18 @@ namespace RLottie
             if (!Equals(left, right)) throw new BuildFailedException("Receipt value differs from manifest.");
         }
 
-        private void VerifyAbsolute(object value, string requiredRoot)
+        private void VerifyAbsolute(object value, string requiredRoot, bool allowEmpty = false)
         {
             var item = DiagnosticJson.Object(value); DiagnosticJson.Keys(item, "path", "sha256", "bytes");
             string path = DiagnosticJson.Text(item, "path"); DiagnosticPaths.Absolute(path); DiagnosticPaths.NoLinks(path);
+            if (!allowEmpty && DiagnosticJson.Size(item, "bytes") == 0) throw new BuildFailedException("Diagnostic archive/tool/receipt inputs must be nonempty.");
             if (requiredRoot != null && !DiagnosticPaths.Inside(path, requiredRoot)) throw new BuildFailedException("Receipt input escapes its approved root.");
             if (VerifiedFiles.ContainsKey(path))
             {
                 if (VerifiedFiles[path] != DiagnosticJson.Hex(item, "sha256", 64) || new FileInfo(path).Length != DiagnosticJson.Size(item, "bytes"))
                     throw new BuildFailedException("Conflicting receipt input descriptor.");
             }
-            else VerifyDescriptor(path, item);
+            else VerifyDescriptor(path, item, allowEmpty);
         }
 
         private void ValidateCommand(object value, string project, string[] executables, bool build)
@@ -531,11 +532,11 @@ namespace RLottie
             return path;
         }
 
-        private void VerifyDescriptor(string path, Dictionary<string, object> item)
+        internal void VerifyDescriptor(string path, Dictionary<string, object> item, bool allowEmpty = false)
         {
             long size = DiagnosticJson.Size(item, "bytes");
             string hash = DiagnosticJson.Hex(item, "sha256", 64);
-            if (size <= 0 || !File.Exists(path) || new FileInfo(path).Length != size || DiagnosticPaths.Hash(path) != hash)
+            if ((!allowEmpty && size == 0) || !File.Exists(path) || new FileInfo(path).Length != size || DiagnosticPaths.Hash(path) != hash)
                 throw new BuildFailedException("Diagnostic input hash/length mismatch: " + path);
             if (VerifiedFiles.ContainsKey(path)) throw new BuildFailedException("Ambiguous repeated diagnostic input path.");
             VerifiedFiles.Add(path, hash);
