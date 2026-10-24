@@ -8,6 +8,115 @@ namespace LottiePlugin
 {
     public sealed partial class LottieAnimation
     {
+#if UNITY_WEBGL && !UNITY_EDITOR && DEVELOPMENT_BUILD
+        [Serializable]
+        private struct WebGLUploadDiagnosticEvent
+        {
+            public int frame, instanceId, width, height, available, backend;
+            public bool alreadyRetried;
+            public string reason;
+            public int applyCalls, reregisterAttempts, reregisterSuccesses, reregisterFailures, fallbacks;
+        }
+
+        [Serializable]
+        private sealed class WebGLUploadDiagnosticReport
+        {
+            public bool enabled = true;
+            public string scope = "Managed upload observations only; native callback errors are not observed.";
+            public string buildGuid = "";
+            public int uploadChecks, availableZero, requestRejections, recoveryApplyCalls;
+            public int reregisterAttempts, reregisterSuccesses, reregisterFailures, fallbacks;
+            public int eventCount, eventsDropped, instancesWithEvents;
+            public WebGLUploadDiagnosticEvent[] events = new WebGLUploadDiagnosticEvent[8];
+        }
+
+        private enum WebGLUploadDiagnosticAction { Apply, ReregisterAttempt, ReregisterSuccess, ReregisterFailure, Fallback }
+        private static WebGLUploadDiagnosticReport sWebGLUploadDiagnostics;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void InitializeWebGLUploadDiagnostics()
+        {
+            // Unity API access belongs to the main-thread startup callback, not type initialization.
+            sWebGLUploadDiagnostics = CreateWebGLUploadDiagnostics();
+            if (sWebGLUploadDiagnostics != null) sWebGLUploadDiagnostics.buildGuid = Application.buildGUID;
+        }
+        private int _webGLDiagnosticInstanceId;
+
+        private static WebGLUploadDiagnosticReport CreateWebGLUploadDiagnostics()
+        {
+            const string optIn = "lottieUploadDiagnostics=1";
+            string url = Application.absoluteURL;
+            if (string.IsNullOrEmpty(url) || url.IndexOf(optIn, StringComparison.Ordinal) < 0) return null;
+            Uri parsed;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out parsed) || !parsed.IsLoopback ||
+                (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)) return null;
+            int matches = 0;
+            foreach (string part in parsed.Query.TrimStart('?').Split('&'))
+            {
+                int separator = part.IndexOf('=');
+                string name = separator < 0 ? part : part.Substring(0, separator);
+                name = Uri.UnescapeDataString(name.Replace("+", " "));
+                if (name != "lottieUploadDiagnostics") continue;
+                // Fail closed on duplicate/conflicting names, including encoded duplicates.
+                if (++matches > 1 || part != optIn) return null;
+            }
+            return matches == 1 ? new WebGLUploadDiagnosticReport() : null;
+        }
+
+        /// <summary>Read-only, bounded Development WebGL diagnostics; call on the Unity main thread.
+        /// Disabled unless an HTTP(S) loopback page explicitly opts in with lottieUploadDiagnostics=1.</summary>
+        public static string GetWebGLUploadDiagnosticsJson()
+        {
+            return sWebGLUploadDiagnostics == null ? "{\"enabled\":false}" : JsonUtility.ToJson(sWebGLUploadDiagnostics);
+        }
+
+        private int BeginWebGLUploadDiagnostic(int available, string reason)
+        {
+            WebGLUploadDiagnosticReport report = sWebGLUploadDiagnostics;
+            if (report == null) return -1;
+            if (_webGLDiagnosticInstanceId == 0) _webGLDiagnosticInstanceId = ++report.instancesWithEvents;
+            if (report.eventCount == report.events.Length) { report.eventsDropped++; return -1; }
+            int index = report.eventCount++;
+            report.events[index] = new WebGLUploadDiagnosticEvent
+            {
+                frame = Time.frameCount, instanceId = _webGLDiagnosticInstanceId,
+                width = Texture.width, height = Texture.height, available = available,
+                backend = (int)TextureUploadBackend, alreadyRetried = _webGLReregisterAttempted, reason = reason
+            };
+            return index;
+        }
+
+        private void ObserveWebGLUploadDiagnostic(int index, WebGLUploadDiagnosticAction action)
+        {
+            WebGLUploadDiagnosticReport report = sWebGLUploadDiagnostics;
+            if (report == null) return;
+            switch (action)
+            {
+                case WebGLUploadDiagnosticAction.Apply:
+                    report.recoveryApplyCalls++;
+                    if (index >= 0) report.events[index].applyCalls++;
+                    break;
+                case WebGLUploadDiagnosticAction.ReregisterAttempt:
+                    report.reregisterAttempts++;
+                    if (index >= 0) report.events[index].reregisterAttempts++;
+                    break;
+                case WebGLUploadDiagnosticAction.ReregisterSuccess:
+                    report.reregisterSuccesses++;
+                    if (index >= 0) report.events[index].reregisterSuccesses++;
+                    break;
+                case WebGLUploadDiagnosticAction.ReregisterFailure:
+                    report.reregisterFailures++;
+                    if (index >= 0) report.events[index].reregisterFailures++;
+                    break;
+                case WebGLUploadDiagnosticAction.Fallback:
+                    report.fallbacks++;
+                    if (index >= 0) report.events[index].fallbacks++;
+                    break;
+            }
+            if (index >= 0) report.events[index].backend = (int)TextureUploadBackend;
+        }
+#endif
+
         // Platform-specific helpers to reduce #if clutter
 
         private Texture GetOutputTexture()
@@ -416,6 +525,10 @@ namespace LottiePlugin
                 if (!_usesUnityOwnedWebGLTexture)
                 {
                     UseWebGLManagedTextureUploadFallback("texture registration");
+#if DEVELOPMENT_BUILD
+                    int diagnostic = BeginWebGLUploadDiagnostic(-1, "texture registration failed");
+                    ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.Fallback);
+#endif
                 }
                 return;
             }
@@ -570,22 +683,45 @@ namespace LottiePlugin
 #if UNITY_WEBGL && !UNITY_EDITOR
             LottieUploadPump.EnsureInstance();
             int uploadAvailable = NativeBridge.LottieIsWebGLUploadAvailable(_animationWrapperIntPtr);
+#if DEVELOPMENT_BUILD
+            if (sWebGLUploadDiagnostics != null) sWebGLUploadDiagnostics.uploadChecks++;
+#endif
 
             if (uploadAvailable == 0)
             {
+#if DEVELOPMENT_BUILD
+                if (sWebGLUploadDiagnostics != null) sWebGLUploadDiagnostics.availableZero++;
+                int diagnostic = BeginWebGLUploadDiagnostic(uploadAvailable, "native upload unavailable");
+#endif
                 if (!_webGLReregisterAttempted)
                 {
                     _webGLReregisterAttempted = true;
+#if DEVELOPMENT_BUILD
+                    ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.Apply);
+#endif
                     // Make this frame visible and let Unity recreate the GPU
                     // object, if needed, before caching its native texture name.
                     Texture.Apply(false, false);
+#if DEVELOPMENT_BUILD
+                    ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.ReregisterAttempt);
+#endif
                     if (TryRegisterUnityOwnedWebGLTexture((uint)Texture.width, (uint)Texture.height))
                     {
+#if DEVELOPMENT_BUILD
+                        ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.ReregisterSuccess);
+#endif
                         return;
                     }
+#if DEVELOPMENT_BUILD
+                    ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.ReregisterFailure);
+#endif
                 }
 
                 UseWebGLManagedTextureUploadFallback("native upload failure");
+#if DEVELOPMENT_BUILD
+                ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.Fallback);
+                ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.Apply);
+#endif
                 Texture.Apply(false, false);
                 return;
             }
@@ -595,7 +731,15 @@ namespace LottiePlugin
                     _animationWrapperIntPtr,
                     _lottieRenderDataIntPtr) == 0)
             {
+#if DEVELOPMENT_BUILD
+                if (sWebGLUploadDiagnostics != null) sWebGLUploadDiagnostics.requestRejections++;
+                int diagnostic = BeginWebGLUploadDiagnostic(uploadAvailable, "upload request rejected");
+#endif
                 UseWebGLManagedTextureUploadFallback("upload request rejected");
+#if DEVELOPMENT_BUILD
+                ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.Fallback);
+                ObserveWebGLUploadDiagnostic(diagnostic, WebGLUploadDiagnosticAction.Apply);
+#endif
                 Texture.Apply(false, false);
             }
 #else
