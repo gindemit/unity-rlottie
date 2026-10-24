@@ -1,6 +1,6 @@
 """Compile actual backend + export slice with labelled host stubs, never Unity/Wasm.
 
-Usage: python native_contract.py --compiler <installed clang++> --output <fresh external directory>
+Usage: python native_contract.py --compiler <installed clang++ or cl.exe> --output <fresh external directory>
 No CMake, native archive, package, dependency, cache or browser operation is performed.
 """
 from pathlib import Path
@@ -39,6 +39,16 @@ def main():
     args = parser.parse_args()
     external_fresh(args.output)
     compiler = args.compiler.resolve(strict=True)
+    msvc = compiler.name.lower() == 'cl.exe'
+    if msvc and args.host_linker:
+        raise ValueError('cl.exe selects its sibling linker; do not supply --host-linker')
+    includes = [directory.resolve(strict=True) for directory in args.host_include]
+    libraries = [directory.resolve(strict=True) for directory in args.host_lib]
+    environment = os.environ.copy()
+    if msvc:
+        # cl launches its matching link.exe by name. Keep the installed host tool
+        # directory first, without mutating the parent shell or Unity toolchain.
+        environment['PATH'] = str(compiler.parent) + os.pathsep + environment.get('PATH', '')
     repo = Path(__file__).resolve().parents[2]
     names = ['src/WebGLBackend.cpp', 'src/WebGLBackend.h', 'src/LottiePlugin.h',
              'src/LottiePluginApi.cpp', 'tests/native/NativeWebGLTraceTests.cpp']
@@ -110,23 +120,35 @@ bool emscripten_is_webgl_context_lost(int);
         (output / directory / filename).write_text(body, encoding='utf-8')
     receipt = {'kind': 'actual-source-host-stub-contracts-not-WebGL',
                'compiler': {'path': str(compiler), 'sha256': digest(compiler.read_bytes())},
+               'harnessSha256': digest(Path(__file__).read_bytes()),
                'inputs': {name: {'sha256': digest(body), 'bytes': len(body)} for name, body in inputs.items()},
                'runs': []}
+    if msvc:
+        linker = compiler.with_name('link.exe').resolve(strict=True)
+        receipt['linker'] = {'path': str(linker), 'sha256': digest(linker.read_bytes())}
     try:
         for mode, define in [('selected', []), ('compile-off', ['-DLOTTIE_HOST_TRACE_OFF=1']),
                              ('threads-unsupported', ['-D__EMSCRIPTEN_PTHREADS__=1'])]:
             executable = output / (mode + ('.exe' if os.name == 'nt' else ''))
-            command = [str(compiler), '-std=c++17', '-Wall', '-Wextra', '-I', str(output),
-                       *define, str(output / 'NativeWebGLTraceTests.cpp'), '-o', str(executable)]
-            if os.name == 'nt':
-                command.insert(1, '--target=x86_64-pc-windows-msvc')
-            if args.host_linker:
-                command.insert(1, '-fuse-ld=' + str(args.host_linker.resolve(strict=True)))
-            for directory in args.host_include:
-                command += ['-isystem', str(directory.resolve(strict=True))]
-            for directory in args.host_lib:
-                command += ['-L', str(directory.resolve(strict=True))]
-            build = subprocess.run(command, cwd=output, capture_output=True, text=True, timeout=90)
+            if msvc:
+                command = [str(compiler), '/nologo', '/std:c++17', '/EHsc', '/W4', '/MD',
+                           '/I' + str(output), *['/D' + value[2:] for value in define],
+                           *['/I' + str(directory) for directory in includes],
+                           str(output / 'NativeWebGLTraceTests.cpp'), '/Fe:' + str(executable),
+                           '/Fo:' + str(output / (mode + '.obj')), '/link',
+                           *['/LIBPATH:' + str(directory) for directory in libraries]]
+            else:
+                command = [str(compiler), '-std=c++17', '-Wall', '-Wextra', '-I', str(output),
+                           *define, str(output / 'NativeWebGLTraceTests.cpp'), '-o', str(executable)]
+                if os.name == 'nt':
+                    command.insert(1, '--target=x86_64-pc-windows-msvc')
+                if args.host_linker:
+                    command.insert(1, '-fuse-ld=' + str(args.host_linker.resolve(strict=True)))
+                for directory in includes:
+                    command += ['-isystem', str(directory)]
+                for directory in libraries:
+                    command += ['-L', str(directory)]
+            build = subprocess.run(command, cwd=output, env=environment, capture_output=True, text=True, timeout=90)
             run = {'mode': mode, 'compileCommand': command, 'compileExit': build.returncode,
                    'compileOutput': build.stdout + build.stderr}
             receipt['runs'].append(run)
@@ -142,7 +164,10 @@ bool emscripten_is_webgl_context_lost(int);
     finally:
         receipt['canonicalInputsUnchanged'] = all((repo / name).read_bytes() == body for name, body in inputs.items())
         (output / 'native-host-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
-    print(json.dumps(receipt, indent=2))
+    print(json.dumps({'passed': receipt['passed'],
+                      'canonicalInputsUnchanged': receipt['canonicalInputsUnchanged'],
+                      'runs': [{'mode': run['mode'], 'output': run['output'].strip()} for run in receipt['runs']],
+                      'receipt': str(output / 'native-host-receipt.json')}, indent=2))
 
 
 if __name__ == '__main__':
