@@ -241,6 +241,80 @@ namespace RLottie.Tests.Editor
                 Assert.Throws<BuildFailedException>(() => LottieWebGLDiagnosticManifest.ValidateNmDiagnostics(line, archive));
         }
 
+        private const string PackageSource = "{\n  \"name\": \"com.gindemit.rlottie\"\n}\n";
+        private const string UpmFingerprint = "eb0438f6b5a1a4e2b9f169150ecfa06db4631a8f";
+
+        private static string EnrichedPackage(string source = PackageSource)
+        {
+            return source.Replace("\n}\n", ",\n  \"_fingerprint\": \"" + UpmFingerprint + "\"\n}\n");
+        }
+
+        private LottieWebGLDiagnosticManifest VerifyInstalledPackage(string installed)
+        {
+            string path = Path.Combine(mPayload, "package.json"); File.WriteAllText(path, installed, new UTF8Encoding(false));
+            byte[] source = Encoding.UTF8.GetBytes(PackageSource);
+            var descriptor = new System.Collections.Generic.Dictionary<string, object> {
+                { "path", "package.json" }, { "sha256", DiagnosticPaths.HashBytes(source) }, { "bytes", (long)source.Length } };
+            var manifest = new LottieWebGLDiagnosticManifest();
+            manifest.VerifyPackageManifestDescriptor(path, descriptor); return manifest;
+        }
+
+        [Test]
+        public void OriginalPackageManifestExactBytesAreAccepted()
+        {
+            Assert.DoesNotThrow(() => VerifyInstalledPackage(PackageSource).Revalidate());
+        }
+
+        [Test]
+        public void UpmFingerprintReconstructsExactSourceAndRevalidatesEntireInstalledFile()
+        {
+            var manifest = VerifyInstalledPackage(EnrichedPackage());
+            string path = Path.Combine(mPayload, "package.json");
+            Assert.That(manifest.VerifiedFiles[path], Is.EqualTo(DiagnosticPaths.Hash(path)));
+            Assert.DoesNotThrow(() => manifest.Revalidate());
+            File.WriteAllText(path, EnrichedPackage().Replace(UpmFingerprint, new string('a', 40)), new UTF8Encoding(false));
+            Assert.Throws<BuildFailedException>(() => manifest.Revalidate());
+        }
+
+        [Test]
+        public void UpmFingerprintDoesNotPermitAlteredSourceFields()
+        {
+            Assert.Throws<BuildFailedException>(() => VerifyInstalledPackage(EnrichedPackage().Replace("com.gindemit.rlottie", "changed")));
+        }
+
+        [Test]
+        public void UpmFingerprintDoesNotPermitOtherAddedFields()
+        {
+            Assert.Throws<BuildFailedException>(() => VerifyInstalledPackage(EnrichedPackage().Replace(
+                "  \"_fingerprint\"", "  \"extra\": true,\n  \"_fingerprint\"")));
+        }
+
+        [Test]
+        public void UpmDuplicateFingerprintPropertiesAreRejected()
+        {
+            Assert.Throws<BuildFailedException>(() => VerifyInstalledPackage(EnrichedPackage().Replace(
+                "  \"_fingerprint\"", "  \"_fingerprint\": \"" + UpmFingerprint + "\",\n  \"_fingerprint\"")));
+        }
+
+        [Test]
+        public void UpmNestedFingerprintCannotReplaceRootMetadata()
+        {
+            Assert.Throws<BuildFailedException>(() => VerifyInstalledPackage(PackageSource.Replace("\n}\n",
+                ",\n  \"metadata\": {\"_fingerprint\": \"" + UpmFingerprint + "\"}\n}\n")));
+        }
+
+        [Test]
+        public void UpmNonfinalAndMalformedFingerprintsAreRejected()
+        {
+            foreach (string installed in new[] {
+                EnrichedPackage().Replace("\n}\n", ",\n  \"extra\": true\n}\n"),
+                EnrichedPackage().Replace(UpmFingerprint, UpmFingerprint.ToUpperInvariant()),
+                EnrichedPackage().Replace(UpmFingerprint, new string('a', 39)),
+                EnrichedPackage().Replace(UpmFingerprint, new string('g', 40)),
+                EnrichedPackage().Replace("\"" + UpmFingerprint + "\"", "1") })
+                Assert.Throws<BuildFailedException>(() => VerifyInstalledPackage(installed));
+        }
+
         private LottieWebGLDiagnosticManifest Manifest()
         {
             var manifest = new LottieWebGLDiagnosticManifest { Root = mPayload, Hash = new string('a', 64), SourceCommit = new string('b', 40),

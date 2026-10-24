@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -257,10 +258,41 @@ namespace RLottie
                 if (!relative.StartsWith(prefix, StringComparison.Ordinal)) continue;
                 string suffix = relative.Substring(prefix.Length); DiagnosticPaths.Relative(suffix);
                 string path = System.IO.Path.Combine(package, suffix); DiagnosticPaths.NoLinks(path);
-                VerifyDescriptor(path, item, true); found.Add(suffix);
+                if (suffix == "package.json") VerifyPackageManifestDescriptor(path, item);
+                else VerifyDescriptor(path, item, true);
+                found.Add(suffix);
             }
             foreach (string name in new[] { "NativeBridge.cs", "LottieAnimation.Platform.cs", "LottieUploadPump.cs", "LottieWebGLNativeStateTrace.cs" })
                 if (!found.Contains("Runtime/src/" + name)) throw new BuildFailedException("Compiled source inventory omits an adopted managed trace source.");
+        }
+
+        internal void VerifyPackageManifestDescriptor(string path, Dictionary<string, object> source)
+        {
+            DiagnosticPaths.NoLinks(path);
+            byte[] installed = File.ReadAllBytes(path);
+            string installedHash = DiagnosticPaths.HashBytes(installed);
+            long sourceBytes = DiagnosticJson.Size(source, "bytes");
+            string sourceHash = DiagnosticJson.Hex(source, "sha256", 64);
+            if (installed.Length != sourceBytes || installedHash != sourceHash)
+            {
+                // UPM appends this one field to an installed Git package manifest.
+                // Reconstruct bytes, never reserialize source fields or ignore changes.
+                var parsed = DiagnosticJson.Object(DiagnosticJson.Parse(installed));
+                DiagnosticJson.Hex(parsed, "_fingerprint", 40);
+                string text = new UTF8Encoding(false, true).GetString(installed);
+                var matches = Regex.Matches(text,
+                    @",[ \t\r\n]*""_fingerprint""[ \t\r\n]*:[ \t\r\n]*""[0-9a-f]{40}""(?=[ \t\r\n]*\}[ \t\r\n]*\z)");
+                if (matches.Count != 1) throw new BuildFailedException("Expected one final UPM package fingerprint field.");
+                string originalText = text.Remove(matches[0].Index, matches[0].Length);
+                var original = DiagnosticJson.Object(DiagnosticJson.Parse(Encoding.UTF8.GetBytes(originalText)));
+                if (original.ContainsKey("_fingerprint")) throw new BuildFailedException("UPM fingerprint removal did not reconstruct the source package manifest.");
+                byte[] reconstructed = Encoding.UTF8.GetBytes(originalText);
+                if (reconstructed.Length != sourceBytes || DiagnosticPaths.HashBytes(reconstructed) != sourceHash)
+                    throw new BuildFailedException("Installed package manifest differs from the exact fingerprint-free source bytes.");
+            }
+            if (VerifiedFiles.ContainsKey(path)) throw new BuildFailedException("Ambiguous repeated diagnostic input path.");
+            // Revalidate the entire actual installed file, including UPM metadata.
+            VerifiedFiles.Add(path, installedHash);
         }
 
         private void ValidateReceipts(Dictionary<string, object> manifest, string project, string unityRoot,
