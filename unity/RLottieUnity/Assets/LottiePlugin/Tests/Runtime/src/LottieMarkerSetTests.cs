@@ -54,5 +54,72 @@ namespace LottiePlugin.Tests.Runtime
         {
             Assert.Throws<FormatException>(() => LottieMarkerSet.Parse(json, 3));
         }
+
+        [TestCase("{\"shape\":{\"a\":1,\"a\":2}}")]
+        [TestCase("{\"shape\":[{\"a\":1,\"\\u0061\":2}]}")]
+        [TestCase("{\"shape\":{\"\\uD800\":1,\"\\ud800\":2}}")]
+        [TestCase("{\"shape\":{\"x\":\"\\q\"}}")]
+        [TestCase("{\"shape\":{\"x\":\"\\u12G4\"}}")]
+        [TestCase("{\"shape\":{\"x\":1e+}}")]
+        [TestCase("{\"shape\":{\"x\":01}}")]
+        [TestCase("{\"shape\":[1,]}")]
+        [TestCase("{\"shape\":{\"x\":1,}}")]
+        public void IgnoredShapeSubtreesStillRejectMalformedJson(string ignored)
+        {
+            string json = "{\"fr\":60,\"ip\":0,\"op\":3,\"ignored\":" + ignored + "}";
+            Assert.Throws<FormatException>(() => LottieMarkerSet.Parse(json, 3));
+        }
+
+        [Test]
+        public void EscapedRootAndMarkerFieldsKeepTheirDecodedSemantics()
+        {
+            const string json = "{\"f\\u0072\":30,\"ip\":0,\"op\":3,\"m\\u0061rkers\":[{\"c\\u006d\":\"x\\n\\u82b1\",\"tm\":0,\"dr\":2}],\"unknown\":{\"Aa\":1,\"BB\":2}}";
+            LottieMarkerSet markers = LottieMarkerSet.Parse(json, 3);
+            Assert.AreEqual(30, markers.FrameRate);
+            Assert.AreEqual(1, markers.Get("x\n花").LastRenderFrameInclusive);
+            Assert.Throws<FormatException>(() => LottieMarkerSet.Parse("{\"fr\":30,\"f\\u0072\":30,\"ip\":0,\"op\":3}", 3));
+        }
+
+        [Test]
+        public void PolynomialCollisionKeysAndSiblingScopesAreNotDuplicates()
+        {
+            const string json = "{\"fr\":60,\"ip\":0,\"op\":3,\"unknown\":[{\"Aa\":1,\"BB\":2},{\"Aa\":3,\"BB\":4}],\"markers\":[]}";
+            Assert.AreEqual(0, LottieMarkerSet.Parse(json, 3).Markers.Count);
+        }
+
+        [TestCase("null")]
+        [TestCase("false")]
+        [TestCase("3")]
+        [TestCase("\"not-an-array\"")]
+        [TestCase("{}")]
+        public void WrongTypedMarkersRetainTheExistingEmptyListBehavior(string value)
+        {
+            string json = "{\"fr\":60,\"ip\":0,\"op\":3,\"markers\":" + value + "}";
+            Assert.AreEqual(0, LottieMarkerSet.Parse(json, 3).Markers.Count);
+        }
+
+        [TestCase("null")]
+        [TestCase("[]")]
+        [TestCase("{\"cm\":7,\"tm\":0,\"dr\":1}")]
+        [TestCase("{\"cm\":\"x\",\"tm\":\"0\",\"dr\":1}")]
+        [TestCase("{\"cm\":\"x\",\"tm\":0,\"dr\":false}")]
+        public void SelectedMarkerTypesRemainStrict(string marker)
+        {
+            string json = "{\"fr\":60,\"ip\":0,\"op\":3,\"markers\":[" + marker + "]}";
+            Assert.Throws<FormatException>(() => LottieMarkerSet.Parse(json, 3));
+        }
+
+        [Test]
+        public void SharedParsedDocumentKeepsOwnerDisposalIndependent()
+        {
+            string json = Resources.Load<TextAsset>("marker_nonzero_ip").text;
+            bool disposed = false;
+            LottieMarkerSet first = LottieMarkerSet.Parse(json, 11, () => disposed);
+            LottieMarkerSet second = LottieMarkerSet.Parse(json, 11, () => false);
+            Assert.AreSame(first.Markers, second.Markers);
+            disposed = true;
+            Assert.Throws<ObjectDisposedException>(() => first.Get("idle"));
+            Assert.AreEqual(0, second.Get("idle").FirstRenderFrame);
+        }
     }
 }

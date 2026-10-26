@@ -204,87 +204,189 @@ namespace LottiePlugin
             return (int)value;
         }
 
-        // Dependency-free parser kept internal so marker parsing works in Unity 2019.4.
+        // Validate the complete document, but materialize only marker metadata. Scratch
+        // key sets are reused by object depth; skipped shape trees retain no DOM objects.
+        // No Span APIs: this path also runs in Unity 2019.4.
         private sealed class JsonSubsetParser
         {
+            // Private process salt and nonlinear mixing avoid predictable polynomial
+            // collision families without changing decoded-key equality or JSON results.
+            private static readonly ulong sKeyHashSeed = ((ulong)(uint)Guid.NewGuid().GetHashCode() << 32) |
+                (uint)Guid.NewGuid().GetHashCode();
+            private enum Selection { Skip, Root, Scalar, Markers, Marker }
             private readonly string _text;
-            private int _position;
+            private readonly List<HashSet<KeyToken>> _keys = new List<HashSet<KeyToken>>();
+            private readonly List<KeyToken> _activeKeys = new List<KeyToken>();
+            private int _position, _objectDepth;
             private JsonSubsetParser(string text) { _text = text; }
 
             public static object Parse(string text)
             {
                 var parser = new JsonSubsetParser(text);
-                object value = parser.ReadValue();
+                object value = parser.ReadValue(Selection.Root);
                 parser.SkipWhiteSpace();
                 if (parser._position != text.Length) throw parser.Error("Unexpected trailing JSON content.");
                 return value;
             }
 
-            private object ReadValue()
+            private object ReadValue(Selection selection)
             {
                 SkipWhiteSpace();
                 if (_position >= _text.Length) throw Error("Unexpected end of JSON.");
                 char c = _text[_position];
-                if (c == '{') return ReadObject();
-                if (c == '[') return ReadArray();
-                if (c == '"') return ReadString();
-                if (c == '-' || (c >= '0' && c <= '9')) return ReadNumber();
-                if (Consume("true")) return true;
-                if (Consume("false")) return false;
-                if (Consume("null")) return null;
+                if (c == '{') return ReadObject(selection);
+                if (c == '[') return ReadArray(selection);
+                if (c == '"')
+                {
+                    KeyToken value = ReadStringToken();
+                    return selection == Selection.Scalar ? value.Materialize() : null;
+                }
+                if (c == '-' || (c >= '0' && c <= '9')) return ReadNumber(selection == Selection.Scalar);
+                if (Consume("true") || Consume("false") || Consume("null")) return null;
                 throw Error("Unexpected JSON token.");
             }
 
-            private Dictionary<string, object> ReadObject()
+            private Dictionary<string, object> ReadObject(Selection selection)
             {
-                var result = new Dictionary<string, object>(StringComparer.Ordinal);
-                _position++; SkipWhiteSpace();
-                if (Take('}')) return result;
-                while (true)
+                bool keep = selection == Selection.Root || selection == Selection.Marker;
+                var result = keep ? new Dictionary<string, object>(StringComparer.Ordinal) : null;
+                int depth = _objectDepth++;
+                if (depth == _keys.Count) _keys.Add(new HashSet<KeyToken>());
+                HashSet<KeyToken> keys = _keys[depth];
+                int keyStart = _activeKeys.Count;
+                try
                 {
-                    SkipWhiteSpace();
-                    if (_position >= _text.Length || _text[_position] != '"') throw Error("Expected an object key.");
-                    string key = ReadString(); SkipWhiteSpace();
-                    if (!Take(':')) throw Error("Expected ':' after an object key.");
-                    if (result.ContainsKey(key)) throw Error("Duplicate JSON object key: " + key);
-                    result.Add(key, ReadValue()); SkipWhiteSpace();
+                    _position++; SkipWhiteSpace();
                     if (Take('}')) return result;
-                    if (!Take(',')) throw Error("Expected ',' or '}'.");
+                    while (true)
+                    {
+                        SkipWhiteSpace();
+                        if (_position >= _text.Length || _text[_position] != '"') throw Error("Expected an object key.");
+                        KeyToken key = ReadStringToken(); SkipWhiteSpace();
+                        if (!Take(':')) throw Error("Expected ':' after an object key.");
+                        if (!keys.Add(key)) throw Error("Duplicate JSON object key: " + key.Materialize());
+                        _activeKeys.Add(key);
+                        string field = null;
+                        Selection child = Selection.Skip;
+                        if (selection == Selection.Root)
+                        {
+                            if (key.Is("fr")) field = "fr";
+                            else if (key.Is("ip")) field = "ip";
+                            else if (key.Is("op")) field = "op";
+                            else if (key.Is("markers")) { field = "markers"; child = Selection.Markers; }
+                        }
+                        else if (selection == Selection.Marker)
+                        {
+                            if (key.Is("cm")) field = "cm";
+                            else if (key.Is("tm")) field = "tm";
+                            else if (key.Is("dr")) field = "dr";
+                        }
+                        if (field != null && child == Selection.Skip) child = Selection.Scalar;
+                        object value = ReadValue(child);
+                        if (field != null) result.Add(field, value);
+                        SkipWhiteSpace();
+                        if (Take('}')) return result;
+                        if (!Take(',')) throw Error("Expected ',' or '}'.");
+                    }
+                }
+                finally
+                {
+                    // Remove only this object's keys. HashSet.Clear would repeatedly clear
+                    // a wide prior sibling's entire capacity for every later tiny object.
+                    for (int i = _activeKeys.Count - 1; i >= keyStart; i--) keys.Remove(_activeKeys[i]);
+                    _activeKeys.RemoveRange(keyStart, _activeKeys.Count - keyStart);
+                    _objectDepth--;
                 }
             }
 
-            private List<object> ReadArray()
+            private List<object> ReadArray(Selection selection)
             {
-                var result = new List<object>();
+                bool keep = selection == Selection.Markers;
+                var result = keep ? new List<object>() : null;
                 _position++; SkipWhiteSpace();
                 if (Take(']')) return result;
                 while (true)
                 {
-                    result.Add(ReadValue()); SkipWhiteSpace();
+                    object value = ReadValue(keep ? Selection.Marker : Selection.Skip);
+                    if (keep) result.Add(value);
+                    SkipWhiteSpace();
                     if (Take(']')) return result;
                     if (!Take(',')) throw Error("Expected ',' or ']'.");
                 }
             }
 
-            private string ReadString()
+            // A validated string slice, hashed and compared by its decoded UTF-16 units.
+            // Escaped-equivalent keys compare equal; hash collisions never establish equality.
+            private struct KeyToken : IEquatable<KeyToken>
             {
-                _position++;
-                var result = new StringBuilder();
+                private readonly string _text;
+                private readonly int _start, _end, _hash;
+                private readonly bool _escaped;
+                public KeyToken(string text, int start, int end, int hash, bool escaped)
+                { _text = text; _start = start; _end = end; _hash = hash; _escaped = escaped; }
+                public override int GetHashCode() { return _hash; }
+                public bool Equals(KeyToken other)
+                {
+                    if (_hash != other._hash) return false;
+                    int a = _start, b = other._start;
+                    while (a < _end && b < other._end)
+                        if (Next(_text, ref a) != Next(other._text, ref b)) return false;
+                    return a == _end && b == other._end;
+                }
+                public override bool Equals(object other) { return other is KeyToken && Equals((KeyToken)other); }
+                public bool Is(string field)
+                {
+                    int position = _start, index = 0;
+                    while (position < _end && index < field.Length)
+                        if (Next(_text, ref position) != field[index++]) return false;
+                    return position == _end && index == field.Length;
+                }
+                public string Materialize()
+                {
+                    if (!_escaped) return _text.Substring(_start, _end - _start);
+                    var result = new StringBuilder();
+                    int position = _start;
+                    while (position < _end) result.Append(Next(_text, ref position));
+                    return result.ToString();
+                }
+                private static char Next(string text, ref int position)
+                {
+                    char c = text[position++];
+                    if (c != '\\') return c;
+                    char escape = text[position++];
+                    if (escape == 'u')
+                    {
+                        int code;
+                        UnicodeCode(text, position, out code);
+                        position += 4;
+                        return (char)code;
+                    }
+                    const string escapes = "\"\\/bfnrt";
+                    const string replacements = "\"\\/\b\f\n\r\t";
+                    return replacements[escapes.IndexOf(escape)];
+                }
+            }
+
+            private KeyToken ReadStringToken()
+            {
+                int start = ++_position;
+                ulong hash = sKeyHashSeed ^ 14695981039346656037UL;
+                bool escaped = false;
                 while (_position < _text.Length)
                 {
                     char c = _text[_position++];
-                    if (c == '"') return result.ToString();
+                    if (c == '"') return new KeyToken(_text, start, _position - 1, KeyHash(hash), escaped);
                     if (c == '\\')
                     {
+                        escaped = true;
                         if (_position >= _text.Length) throw Error("Incomplete JSON escape.");
                         char escape = _text[_position++];
                         if (escape == 'u')
                         {
                             if (_position + 4 > _text.Length) throw Error("Incomplete Unicode escape.");
                             int code;
-                            if (!int.TryParse(_text.Substring(_position, 4), NumberStyles.HexNumber,
-                                CultureInfo.InvariantCulture, out code)) throw Error("Invalid Unicode escape.");
-                            result.Append((char)code); _position += 4;
+                            if (!UnicodeCode(_text, _position, out code)) throw Error("Invalid Unicode escape.");
+                            c = (char)code; _position += 4;
                         }
                         else
                         {
@@ -292,34 +394,84 @@ namespace LottiePlugin
                             const string replacements = "\"\\/\b\f\n\r\t";
                             int index = escapes.IndexOf(escape);
                             if (index < 0) throw Error("Invalid JSON escape.");
-                            result.Append(replacements[index]);
+                            c = replacements[index];
                         }
                     }
-                    else
-                    {
-                        if (c < 0x20) throw Error("Control character in JSON string.");
-                        result.Append(c);
-                    }
+                    else if (c < 0x20) throw Error("Control character in JSON string.");
+                    hash = unchecked((hash ^ c) * 1099511628211UL);
                 }
                 throw Error("Unterminated JSON string.");
             }
 
-            private double ReadNumber()
+            private static int KeyHash(ulong value)
+            {
+                unchecked
+                {
+                    value ^= value >> 33;
+                    value *= 0xff51afd7ed558ccdUL;
+                    value ^= value >> 33;
+                    value *= 0xc4ceb9fe1a85ec53UL;
+                    value ^= value >> 33;
+                    return (int)(value ^ (value >> 32));
+                }
+            }
+
+            private static bool UnicodeCode(string text, int position, out int code)
+            {
+                code = 0;
+                for (int i = 0; i < 4; i++)
+                {
+                    char c = text[position + i];
+                    int digit = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 :
+                        c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+                    if (digit < 0)
+                    {
+                        // Keep the old HexNumber parser's uncommon whitespace behavior.
+                        return int.TryParse(text.Substring(position, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out code);
+                    }
+                    code = (code << 4) | digit;
+                }
+                return true;
+            }
+
+            private object ReadNumber(bool keep)
             {
                 int start = _position;
                 if (Take('-')) { }
                 if (Take('0')) { }
                 else { RequireDigits(); }
                 if (Take('.')) RequireDigits();
+                int exponent = -1;
                 if (Take('e') || Take('E'))
                 {
                     if (!Take('+')) Take('-');
+                    exponent = _position;
                     RequireDigits();
                 }
+                if (!keep && OrdinaryFiniteNumber(start, exponent)) return null;
+                // Required values retain the exact runtime's double conversion. Exceptional
+                // skipped tokens (overflow, huge exponents or Unicode digits) also use the old
+                // conversion, preserving its acceptance/rejection without newer Span APIs.
                 double result;
                 if (!double.TryParse(_text.Substring(start, _position - start), NumberStyles.Float,
                     CultureInfo.InvariantCulture, out result)) throw Error("Invalid JSON number.");
-                return result;
+                return keep ? (object)result : null;
+            }
+
+            private bool OrdinaryFiniteNumber(int start, int exponent)
+            {
+                // At most 128 ASCII token characters and exponent magnitude <=128 guarantee
+                // finite conversion (absolute magnitude <1e256). Grammar was already checked.
+                if (_position - start > 128) return false;
+                for (int i = start; i < _position; i++) if (_text[i] > 127) return false;
+                int power = 0;
+                if (exponent >= 0)
+                    for (int i = exponent; i < _position; i++)
+                    {
+                        power = power * 10 + _text[i] - '0';
+                        if (power > 128) return false;
+                    }
+                return true;
             }
 
             private void RequireDigits()
