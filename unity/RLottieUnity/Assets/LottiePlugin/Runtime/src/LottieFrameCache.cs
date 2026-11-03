@@ -81,6 +81,7 @@ namespace LottiePlugin
         private LottieRasterBatch _batch;
         private readonly LottieFramePreparationPool _pool;
         private byte[] _completed;
+        private int[] _batchFrames;
         private int _completedOffset;
         private int _reservedBytes;
         public bool FellBack { get; private set; }
@@ -169,9 +170,12 @@ namespace LottiePlugin
                             int bytes = checked(count * _pixels.Length);
                             if (!_pool.TryReserve(bytes)) return false;
                             _reservedBytes = bytes;
-                            var frames = new int[count];
-                            Array.Copy(clip.SourceFrames, _warmFrame, frames, 0, count);
-                            _batch.Start(frames);
+                            // The previous batch has been fully consumed before these
+                            // indices can be overwritten. Keep exact tail lengths.
+                            if (_batchFrames == null || _batchFrames.Length != count)
+                                _batchFrames = new int[count];
+                            Array.Copy(clip.SourceFrames, _warmFrame, _batchFrames, 0, count);
+                            _batch.Start(_batchFrames);
                         }
                         if (_completed == null)
                         {
@@ -215,6 +219,7 @@ namespace LottiePlugin
             {
                 _ready = true;
                 if (_batch != null) { _batch.Dispose(); _batch = null; }
+                _batchFrames = null;
                 _rasterizer.Dispose();
                 _rasterizer = null;
                 _pixels.Dispose();
@@ -353,6 +358,7 @@ namespace LottiePlugin
                 throw new InvalidOperationException("Dispose must run on the thread that created the frame cache.");
             _disposed = true;
             if (_batch != null) { _batch.Dispose(); _batch = null; }
+            _batchFrames = null;
             ReleaseBatchPixels();
             if (_rasterizer != null) { _rasterizer.Dispose(); _rasterizer = null; }
             if (_pixels.IsCreated) _pixels.Dispose();
@@ -373,6 +379,7 @@ namespace LottiePlugin
         private void FallBack(Exception error)
         {
             if (_batch != null) { _batch.Dispose(); _batch = null; }
+            _batchFrames = null;
             ReleaseBatchPixels();
             FellBack = true;
             FallbackReason = error.Message;

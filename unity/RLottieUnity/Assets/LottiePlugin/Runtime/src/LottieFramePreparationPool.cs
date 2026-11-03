@@ -11,6 +11,9 @@ namespace LottiePlugin
     /// Explicitly owned shared CPU preparation budget. Dispose caches before this pool.
     /// Workers: 1..8; batch: 1..32; pending pixels: 4 bytes..64 MiB total;
     /// browser timeout: 0.1..60 seconds. Native retirement joins bounded work.
+    /// MaximumPendingPixelBytes bounds in-flight cache reservations, not all
+    /// retained memory. Each active cache can retain one exact-sized completed
+    /// result buffer until its next batch or disposal, outside that reservation.
     /// </summary>
     public sealed class LottieFramePreparationPool : IDisposable
     {
@@ -98,6 +101,8 @@ namespace LottiePlugin
 
     internal abstract class LottieRasterBatch : IDisposable
     {
+        // Input indices and completed pixels may be reused by the next Start.
+        // Callers must consume all completed pixels before starting another batch.
         public abstract void Start(int[] frames);
         public abstract bool TryComplete(out byte[] pixels);
         public abstract void Dispose();
@@ -109,6 +114,7 @@ namespace LottiePlugin
         private readonly LottieCpuRasterizer _rasterizer;
         private NativeArray<byte> _pixels;
         private Task<byte[]> _pending;
+        private byte[] _resultPixels;
         private bool _disposed;
         internal LottieTaskRasterBatch(LottieFramePreparationPool pool, string json,
             string resourcesPath, LottieFrameCacheOptions options)
@@ -127,7 +133,12 @@ namespace LottiePlugin
                 await _pool.Slots.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    var result = new byte[checked(frames.Length * _pixels.Length)];
+                    // Allocate/clear large buffers on the worker after admission.
+                    // Start/TryComplete serialize access; Dispose joins this task.
+                    int byteCount = checked(frames.Length * _pixels.Length);
+                    if (_resultPixels == null || _resultPixels.Length != byteCount)
+                        _resultPixels = new byte[byteCount];
+                    byte[] result = _resultPixels;
                     for (int index = 0; index < frames.Length; index++)
                     {
                         _rasterizer.RenderFrame(frames[index], _pixels);
@@ -154,6 +165,7 @@ namespace LottiePlugin
             try { if (_pending != null) _pending.GetAwaiter().GetResult(); }
             catch { /* Observe task failures during explicit retirement. */ }
             _pending = null;
+            _resultPixels = null;
             _pixels.Dispose();
             _rasterizer.Dispose();
             _pool.Retire();
@@ -173,6 +185,7 @@ namespace LottiePlugin
         private readonly int _bytesPerFrame;
         private int _id;
         private byte[] _pixels;
+        private byte[] _resultPixels;
         private double _started;
         internal LottieWebRasterBatch(LottieFramePreparationPool pool, int browserPool, string json, int width, int height)
         {
@@ -183,7 +196,12 @@ namespace LottiePlugin
         }
         public override void Start(int[] frames)
         {
-            _pixels = new byte[checked(frames.Length * _bytesPerFrame)];
+            if (_id <= 0) throw new ObjectDisposedException(nameof(LottieWebRasterBatch));
+            if (_pixels != null) throw new InvalidOperationException("A raster batch is already pending.");
+            int byteCount = checked(frames.Length * _bytesPerFrame);
+            if (_resultPixels == null || _resultPixels.Length != byteCount)
+                _resultPixels = new byte[byteCount];
+            _pixels = _resultPixels;
             _started = Time.realtimeSinceStartupAsDouble;
             if (LottieRasterStart(_id, frames, frames.Length) != 1)
                 throw new InvalidOperationException("Browser raster batch was rejected.");
@@ -205,6 +223,7 @@ namespace LottiePlugin
             LottieRasterDispose(_id);
             _id = 0;
             _pixels = null;
+            _resultPixels = null;
             _pool.Retire();
         }
     }

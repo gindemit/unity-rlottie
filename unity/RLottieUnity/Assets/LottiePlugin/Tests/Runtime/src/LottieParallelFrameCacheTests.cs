@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -79,6 +80,88 @@ namespace LottiePlugin.Tests.Runtime
             }
             public override void Dispose() { Retired = true; }
         }
+        private sealed class RecordingBatch : LottieRasterBatch
+        {
+            internal readonly List<int[]> Requests = new List<int[]>();
+            private int[] _frames;
+            private int[] _snapshot;
+            private readonly int _bytesPerFrame;
+            internal RecordingBatch(int bytesPerFrame) { _bytesPerFrame = bytesPerFrame; }
+            public override void Start(int[] frames)
+            {
+                Assert.IsNull(_frames, "A batch must finish before its indices are reused.");
+                _frames = frames;
+                _snapshot = (int[])frames.Clone();
+                Requests.Add(frames);
+            }
+            public override bool TryComplete(out byte[] pixels)
+            {
+                CollectionAssert.AreEqual(_snapshot, _frames, "Pending indices were overwritten.");
+                pixels = new byte[_frames.Length * _bytesPerFrame];
+                _frames = null;
+                return true;
+            }
+            public override void Dispose() { _frames = null; }
+        }
+        [Test]
+        public void FrameIndicesReuseEqualLengthBatchesAndKeepExactClipTails()
+        {
+            using (var pool = new LottieFramePreparationPool(batchSize: 2))
+            {
+                var batch = new RecordingBatch(16 * 32 * 4);
+                using (var cache = new LottieFrameCache(Json, "", Options(16, 32, LottieAlphaMode.StraightRgba, true), pool, () => batch))
+                {
+                    var expectedLengths = new List<int>();
+                    foreach (LottieClipPreflight clip in cache.Preflight.Clips)
+                        for (int remaining = clip.FrameCount; remaining > 0; remaining -= 2)
+                            expectedLengths.Add(Math.Min(remaining, 2));
+                    while (!cache.Ready) cache.WarmStep();
+                    Assert.AreEqual(expectedLengths.Count, batch.Requests.Count);
+                    bool observedReuse = false, observedTail = false;
+                    for (int index = 0; index < expectedLengths.Count; index++)
+                    {
+                        Assert.AreEqual(expectedLengths[index], batch.Requests[index].Length);
+                        observedTail |= expectedLengths[index] < 2;
+                        if (index > 0 && expectedLengths[index] == expectedLengths[index - 1])
+                        {
+                            Assert.AreSame(batch.Requests[index - 1], batch.Requests[index]);
+                            observedReuse = true;
+                        }
+                    }
+                    Assert.IsTrue(observedReuse);
+                    Assert.IsTrue(observedTail);
+                    Assert.AreEqual(0, pool.PendingPixelBytes);
+                }
+            }
+        }
+#if !UNITY_WEBGL || UNITY_EDITOR || LOTTIE_PARALLEL_PREPARATION
+        [UnityTest]
+        public IEnumerator BatchReusesCompletedPixelsAndResizesExactTails()
+        {
+            using (var pool = new LottieFramePreparationPool(batchSize: 3))
+            using (LottieRasterBatch batch = pool.CreateBatch(Json, "", Options(16, 32, LottieAlphaMode.StraightRgba, true)))
+            {
+                byte[] previous = null;
+                int previousCount = 0;
+                foreach (int count in new[] { 3, 3, 1, 1, 3 })
+                {
+                    var frames = new int[count];
+                    for (int index = 0; index < count; index++) frames[index] = index;
+                    batch.Start(frames);
+                    Assert.Throws<InvalidOperationException>(() => batch.Start(frames));
+                    byte[] completed;
+                    double deadline = Time.realtimeSinceStartupAsDouble + 15;
+                    while (!batch.TryComplete(out completed) && Time.realtimeSinceStartupAsDouble < deadline)
+                        yield return null;
+                    Assert.IsNotNull(completed, "Raster batch timed out.");
+                    Assert.AreEqual(count * 16 * 32 * 4, completed.Length);
+                    if (previousCount == count) Assert.AreSame(previous, completed);
+                    previous = completed;
+                    previousCount = count;
+                }
+            }
+        }
+#endif
         [TestCase(false)]
         [TestCase(true)]
         public void FailedOrMalformedBatchRetiresAndFinishesSerial(bool malformed)
