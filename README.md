@@ -87,6 +87,13 @@ Here are the steps to use the `AnimatedImage` class in your Unity project:
     ```
 And that's it! You are now able to use Lottie animations in your Unity projects using the `AnimatedImage` class.
 
+## Review a Lottie export
+
+Use [the local export review command](docs/lottie-creator-export-review-2026-11-23.md#what-changed)
+to find compatibility issues in self-contained vector JSON and render a transparent
+filmstrip with the Windows plugin. The command can also write a separate copy that
+corrects misplaced shape type keys for the pinned rlottie parser.
+
 ## Logging
 
 The plugin logs warnings and errors by default. To change the global native log
