@@ -18,6 +18,7 @@ namespace LottiePlugin.Sample.SceneUI.UI
         private LottiePlugin.LottieAnimation _lottieAnimation;
         private bool _ignoreSliderCallback;
         private TextAsset[] _animations;
+        private int _lastFrame;
 
         internal void Init(TextAsset[] animations)
         {
@@ -37,8 +38,9 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 _animationDropdown.options.Add(
                     new TMP_Dropdown.OptionData(animations[i].name));
             }
-            OnAnimationDropdownValueChanged(0);
-    }
+            if (animations.Length > 0)
+                OnAnimationDropdownValueChanged(0);
+        }
         public void Dispose()
         {
             _animationDropdown.onValueChanged.RemoveListener(OnAnimationDropdownValueChanged);
@@ -63,7 +65,7 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 _lottieAnimation.Update();
                 if (_lottieAnimation.IsPlaying)
                 {
-                    _playPositionSlider.value = _lottieAnimation.CurrentFrame;
+                    _playPositionSlider.SetValueWithoutNotify(_lottieAnimation.CurrentFrame);
                 }
             }
         }
@@ -77,26 +79,29 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 _lottieAnimation = null;
             }
             _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonData(animationAsset.text, string.Empty, 512, 512);
-            _animationImage.texture = _lottieAnimation.Texture;
+            _animationImage.texture = _lottieAnimation.OutputTexture;
             _frameRateText.text = _lottieAnimation.FrameRate.ToString();
             _totalFramesCountText.text = _lottieAnimation.TotalFramesCount.ToString();
             _durationSecondsText.text = _lottieAnimation.DurationSeconds.ToString("F3");
             _ignoreSliderCallback = true;
-            _playPositionSlider.maxValue = _lottieAnimation.TotalFramesCount;
+            _lastFrame = (int)System.Math.Max(0L, System.Math.Min(int.MaxValue, _lottieAnimation.TotalFramesCount - 1));
+            _playPositionSlider.maxValue = _lastFrame;
+            _playPositionSlider.SetValueWithoutNotify(0);
             _ignoreSliderCallback = false;
             _playPauseButton.ResetState();
         }
         private void OnPlayPositionSliderValueChanged(float newValue)
         {
-            if (!_ignoreSliderCallback && newValue != _lottieAnimation.CurrentFrame)
+            int frame = newValue >= _lastFrame ? _lastFrame : Mathf.RoundToInt(newValue);
+            if (!_ignoreSliderCallback && _lottieAnimation != null && frame != _lottieAnimation.CurrentFrame)
             {
                 _lottieAnimation.Pause();
-                _lottieAnimation.DrawOneFrame(Mathf.RoundToInt(newValue));
+                _lottieAnimation.DrawOneFrame(frame);
             }
         }
         private void OnPlayPauseButtonClick(int currentStateIndex, LottiePlugin.UI.AnimatedButton.State state)
         {
-            _lottieAnimation.TogglePlay();
+            _lottieAnimation?.TogglePlay();
         }
         private void OnNextAnimationClick(int currentStateIndex, LottiePlugin.UI.AnimatedButton.State state)
         {

@@ -84,6 +84,7 @@ public sealed class LottieSmokeController : MonoBehaviour
     private int _fpsFrameCount;
     private float _displayFps;
     private float _displayFrameMilliseconds;
+    private readonly GUIContent _fpsContent = new GUIContent("FPS …");
     private GUIStyle _fpsBoxStyle;
     private GUIStyle _fpsLabelStyle;
     private static readonly List<PendingReadbackCleanup> sPendingReadbackCleanup =
@@ -127,6 +128,8 @@ public sealed class LottieSmokeController : MonoBehaviour
             {
                 _displayFps = _fpsFrameCount / _fpsFrameTime;
                 _displayFrameMilliseconds = 1000f * _fpsFrameTime / _fpsFrameCount;
+                _fpsContent.text = string.Format(CultureInfo.InvariantCulture,
+                    "FPS {0:F1}  |  {1:F1} ms", _displayFps, _displayFrameMilliseconds);
                 _fpsElapsed = 0f;
                 _fpsFrameTime = 0f;
                 _fpsFrameCount = 0;
@@ -192,13 +195,13 @@ public sealed class LottieSmokeController : MonoBehaviour
             _fpsLabelStyle.normal.textColor = Color.white;
         }
 
-        float width = Mathf.Clamp(Screen.width * 0.3f, 260f, 520f);
-        float height = fontSize * 2.2f;
-        var rect = new Rect(Screen.width - width - 16f, 16f, width, height);
+        Rect safeArea = Screen.safeArea;
+        Vector2 size = _fpsLabelStyle.CalcSize(_fpsContent);
+        float width = Mathf.Min(Mathf.Ceil(size.x) + 24f, Mathf.Max(1f, safeArea.width - 32f));
+        var rect = new Rect(safeArea.xMax - width - 16f, Screen.height - safeArea.yMax + 16f,
+            width, Mathf.Ceil(size.y) + 12f);
         GUI.Box(rect, GUIContent.none, _fpsBoxStyle);
-        GUI.Label(rect,
-            string.Format(CultureInfo.InvariantCulture, "FPS {0:F1}  |  {1:F1} ms", _displayFps, _displayFrameMilliseconds),
-            _fpsLabelStyle);
+        GUI.Label(rect, _fpsContent, _fpsLabelStyle);
     }
 
     private IEnumerator Start()
@@ -259,6 +262,7 @@ public sealed class LottieSmokeController : MonoBehaviour
         _forceShowFps = true;
         _showFps = true;
         _quitWhenComplete = HasArgument(arguments, QuitArgument) || IsQuitEnvironmentVariableSet();
+        FindObjectOfType<LottieBenchmarkController>()?.ClosePanel();
         _result = new SmokeResult
         {
             platform = Application.platform.ToString(),

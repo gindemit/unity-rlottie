@@ -79,6 +79,8 @@ public sealed class LottieBenchmarkController : MonoBehaviour
     private GUIStyle _smallStyle;
     private GUIStyle _panelStyle;
 
+    internal void ClosePanel() => _panelOpen = false;
+
     private void Start()
     {
         string[] arguments = GetBenchmarkArguments();

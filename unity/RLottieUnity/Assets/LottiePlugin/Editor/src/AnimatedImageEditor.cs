@@ -1,5 +1,4 @@
 #if UNITY_EDITOR
-using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -23,13 +22,12 @@ namespace LottiePlugin.UI.Editor
         private SerializedProperty _logLevel;
 
         private AnimatedImage _image;
-        private LottieAnimation _lottieAnimation;
+        private LottieAnimation Animation => _image.Animation;
         private string _animationInfoBoxText;
 
         private void OnEnable()
         {
             _image = serializedObject.targetObject as AnimatedImage;
-            _lottieAnimation = _image.CreateIfNeededAndReturnLottieAnimation();
             Started = serializedObject.FindProperty("Started");
             Paused = serializedObject.FindProperty("Paused");
             Stopped = serializedObject.FindProperty("Stopped");
@@ -42,7 +40,7 @@ namespace LottiePlugin.UI.Editor
             _stopOnLastFrame = serializedObject.FindProperty("_stopOnLastFrame");
             _logLevel = serializedObject.FindProperty("_logLevel");
 
-            CreateAnimationIfNecessaryAndAttachToGraphic();
+            CreatePreview(_image);
             UpdateTheAnimationInfoBoxText();
         }
         public override void OnInspectorGUI()
@@ -53,29 +51,18 @@ namespace LottiePlugin.UI.Editor
             EditorGUILayout.PropertyField(_animationJsonProperty);
             if (EditorGUI.EndChangeCheck())
             {
-                _image.DisposeLottieAnimation();
-                _lottieAnimation = null;
-                CreateAnimationIfNecessaryAndAttachToGraphic();
-                UpdateTheAnimationInfoBoxText();
+                RebuildPreviews();
             }
-            if (_image.AnimationJson == null ||
-                string.IsNullOrEmpty(_image.AnimationJson.text))
+            if (Animation == null && !serializedObject.isEditingMultipleObjects &&
+                _image.AnimationJson == null)
             {
                 EditorGUILayout.HelpBox("You must have a lottie json in order to use the animated image.", MessageType.Error);
             }
-            if (_lottieAnimation != null)
+            if (!serializedObject.isEditingMultipleObjects && Animation != null && !string.IsNullOrEmpty(_animationInfoBoxText))
             {
                 EditorGUILayout.HelpBox(_animationInfoBoxText, MessageType.Info);
             }
             EditorGUILayout.Space();
-            if (_widthProperty.intValue == 0)
-            {
-                _widthProperty.intValue = 128;
-            }
-            if (_heightProperty.intValue == 0)
-            {
-                _heightProperty.intValue = 128;
-            }
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_animationSpeedProperty);
             if (EditorGUI.EndChangeCheck())
@@ -88,11 +75,12 @@ namespace LottiePlugin.UI.Editor
             EditorGUILayout.PropertyField(_heightProperty);
             if (EditorGUI.EndChangeCheck())
             {
-                _image.DisposeLottieAnimation();
-                _lottieAnimation = null;
-                CreateAnimationIfNecessaryAndAttachToGraphic();
+                RebuildPreviews();
             }
             EditorGUILayout.EndHorizontal();
+            if ((!_widthProperty.hasMultipleDifferentValues && _widthProperty.longValue == 0) ||
+                (!_heightProperty.hasMultipleDifferentValues && _heightProperty.longValue == 0))
+                EditorGUILayout.HelpBox("A texture dimension of zero uses 128 pixels.", MessageType.Info);
             if (_widthProperty.intValue > 2048 || _heightProperty.intValue > 2048)
             {
                 EditorGUILayout.HelpBox("Higher texture resolution will consume more processor resources at runtime.", MessageType.Warning);
@@ -108,51 +96,29 @@ namespace LottiePlugin.UI.Editor
             EditorGUILayout.PropertyField(Stopped);
             serializedObject.ApplyModifiedProperties();
         }
-        private void CreateAnimationIfNecessaryAndAttachToGraphic()
+        private void RebuildPreviews()
         {
-            if (_lottieAnimation != null)
-            {
-                return;
-            }
             serializedObject.ApplyModifiedProperties();
-            if (_image.AnimationJson == null)
+            foreach (AnimatedImage image in targets)
             {
+                image.DisposeLottieAnimation();
+                CreatePreview(image);
+            }
+            UpdateTheAnimationInfoBoxText();
+        }
+        private static void CreatePreview(AnimatedImage image)
+        {
+            if (image.Animation != null) return;
+            if (AnimationInspector.HasEmptyAsset(image.AnimationJson))
+            {
+                Debug.LogError("The selected animation JSON is empty.", image);
                 return;
             }
-            string jsonData = _image.AnimationJson.text;
-            if (string.IsNullOrEmpty(jsonData))
-            {
-                Debug.LogError("Selected file is not a lottie json");
-                return;
-            }
-            _lottieAnimation = _image.CreateIfNeededAndReturnLottieAnimation();
-            if (_lottieAnimation == null)
-            {
-                return;
-            }
-            _lottieAnimation.DrawOneFrame(0);
+            image.CreateIfNeededAndReturnLottieAnimation()?.DrawOneFrame(0);
         }
         private void UpdateTheAnimationInfoBoxText()
         {
-            if (_lottieAnimation == null)
-            {
-                return;
-            }
-
-            var sb = new StringBuilder();
-            sb.Append("Animation info: Frame Rate \"");
-            sb.Append(_lottieAnimation.FrameRate.ToString("F2"));
-            sb.Append("\", Total Frames \"");
-            sb.Append(_lottieAnimation.TotalFramesCount.ToString());
-            sb.Append("\", Original Duration \"");
-            sb.Append(_lottieAnimation.DurationSeconds.ToString("F2"));
-            sb.Append("\" sec. Play Duration \"");
-            sb.Append((_lottieAnimation.DurationSeconds / _animationSpeedProperty.floatValue).ToString("F2"));
-            sb.Append("\" sec. Current Frame \"");
-            sb.Append(_lottieAnimation.CurrentFrame.ToString());
-            sb.Append("\"");
-
-            _animationInfoBoxText = sb.ToString();
+            _animationInfoBoxText = AnimationInspector.FormatInfo(Animation, _animationSpeedProperty.floatValue);
         }
     }
 }

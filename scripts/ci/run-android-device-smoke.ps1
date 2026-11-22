@@ -51,7 +51,7 @@ if ($LASTEXITCODE -ne 0 -or $deviceState -ne 'device') {
 }
 
 if (-not $SkipInstall) {
-    $remoteApk = '/data/local/tmp/rlottie-device-smoke.apk'
+    $remoteApk = "/data/local/tmp/rlottie-device-smoke-$PID.apk"
     try {
         Invoke-Adb -Arguments @('push', $Apk, $remoteApk) | Out-Host
         Invoke-Adb -Arguments @('shell', 'pm', 'install', '-r', $remoteApk) | Out-Host
@@ -60,12 +60,16 @@ if (-not $SkipInstall) {
         & $Adb @adbPrefix shell rm -f $remoteApk | Out-Null
     }
 }
-Invoke-Adb -Arguments @('logcat', '-c')
+$startSeconds = (Invoke-Adb -Arguments @('shell', 'date', '+%s')).Trim()
+if ($startSeconds -notmatch '^\d+$') {
+    throw "Could not read Android device time: $startSeconds"
+}
+$logArguments = @('logcat', '-d', '-v', 'threadtime', '-T', "$startSeconds.000")
 Invoke-Adb -Arguments @('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
 Invoke-Adb -Arguments @('shell', 'wm', 'dismiss-keyguard')
 Invoke-Adb -Arguments @('shell', 'am', 'force-stop', $Package)
 $remoteResult = "/sdcard/Android/data/$Package/files/lottie-smoke-result.json"
-& $Adb @adbPrefix shell rm -f $remoteResult | Out-Null
+Invoke-Adb -Arguments @('shell', 'rm', '-f', $remoteResult) | Out-Null
 $launcherActivity = (& $Adb @adbPrefix shell cmd package resolve-activity --brief `
     -a android.intent.action.MAIN -c android.intent.category.LAUNCHER $Package 2>&1 | Select-Object -Last 1).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $launcherActivity.Contains('/')) {
@@ -87,7 +91,7 @@ do {
 } while (-not $resultReady -and [DateTime]::UtcNow -lt $deadline)
 
 if (-not $resultReady) {
-    $timeoutLog = (& $Adb @adbPrefix logcat -d -v threadtime 2>&1 | Out-String)
+    $timeoutLog = (Invoke-Adb -Arguments $logArguments | Out-String)
     $timeoutLog | Set-Content -LiteralPath $LogFile -Encoding UTF8
     throw "Android smoke result was not produced within $RunSeconds seconds: $remoteResult"
 }
@@ -98,12 +102,16 @@ if ($LASTEXITCODE -ne 0 -or -not $pidValue) {
     throw "Android player is not running: $Package"
 }
 
-$log = (& $Adb @adbPrefix logcat -d -v threadtime 2>&1 | Out-String)
+$log = (Invoke-Adb -Arguments $logArguments | Out-String)
 $log | Set-Content -LiteralPath $LogFile -Encoding UTF8
 $remoteScreenshot = "/sdcard/rlottie-device-smoke-$PID.png"
-Invoke-Adb -Arguments @('shell', 'screencap', '-p', $remoteScreenshot)
-Invoke-Adb -Arguments @('pull', $remoteScreenshot, $Screenshot) | Out-Host
-Invoke-Adb -Arguments @('shell', 'rm', $remoteScreenshot)
+try {
+    Invoke-Adb -Arguments @('shell', 'screencap', '-p', $remoteScreenshot)
+    Invoke-Adb -Arguments @('pull', $remoteScreenshot, $Screenshot) | Out-Host
+}
+finally {
+    & $Adb @adbPrefix shell rm -f $remoteScreenshot | Out-Null
+}
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
 Assert-LottieSmokeResult -Result $result -Platform Android -ExpectedGraphicsApi $ExpectedGraphicsApi `

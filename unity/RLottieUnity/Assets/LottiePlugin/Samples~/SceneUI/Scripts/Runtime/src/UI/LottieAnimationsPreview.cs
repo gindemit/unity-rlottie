@@ -18,13 +18,11 @@ namespace LottiePlugin.Sample.SceneUI.UI
         private List<AnimationPreview> _animationPreviews;
         private float _oneItemSize;
         private float _viewPortSize;
-        private WaitForEndOfFrame _waitForEndOfFrame;
         private Coroutine _coroutine;
 
         internal void Init(TextAsset[] animations, uint textureSize)
         {
             int animationsCount = animations.Length;
-            _waitForEndOfFrame = new WaitForEndOfFrame();
             _noItemsText.gameObject.SetActive(animationsCount == 0);
             if (animationsCount == 0)
             {
@@ -38,12 +36,12 @@ namespace LottiePlugin.Sample.SceneUI.UI
             {
                 TextAsset animation = animations[i];
                 AnimationPreview animationPreview = Instantiate(_animationPreviewPrefab, _scrollRectContent);
+                _animationPreviews.Add(animationPreview);
                 animationPreview.InitFromData(animation.text, textureSize, textureSize);
                 animationPreview.RectTransform.anchoredPosition = new Vector3(
                     i % _columns * _oneItemSize + _gabBetweenItems,
                     -i / _columns * _oneItemSize - _gabBetweenItems);
                 animationPreview.RectTransform.sizeDelta = new Vector2(_oneItemSize, _oneItemSize);
-                _animationPreviews.Add(animationPreview);
             }
             int rows = Mathf.CeilToInt((float)animationsCount / _columns);
             _scrollRectContent.sizeDelta = new Vector2(
@@ -71,7 +69,7 @@ namespace LottiePlugin.Sample.SceneUI.UI
             }
             for (int i = 0; i < _animationPreviews.Count; ++i)
             {
-                _animationPreviews[i].Dispose();
+                if (_animationPreviews[i] != null) _animationPreviews[i].Dispose();
             }
             _animationPreviews.Clear();
         }

@@ -21,13 +21,24 @@ namespace LottiePlugin.Sample.SceneUI.UI
                 return;
             }
             _lottieAnimation = LottiePlugin.LottieAnimation.LoadFromJsonData(jsonData, string.Empty, width, height);
-            _animationPreview.texture = _lottieAnimation.Texture;
+            _animationPreview.texture = _lottieAnimation.OutputTexture;
             DoUpdate();
         }
         public void Dispose()
         {
-            _lottieAnimation.Dispose();
+            ReleaseAnimation();
             Destroy(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            ReleaseAnimation();
+        }
+
+        private void ReleaseAnimation()
+        {
+            _lottieAnimation?.Dispose();
+            _lottieAnimation = null;
         }
 
         internal void DoUpdate()
@@ -36,7 +47,7 @@ namespace LottiePlugin.Sample.SceneUI.UI
             {
                 return;
             }
-            _lottieAnimation.Update();
+            _lottieAnimation?.Update();
         }
         internal void DoUpdateAsync()
         {
@@ -44,17 +55,8 @@ namespace LottiePlugin.Sample.SceneUI.UI
             {
                 return;
             }
-            _lottieAnimation.UpdateAsync();
+            _lottieAnimation?.UpdateAsync();
         }
-        internal void DoDrawOneFrameAsyncGetResult()
-        {
-            if (!_animationEnabled)
-            {
-                return;
-            }
-            _lottieAnimation.DrawOneFrameAsyncGetResult();
-        }
-
         internal void DisableAnimation()
         {
             _animationEnabled = false;
