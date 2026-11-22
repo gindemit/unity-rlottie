@@ -14,10 +14,8 @@
 
 // Forward declarations for platform-specific types
 #if defined(_WIN32)
-struct ID3D12Resource;
-struct ID3D12Fence;
+struct D3D12Texture;
 struct ID3D11Texture2D;
-struct D3D12_PLACED_SUBRESOURCE_FOOTPRINT;
 #endif
 
 // Per-animation instance state for texture management
@@ -67,21 +65,9 @@ struct InstanceState
     bool preferSRGBSampling = false;
 
     // Platform-specific texture data
-    struct D3D12Data
-    {
 #if defined(_WIN32)
-        static constexpr unsigned int kUploadSlotCount = 3;
-        ID3D12Resource* tex = nullptr;
-        ID3D12Resource* upload = nullptr;
-        void* uploadMapped = nullptr;
-        unsigned long long uploadSlotBytes = 0;
-        std::array<unsigned long long, kUploadSlotCount> uploadSlotFenceValues{};
-        unsigned int nextUploadSlot = 0;
-        D3D12_PLACED_SUBRESOURCE_FOOTPRINT* footprint = nullptr;
-        int texState = 0; // D3D12_RESOURCE_STATE_COMMON
-        ID3D12Fence* frameFence = nullptr;
+    D3D12Texture* d3d12 = nullptr;
 #endif
-    } d3d12;
 
     struct D3D11Data
     {

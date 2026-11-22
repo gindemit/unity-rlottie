@@ -205,6 +205,7 @@ endif()
 if (WIN32)
     list(APPEND RLOTTIE_PLUGIN_LIBRARY_SOURCES
         ../../src/D3D12Backend_win.cpp
+        ../../src/D3D12Texture_win.cpp
         ../../src/D3D11Backend_win.cpp
         ../../src/OpenGLBackend.cpp)
 elseif(RLOTTIE_OSX OR RLOTTIE_IOS)
@@ -381,6 +382,20 @@ if (BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     target_include_directories(LottieUploadQueueTests PRIVATE
         ../../src "${RLOTTIE_ROOT}/inc" "${UNITY_PLUGINAPI_DIR}")
     add_test(NAME LottiePlugin.UploadQueue COMMAND LottieUploadQueueTests)
+    if (WIN32)
+        add_library(LottieD3D12LifetimeProbe SHARED
+            ../../tests/native/D3D12LifetimeProbe.cpp
+            ../../src/D3D12Texture_win.cpp)
+        target_compile_features(LottieD3D12LifetimeProbe PRIVATE cxx_std_17)
+        target_include_directories(LottieD3D12LifetimeProbe PRIVATE ../../src)
+        add_executable(LottieD3D12LifetimeTests ../../tests/native/D3D12LifetimeTests.cpp)
+        target_compile_features(LottieD3D12LifetimeTests PRIVATE cxx_std_17)
+        target_link_libraries(LottieD3D12LifetimeTests PRIVATE d3d12 dxgi)
+        add_dependencies(LottieD3D12LifetimeTests LottieD3D12LifetimeProbe)
+        add_test(NAME LottiePlugin.D3D12Lifetime
+            COMMAND LottieD3D12LifetimeTests "$<TARGET_FILE:LottieD3D12LifetimeProbe>")
+        set_tests_properties(LottiePlugin.D3D12Lifetime PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
+    endif()
 endif()
 
 # rlottie is built as a static library here, but its private ELF version-script

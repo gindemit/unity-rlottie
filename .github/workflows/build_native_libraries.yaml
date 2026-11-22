@@ -59,6 +59,9 @@ jobs:
           cmake --build ./build_x86 --config Release
           cmake --build ./build_x86_64 --config Release
 
+      - name: Run Windows native tests
+        run: ctest --test-dir projects/CMake/build_x86_64 -C Release --output-on-failure --no-tests=error
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -48,11 +48,6 @@ void RefreshCompletedRenderSlots(InstanceState* state)
 {
     switch (GetCurrentRenderer())
     {
-        case Renderer::D3D12:
-#if defined(_WIN32)
-            RefreshCompletedRenderSlotsD3D12(state);
-#endif
-            break;
         case Renderer::Vulkan:
             RefreshCompletedRenderSlotsVulkan(state);
             break;
@@ -178,7 +173,7 @@ void ResetTextureForRenderer(lottie_animation_wrapper* animation, InstanceState*
     {
         case Renderer::D3D12:
 #if defined(_WIN32)
-            ResetTextureD3D12(animation, state);
+            ResetTextureD3D12(state);
 #endif
             break;
         case Renderer::D3D11:
@@ -203,7 +198,7 @@ void ResetTextureForRenderer(lottie_animation_wrapper* animation, InstanceState*
         default:
             // Try to reset all if renderer is unknown (e.g., during shutdown)
 #if defined(_WIN32)
-            ResetTextureD3D12(animation, state);
+            ResetTextureD3D12(state);
             ResetTextureD3D11(animation, state);
             ResetTextureOpenGL(animation, state);
 #elif defined(__APPLE__) && !defined(__EMSCRIPTEN__)

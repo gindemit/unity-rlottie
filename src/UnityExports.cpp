@@ -93,15 +93,6 @@ EXPORT_API void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int dev
             case Renderer::D3D12:
 #if defined(_WIN32)
                 SetD3D12Device(reinterpret_cast<ID3D12Device*>(device));
-                // Get command queue from D3D12 interface
-                {
-                    IUnityGraphicsD3D12v8* d3d12v8 = nullptr;
-                    IUnityGraphicsD3D12v7* d3d12v7 = nullptr;
-                    IUnityGraphicsD3D12v6* d3d12v6 = nullptr;
-                    IUnityGraphicsD3D12v5* d3d12v5 = nullptr;
-                    // These are cached from UnityPluginLoad, access them through extern functions
-                    // For simplicity, we'll get the queue when needed
-                }
 #endif
                 break;
             case Renderer::D3D11:
@@ -164,9 +155,7 @@ EXPORT_API void UNITY_INTERFACE_API UnitySetGraphicsDevice(void* device, int dev
         {
             case Renderer::D3D12:
 #if defined(_WIN32)
-                SetD3D12Queue(nullptr);
                 SetD3D12Device(nullptr);
-                ReleaseOwnedD3D12CommandList();
 #endif
                 break;
             case Renderer::D3D11:

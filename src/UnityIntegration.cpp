@@ -148,9 +148,7 @@ static void UNITY_INTERFACE_API OnGraphicsDeviceEventInternal(UnityGfxDeviceEven
 #endif
 
 #if defined(_WIN32)
-        SetD3D12Queue(nullptr);
         SetD3D12Device(nullptr);
-        ReleaseOwnedD3D12CommandList();
         ReleaseD3D11Context();
 #endif
 
@@ -185,27 +183,7 @@ extern "C" EXPORT_API void UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces*
     }
 
 #if defined(_WIN32)
-    if (unityInterfaces != nullptr)
-    {
-        IUnityGraphicsD3D12v8* d3d12v8 = unityInterfaces->Get<IUnityGraphicsD3D12v8>();
-        IUnityGraphicsD3D12v7* d3d12v7 = nullptr;
-        IUnityGraphicsD3D12v6* d3d12v6 = nullptr;
-        IUnityGraphicsD3D12v5* d3d12v5 = nullptr;
-
-        if (d3d12v8 == nullptr)
-        {
-            d3d12v7 = unityInterfaces->Get<IUnityGraphicsD3D12v7>();
-        }
-        if (d3d12v7 == nullptr)
-        {
-            d3d12v6 = unityInterfaces->Get<IUnityGraphicsD3D12v6>();
-            if (d3d12v6 == nullptr)
-            {
-                d3d12v5 = unityInterfaces->Get<IUnityGraphicsD3D12v5>();
-            }
-        }
-        SetD3D12Interfaces(d3d12v8, d3d12v7, d3d12v6, d3d12v5);
-    }
+    SetD3D12Interface(unityInterfaces ? unityInterfaces->Get<IUnityGraphicsD3D12v8>() : nullptr);
 #endif
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
@@ -261,9 +239,7 @@ extern "C" EXPORT_API void UNITY_INTERFACE_API UnityPluginUnload()
     SetCurrentRenderer(Renderer::Unknown);
 
 #if defined(_WIN32)
-    SetD3D12Queue(nullptr);
     SetD3D12Device(nullptr);
-    ReleaseOwnedD3D12CommandList();
     ReleaseD3D11Context();
 #endif
 
@@ -281,7 +257,7 @@ extern "C" EXPORT_API void UNITY_INTERFACE_API UnityPluginUnload()
     sMkUpload = nullptr;
 
 #if defined(_WIN32)
-    SetD3D12Interfaces(nullptr, nullptr, nullptr, nullptr);
+    SetD3D12Interface(nullptr);
 #endif
 
 #if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
