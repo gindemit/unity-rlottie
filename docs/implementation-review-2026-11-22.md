@@ -49,3 +49,41 @@ The canonical project uses Unity 2022.3.62f3. The physical device was a Samsung 
 | Sample compilation | The SceneUI sample runtime sources compiled against the project's Unity player references. |
 
 This pass rebuilt the four Android ABIs and the Windows x64 editor library. Other platforms retain their previously packaged native binaries until they are rebuilt and qualified. No package or release tag was published. The device lifecycle checks exercise repeated creation and disposal. A long-duration allocation profile and D3D12 device-loss run remain open.
+
+## Second pass
+
+Three reviewers examined managed rendering, native resource ownership and device automation on canonical `main`, starting from `7f56e754`. They also reviewed each other's changes.
+
+| Finding | Change |
+| --- | --- |
+| A D3D12 reset could block the Unity thread and lose track of GPU resources when a wait failed. | Each texture now owns its mapped upload buffer, last-use fence and deferred cleanup. A completed fence releases resources immediately. Pending work keeps the DLL loaded until its callback finishes. Failed event registration uses a bounded-interval completion check. |
+| Native parsing ran before the managed structural check. A file could change between the managed read and native loading, and a path-keyed model could outlive the file version. | The live and CPU file loaders take one snapshot and validate its structure before native parsing. Markers and pixels come from the same contents. Reloading an unchanged file now reparses its native model. |
+| Background frame preparation allocated two full-size pixel buffers per worker and copied every frame twice. | Each worker copies the native rasterizer's staging pixels directly to their checked offset in the batch under the rasterizer's lifetime lock. This saves one full-frame buffer per worker and one full-frame copy per prepared frame. |
+| A native upload target could disappear before submission or fail later. Recovery could leave the native descriptor pointing at the old surface and a UI component displaying a destroyed texture. | Recovery publishes the CPU surface and retries a failed submission once when Vulkan or OpenGL reports the target unavailable. UI components update their own bindings and preserve textures assigned by callers. |
+| Color override marshalling read the collection size repeatedly and could allocate unmanaged memory before allocating its cleanup bookkeeping. | Snapshot the count, allocate cleanup storage first, and reject embedded NULs before passing keypaths to native code. |
+
+### Device qualification
+
+The Android runner builds both graphics backends, requires all 19 named checks, runs the Unity runtime assembly, and writes a compact `qualification.json`. Inspect this file first. It points to the NUnit XML, per-backend JSON and screenshots. The command is in the [README](../README.md#android-device-tests).
+
+The rendered suite compares frame 30 against its synchronous reference after drawing a visibly different frame 0 on a 101 × 83 texture. The lifecycle check alternates synchronous and asynchronous rasterization and disposes each animation with a render outstanding. It verifies that Unity destroys the output texture. A stationary button's initial upload can arrive after the first readback. The test waits for frame zero without drawing it again. On three consecutive D3D12 launches, the second readback showed exactly 922 visible pixels.
+
+The Windows native tests exercised normal completion, a delayed GPU fence, refused event registration, unloading the host DLL reference while work was pending, and process-local D3D12 device removal. The x86 and x64 release binaries passed all three CTest suites and preserved all 75 exported names on each architecture. The x64 DLL inside the Windows player matched the tested build.
+
+The Galaxy Note10+ completed 600 cycles on each native backend. Android process-memory samples spanned 95 seconds on Vulkan and 101 seconds on OpenGL ES 3. Median allocated native heap in the middle and final thirds was 51.88 and 51.90 MiB on Vulkan, and 58.12 and 58.08 MiB on OpenGL ES 3. The samples cover the whole player. The disposal assertion checks every output texture individually. A longer session could expose slower accumulation.
+
+| Second-pass verification | Result |
+| --- | --- |
+| Galaxy Note10+, Android 12, IL2CPP runtime assembly | 86/86 passed, including same-path file replacement and rendering a PNG relative to the animation file. After the editor heartbeat timed out, the runner recovered the player's XML over USB and verified all 86 individual verdicts. |
+| Galaxy Note10+, Vulkan and OpenGL ES 3 | 19/19 rendered checks on each backend, including pixel equality after asynchronous rendering and texture destruction over 600 create/dispose cycles per backend. Two further 48-cycle runs per backend passed with an assertion that the scene finished on its original upload backend. |
+| Galaxy Note10+, ARM64 native ABI | Passed on the phone against the packaged library. Both Android player builds contained byte-identical copies of the repository's ARM64 and ARMv7 libraries. |
+| Windows, RTX 3080 Ti, D3D12 player | 19/19 rendered checks on three consecutive launches with 180 create/dispose cycles each. Two further launches passed all 19 checks and 180 cycles with the final backend assertion. |
+| Unity 2022.3.62f3 on Windows | 9/9 EditMode and 83/83 PlayMode tests passed. |
+| Windows native ABI, upload queue and D3D12 lifetime | 3/3 suites passed on x86 and 3/3 on x64. |
+| Host-side automation | All three runner and result-validation suites passed on Windows PowerShell 5.1 and PowerShell 7. They cover stale files, partial results, conflicting device packages and transient USB result retrieval. |
+
+An Android Gradle failure exposed a cleanup issue in Unity batch mode. The build now explicitly saves the restored settings before exiting. Repeating the failure with a rejected package identifier preserved the previous APK and left the project settings byte-for-byte identical. After device verification, the temporary apps were removed and the phone returned to its launcher.
+
+### Remaining limits
+
+A live D3D12 fence that never advances or reports device removal must keep its referenced allocations alive. The structural validation applies to Unity's managed loaders. Direct native ABI callers still use the pinned rlottie parser. The pinned Windows image decoder can render a relative external PNG as transparent. Embedded PNGs render correctly on Windows. Historical Unity configurations and other operating systems require separate player runs.
