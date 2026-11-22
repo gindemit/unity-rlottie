@@ -10,7 +10,9 @@
 
 #include "IUnityGraphicsVulkan.h"
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <new>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -55,7 +57,7 @@ struct UploadSlot
 
 struct VulkanTextureData
 {
-    std::vector<UploadSlot> slots;
+    std::array<UploadSlot, kVulkanUploadSlotCount> slots{};
     size_t nextUploadSlot = 0;
     uint64_t poolExhaustionCount = 0;
     bool copyConfigurationLogged = false;
@@ -517,7 +519,7 @@ void BeginUploadEventVulkan(InstanceState*)
 UploadResult UploadVulkan(InstanceState* state, const UploadContext& ctx)
 {
     ImageBufferSize imageSize{};
-    if (state == nullptr || !IsValidImageBuffer(ctx.data, ctx.width, ctx.height, ctx.stride) ||
+    if (state == nullptr || ctx.data == nullptr ||
         !TryGetImageBufferSize(ctx.width, ctx.height, ctx.stride, imageSize) ||
         (ctx.stride % 4) != 0 || !EnsureDeviceFunctions())
     {
@@ -535,18 +537,16 @@ UploadResult UploadVulkan(InstanceState* state, const UploadContext& ctx)
     VulkanTextureData* data = static_cast<VulkanTextureData*>(state->vulkan.backend);
     if (data == nullptr)
     {
-        data = new VulkanTextureData();
-        data->slots.resize(kVulkanUploadSlotCount);
+        data = new (std::nothrow) VulkanTextureData();
+        if (data == nullptr)
+        {
+            MarkUnavailable(state, "upload ring allocation");
+            return UploadResult::Failed;
+        }
         state->vulkan.backend = data;
     }
 
     const VkDeviceSize bytes = static_cast<VkDeviceSize>(imageSize.totalBytes);
-    if (data->slots.size() != kVulkanUploadSlotCount)
-    {
-        MarkUnavailable(state, "upload ring slot count");
-        return UploadResult::Failed;
-    }
-
     for (UploadSlot& uploadSlot : data->slots)
     {
         if (uploadSlot.mapped == nullptr && !CreateUploadSlot(bytes, uploadSlot))

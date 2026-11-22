@@ -146,9 +146,6 @@ void RestoreUploadSlotToReady(InstanceState* state, int slotIndex);
 void WaitForActiveRenders(InstanceState* state);
 
 
-// Get the instance state for an animation, optionally creating it if it doesn't exist
-InstanceState* GetState(lottie_animation_wrapper* animation, bool create = true);
-
 // Acquire an instance and its upload lock atomically with respect to removal.
 // The returned lock keeps the state alive until the render-thread upload ends.
 bool LockStateForUpload(

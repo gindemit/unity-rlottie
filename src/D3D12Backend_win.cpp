@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "IUnityInterface.h"
 #include "IUnityGraphicsD3D12.h"
@@ -173,6 +174,7 @@ void ResetTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state
         ID3D12Fence* frameFence = state->d3d12.frameFence;
         if (frameFence != nullptr && lastUse != 0 && frameFence->GetCompletedValue() < lastUse)
         {
+            safeToRelease = false;
             HANDLE completionEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
             if (completionEvent != nullptr)
             {
@@ -189,10 +191,8 @@ void ResetTextureD3D12(lottie_animation_wrapper* animation, InstanceState* state
             // Leaking these device-owned objects is preferable to either hanging
             // the scripting thread or freeing memory still referenced by a GPU.
             LottieLogWarning(animation, "[Lottie] D3D12 fence timeout during reset; retaining GPU resources");
-            state->d3d12.upload = nullptr;
-            state->d3d12.uploadMapped = nullptr;
-            state->d3d12.tex = nullptr;
-            state->d3d12.frameFence = nullptr;
+            delete state->d3d12.footprint;
+            state->d3d12 = {};
             return;
         }
         if (state->d3d12.uploadMapped)
@@ -277,13 +277,22 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
         return false;
     }
 
-    // Create footprint
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT* footprint = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT{};
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout{};
     UINT64 totalBytes = 0;
-    gD3D12Device->GetCopyableFootprints(&texDesc, 0, 1, 0, footprint, nullptr, nullptr, &totalBytes);
+    gD3D12Device->GetCopyableFootprints(&texDesc, 0, 1, 0, &layout, nullptr, nullptr, &totalBytes);
 
-    state->d3d12.uploadSlotBytes = totalBytes;
-    const UINT64 uploadBytes = totalBytes * InstanceState::D3D12Data::kUploadSlotCount;
+    // GetCopyableFootprints returns the space required by a single texture.
+    // Each copy in the ring needs a separately aligned placement offset.
+    constexpr UINT64 alignment = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
+    constexpr UINT64 slotCount = InstanceState::D3D12Data::kUploadSlotCount;
+    constexpr UINT64 maxSlotBytes = (UINT64_MAX / slotCount) & ~(alignment - 1);
+    if (totalBytes == 0 || totalBytes > maxSlotBytes)
+    {
+        texture->Release();
+        return false;
+    }
+    const UINT64 slotBytes = (totalBytes + alignment - 1) & ~(alignment - 1);
+    const UINT64 uploadBytes = slotBytes * slotCount;
 
     D3D12_HEAP_PROPERTIES heapUpload{ D3D12_HEAP_TYPE_UPLOAD };
     heapUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
@@ -323,8 +332,6 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
             upload->Release();
         }
         texture->Release();
-        delete footprint;
-        state->d3d12.uploadSlotBytes = 0;
         return false;
     }
 
@@ -337,11 +344,18 @@ bool EnsureTextureD3D12(lottie_animation_wrapper* animation, InstanceState* stat
         LottieLogError(animation, errorMsg);
         upload->Release();
         texture->Release();
-        delete footprint;
-        state->d3d12.uploadSlotBytes = 0;
         return false;
     }
 
+    auto* footprint = new (std::nothrow) D3D12_PLACED_SUBRESOURCE_FOOTPRINT(layout);
+    if (footprint == nullptr)
+    {
+        upload->Unmap(0, nullptr);
+        upload->Release();
+        texture->Release();
+        return false;
+    }
+    state->d3d12.uploadSlotBytes = slotBytes;
     state->d3d12.tex = texture;
     state->d3d12.upload = upload;
     state->d3d12.uploadMapped = mapped;
@@ -456,6 +470,12 @@ UploadResult UploadD3D12(InstanceState* state, const UploadContext& ctx)
         return UploadResult::Retry;
     }
 
+    const UINT64 fenceValue = GetUnityNextFrameFenceValue();
+    if (fenceValue == 0)
+    {
+        return UploadResult::Retry;
+    }
+
     // Retry must not modify mapped upload memory or Unity's resource-state
     // tracker. Validate the active recording context before either operation.
     D3D12CommandContext ctxWrapper = AcquireD3D12CommandContext();
@@ -525,17 +545,9 @@ UploadResult UploadD3D12(InstanceState* state, const UploadContext& ctx)
         sD3D12v8->NotifyResourceState(state->d3d12.tex, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, false);
     }
 
-    const UINT64 fenceValue = GetUnityNextFrameFenceValue();
-    state->d3d12.uploadSlotFenceValues[uploadSlot] = fenceValue != 0 ? fenceValue : UINT64_MAX;
+    state->d3d12.uploadSlotFenceValues[uploadSlot] = fenceValue;
     state->d3d12.nextUploadSlot = (uploadSlot + 1) % InstanceState::D3D12Data::kUploadSlotCount;
     SubmitD3D12CommandContext(ctxWrapper);
-    if (fenceValue == 0)
-    {
-        // Without Unity's frame fence there is no safe signal for overwriting
-        // mapped upload memory. Keep the slot owned; the remaining two slots
-        // allow bounded progress without unsafe reuse.
-        LottieLogWarning(nullptr, "[Lottie] D3D12 frame fence unavailable; upload slot retained");
-    }
     return UploadResult::Submitted;
 }
 

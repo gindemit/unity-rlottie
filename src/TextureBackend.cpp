@@ -214,6 +214,11 @@ void ResetTextureForRenderer(lottie_animation_wrapper* animation, InstanceState*
             ResetTextureVulkan(animation, state);
             break;
     }
+    // Both disposal and resize invalidate the cached handle, even when the
+    // subsequent allocation fails.
+    state->nativeTex = nullptr;
+    state->texW = 0;
+    state->texH = 0;
 }
 
 #endif // !defined(__EMSCRIPTEN__)

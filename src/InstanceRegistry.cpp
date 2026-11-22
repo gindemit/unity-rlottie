@@ -54,63 +54,43 @@ RenderSlotAcquireResult AcquireRenderSlot(
     }
 
     InstanceState* state = nullptr;
+    std::unique_lock<std::mutex> lifetimeLock;
+    if (!LockStateForUpload(animation, state, lifetimeLock) || !UsesNativeRenderPool(state))
     {
-        std::lock_guard<std::mutex> registryLock(gInstancesMutex);
-        auto it = gInstances.find(animation);
-        if (it == gInstances.end())
-        {
-            return RenderSlotAcquireResult::ExternalBuffer;
-        }
-        state = it->second.get();
-        // Serialize the active-render handoff with reset/disposal. Once the
-        // count is incremented, reset waits before mutating texture or pool
-        // state; acquiring this lock first closes the reset-passed-zero race.
-        std::lock_guard<std::mutex> stateLifetimeLock(state->lifetimeMutex);
-        std::lock_guard<std::mutex> renderLifetimeLock(state->renderLifetimeMutex);
-        ++state->activeRenders;
-    }
-    if (!UsesNativeRenderPool(state))
-    {
-        std::lock_guard<std::mutex> renderLifetimeLock(state->renderLifetimeMutex);
-        --state->activeRenders;
-        state->renderLifetimeChanged.notify_all();
         return RenderSlotAcquireResult::ExternalBuffer;
     }
 
     std::unique_lock<std::mutex> lock(state->renderPoolMutex);
 
-    int selected = -1;
-    uint64_t oldestReady = UINT64_MAX;
-    for (int i = 0; i < InstanceState::kRenderSlotCount; ++i)
-    {
-        const InstanceState::RenderSlot& slot = state->renderSlots[i];
-        if (slot.owner == InstanceState::SlotOwner::Free)
+    auto selectSlot = [state]() {
+        int selected = -1;
+        uint64_t oldestReady = UINT64_MAX;
+        for (int i = 0; i < InstanceState::kRenderSlotCount; ++i)
         {
-            selected = i;
-            break;
-        }
-        if (slot.owner == InstanceState::SlotOwner::Ready && slot.version < oldestReady)
-        {
-            // Async backpressure coalesces an unconsumed older frame instead of
-            // allocating a fourth buffer or blocking the scripting thread.
-            selected = i;
-            oldestReady = slot.version;
-        }
-    }
-    if (selected < 0)
-    {
-        if (waitForSlot)
-        {
-            state->renderPoolChanged.wait_for(lock, std::chrono::milliseconds(16));
-            for (int i = 0; i < InstanceState::kRenderSlotCount; ++i)
+            const auto& slot = state->renderSlots[i];
+            if (slot.owner == InstanceState::SlotOwner::Free)
             {
-                if (state->renderSlots[i].owner == InstanceState::SlotOwner::Free)
-                {
-                    selected = i;
-                    break;
-                }
+                return i;
+            }
+            if (slot.owner == InstanceState::SlotOwner::Ready && slot.version < oldestReady)
+            {
+                selected = i;
+                oldestReady = slot.version;
             }
         }
+        return selected;
+    };
+
+    int selected = selectSlot();
+    if (selected < 0 && waitForSlot)
+    {
+        // Upload holds lifetimeMutex until its slot is released. With that
+        // mutex held here, an exhausted pool contains only CPU renders.
+        // Publishing or cancelling them needs only the pool mutex.
+        state->renderPoolChanged.wait_for(lock, std::chrono::milliseconds(16), [&]() {
+            selected = selectSlot();
+            return selected >= 0;
+        });
     }
     if (selected < 0)
     {
@@ -123,9 +103,6 @@ RenderSlotAcquireResult AcquireRenderSlot(
                 static_cast<unsigned long long>(exhaustionCount));
         }
         state->uploadVersion.fetch_add(1, std::memory_order_acq_rel);
-        std::lock_guard<std::mutex> renderLifetimeLock(state->renderLifetimeMutex);
-        --state->activeRenders;
-        state->renderLifetimeChanged.notify_all();
         return RenderSlotAcquireResult::NativeBackpressure;
     }
 
@@ -135,9 +112,6 @@ RenderSlotAcquireResult AcquireRenderSlot(
     if (!PrepareRenderSlotForRenderer(
             state, selected, renderData->width, renderData->height, data, stride))
     {
-        std::lock_guard<std::mutex> renderLifetimeLock(state->renderLifetimeMutex);
-        --state->activeRenders;
-        state->renderLifetimeChanged.notify_all();
         return RenderSlotAcquireResult::NativeBackpressure;
     }
     if (data == nullptr)
@@ -150,6 +124,12 @@ RenderSlotAcquireResult AcquireRenderSlot(
         data = slot.storage.data();
     }
 
+    // Keep the lifetime lock through slot preparation. Only hand a render
+    // reference to the caller after every potentially allocating step succeeds.
+    {
+        std::lock_guard<std::mutex> renderLifetimeLock(state->renderLifetimeMutex);
+        ++state->activeRenders;
+    }
     slot.owner = InstanceState::SlotOwner::Rendering;
     slot.data = data;
     slot.width = renderData->width;
@@ -184,6 +164,7 @@ void PublishRenderSlot(lottie_animation_wrapper* animation, lottie_render_data* 
         {
             slot.version = state->uploadVersion.fetch_add(1, std::memory_order_acq_rel) + 1;
             slot.owner = InstanceState::SlotOwner::Ready;
+            state->renderPoolChanged.notify_all();
         }
     }
 
@@ -312,35 +293,6 @@ void WaitForActiveRenders(InstanceState* state)
     state->renderLifetimeChanged.wait(lock, [state]() { return state->activeRenders == 0; });
 }
 
-InstanceState* GetState(lottie_animation_wrapper* animation, bool create)
-{
-    if (animation == nullptr)
-    {
-        LottieLogWarning(nullptr, "[Lottie] GetState called with null animation");
-        return nullptr;
-    }
-
-    std::lock_guard<std::mutex> lock(gInstancesMutex);
-    auto it = gInstances.find(animation);
-    if (it != gInstances.end())
-    {
-        LottieLogInfo(animation, "[Lottie] Found existing instance state");
-        return it->second.get();
-    }
-
-    if (!create)
-    {
-        LottieLogInfo(animation, "[Lottie] Instance state not found, create=false");
-        return nullptr;
-    }
-
-    auto instance = std::make_unique<InstanceState>();
-    InstanceState* raw = instance.get();
-    gInstances.emplace(animation, std::move(instance));
-    LottieLogInfo(animation, "[Lottie] Created new instance state");
-    return raw;
-}
-
 bool LockStateForUpload(
     lottie_animation_wrapper* animation,
     InstanceState*& state,
@@ -357,7 +309,6 @@ bool LockStateForUpload(
             return false;
         }
         auto instance = std::make_unique<InstanceState>();
-        state = instance.get();
         it = gInstances.emplace(animation, std::move(instance)).first;
     }
 
@@ -385,9 +336,6 @@ void ResetTextureState(lottie_animation_wrapper* animation, InstanceState* state
     // Delegate to backend-specific reset
     ResetTextureForRenderer(animation, state);
 
-    state->nativeTex = nullptr;
-    state->texW = 0;
-    state->texH = 0;
     state->uploadCtx = {};
     state->uploadVersion.store(0, std::memory_order_relaxed);
     state->requestedVersion.store(0, std::memory_order_relaxed);

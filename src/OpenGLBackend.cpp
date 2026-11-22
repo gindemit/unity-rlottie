@@ -140,14 +140,6 @@ bool EnsureTextureOpenGL(lottie_animation_wrapper* animation, InstanceState* sta
     // Clear any existing OpenGL errors
     while (glGetError() != GL_NO_ERROR) {}
 
-    // Deferred OpenGL creation starts with a dummy pointer until the render event.
-    if (state->gl.glTex == 0 &&
-        state->nativeTex == reinterpret_cast<void*>(static_cast<uintptr_t>(kDeferredGLTexDummy)))
-    {
-        LottieLogInfo(animation, "[Lottie] EnsureTexture: performing deferred OpenGL texture creation");
-        state->nativeTex = nullptr; // clear dummy
-    }
-
     if (state->gl.glTex == 0)
     {
         LottieLogInfo(animation, "[Lottie] EnsureTexture: glGenTextures");
@@ -310,6 +302,15 @@ bool RegisterUnityTextureOpenGL(
     {
         return false;
     }
+    // Unity passes an existing texture name on Linux and Android. Registration
+    // deliberately does not issue GL calls because it runs on Unity's scripting
+    // thread; all GL access remains inside the render-event callback.
+    if (state->gl.glTex != 0 && !state->gl.unityOwnedTexture)
+    {
+        LottieLogWarning(animation, "[Lottie] OpenGL: cannot replace a plugin-owned texture off the render thread");
+        return false;
+    }
+
     WaitForActiveRenders(state);
     {
         std::lock_guard<std::mutex> poolLock(state->renderPoolMutex);
@@ -318,15 +319,6 @@ bool RegisterUnityTextureOpenGL(
             slot = {};
         }
         state->renderPoolChanged.notify_all();
-    }
-
-    // Unity passes an existing texture name on Linux and Android. Registration
-    // deliberately does not issue GL calls because it runs on Unity's scripting
-    // thread; all GL access remains inside the render-event callback.
-    if (state->gl.glTex != 0 && !state->gl.unityOwnedTexture)
-    {
-        LottieLogWarning(animation, "[Lottie] OpenGL: cannot replace a plugin-owned texture off the render thread");
-        return false;
     }
 
     state->gl.glTex = static_cast<GLuint>(textureName);

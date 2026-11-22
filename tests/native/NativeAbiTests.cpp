@@ -1,5 +1,6 @@
 #include "ImageBufferUtils.h"
 #include "LottiePlugin.h"
+#include "PixelFormatUtils.h"
 
 #include <cstdint>
 #include <cmath>
@@ -45,6 +46,16 @@ namespace
         Expect(destination[4] == 0 && destination[16] == 0, "row padding untouched");
         Expect(!CopyImageRows(destination, 3, source, 8, 1, 2), "short destination row rejected");
         Expect(!CopyImageRows(destination, 12, source, 3, 1, 2), "short source row rejected");
+    }
+
+    void TestPaddedChannelConversion()
+    {
+        uint32_t pixels[] = {0xff332211u, 0x12345678u, 0x99445566u, 0x87654321u};
+        ConvertBGRAtoRGBA(pixels, 1, 2, 8);
+        Expect(pixels[0] == 0xff112233u && pixels[2] == 0x99665544u,
+               "WebGL channel conversion swaps red and blue on each row");
+        Expect(pixels[1] == 0x12345678u && pixels[3] == 0x87654321u,
+               "WebGL channel conversion preserves row padding");
     }
 
     void TestNullAbiArguments()
@@ -240,9 +251,9 @@ namespace
             return;
         }
 
-        uint32_t pixel = 0;
+        uint32_t pixels[2] = {};
         lottie_render_data renderData{};
-        renderData.buffer = &pixel;
+        renderData.buffer = pixels;
         renderData.width = 1;
         renderData.height = 1;
         renderData.bytesPerLine = 3;
@@ -258,7 +269,39 @@ namespace
         Expect(lottie_render_create_future_async(animation, &renderData, 0, false, false) == -1,
                "missing external async buffer rejected after slot acquisition");
 
-        renderData.buffer = &pixel;
+        renderData.buffer = pixels;
+        renderData.bytesPerLine = 5;
+        Expect(lottie_render_immediately(animation, &renderData, 0, false, false) == -1,
+               "render rejects stride that would misalign successive pixel rows");
+
+        renderData.bytesPerLine = 4;
+        Expect(lottie_render_create_future_async(animation, &renderData, 0, false, false) == 0,
+               "async render starts");
+        Expect(lottie_render_create_future_async(animation, &renderData, 0, false, false) == -1,
+               "second async render preserves the unconsumed future");
+        Expect(lottie_render_immediately(animation, &renderData, 0, false, false) == -1,
+               "immediate render cannot reuse an outstanding async surface");
+        lottie_animation_wrapper* other = nullptr;
+        if (lottie_load_from_data(validJson, nullptr, &other) == 0 && other != nullptr)
+        {
+            int32_t ready = 0;
+            Expect(lottie_render_try_get_future_result(other, &renderData, &ready) == -1,
+                   "poll rejects an unrelated animation without consuming the future");
+            Expect(lottie_render_get_future_result(other, &renderData) == -1,
+                   "wait rejects an unrelated animation without consuming the future");
+            lottie_dispose_wrapper(&other);
+        }
+        else
+        {
+            Expect(false, "second animation loads");
+        }
+        Expect(lottie_render_get_future_result(animation, &renderData) == 0,
+               "the original future remains consumable");
+        Expect(lottie_render_get_future_result(animation, &renderData) == -1,
+               "duplicate wait returns an error");
+        Expect(lottie_render_immediately(animation, &renderData, 0, false, false) == 0,
+               "surface can render again after consumption");
+
         renderData.height = 0;
         Expect(lottie_render_immediately(animation, &renderData, 0, false, false) == -1,
                "zero-height render rejected");
@@ -271,6 +314,7 @@ int main()
 {
     TestCheckedImageSizing();
     TestBoundedRowCopy();
+    TestPaddedChannelConversion();
     TestNullAbiArguments();
     TestSemanticColorKeypathsAndBatching();
     TestCompiledBackendCapabilities();
