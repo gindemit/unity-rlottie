@@ -135,6 +135,7 @@ namespace LottiePlugin.UI
                         CreateOptions());
                 }
                 SetTextureToTheTargetRawImage();
+                _lottieAnimation.OutputTextureReplaced += ReplaceBoundTexture;
             }
             return _lottieAnimation;
         }
@@ -146,15 +147,20 @@ namespace LottiePlugin.UI
             }
             _rawImage.texture = _lottieAnimation.OutputTexture;
         }
+
+        private void ReplaceBoundTexture(Texture previous, Texture replacement)
+        {
+            if (_rawImage != null && _rawImage.texture == previous)
+                _rawImage.texture = replacement;
+        }
+
         internal void DisposeLottieAnimation()
         {
             StopStateTransition();
             if (_lottieAnimation != null)
             {
-                if (_rawImage != null)
-                {
-                    _rawImage.texture = null;
-                }
+                _lottieAnimation.OutputTextureReplaced -= ReplaceBoundTexture;
+                ReplaceBoundTexture(_lottieAnimation.OutputTexture, null);
                 _lottieAnimation.Dispose();
                 _lottieAnimation = null;
             }

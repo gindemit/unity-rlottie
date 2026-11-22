@@ -2,7 +2,6 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Unity.Collections;
 using UnityEngine;
 
 namespace LottiePlugin
@@ -125,7 +124,6 @@ namespace LottiePlugin
     {
         private readonly LottieFramePreparationPool _pool;
         private readonly LottieCpuRasterizer _rasterizer;
-        private NativeArray<byte> _pixels;
         private Task<byte[]> _pending;
         private byte[] _resultPixels;
         private bool _disposed;
@@ -134,8 +132,6 @@ namespace LottiePlugin
         {
             _pool = pool;
             _rasterizer = LottieCpuRasterizer.LoadFromJsonData(json, resourcesPath, options.Width, options.Height, options.ColorOverrides);
-            try { _pixels = new NativeArray<byte>(_rasterizer.ByteCount, Allocator.Persistent); }
-            catch { _rasterizer.Dispose(); throw; }
         }
         public override void Start(int[] frames)
         {
@@ -148,14 +144,14 @@ namespace LottiePlugin
                 {
                     // Allocate/clear large buffers on the worker after admission.
                     // Start/TryComplete serialize access; Dispose joins this task.
-                    int byteCount = checked(frames.Length * _pixels.Length);
+                    int bytesPerFrame = _rasterizer.ByteCount;
+                    int byteCount = checked(frames.Length * bytesPerFrame);
                     if (_resultPixels == null || _resultPixels.Length != byteCount)
                         _resultPixels = new byte[byteCount];
                     byte[] result = _resultPixels;
                     for (int index = 0; index < frames.Length; index++)
                     {
-                        _rasterizer.RenderFrame(frames[index], _pixels);
-                        NativeArray<byte>.Copy(_pixels, 0, result, index * _pixels.Length, _pixels.Length);
+                        _rasterizer.RenderIntoBatch(frames[index], result, index * bytesPerFrame);
                     }
                     return result;
                 }
@@ -181,7 +177,6 @@ namespace LottiePlugin
             {
                 _pending = null;
                 _resultPixels = null;
-                _pixels.Dispose();
                 try { _rasterizer.Dispose(); }
                 finally { _pool.Retire(); }
             }

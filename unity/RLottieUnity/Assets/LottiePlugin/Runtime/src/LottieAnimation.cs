@@ -1,7 +1,7 @@
+using LottiePlugin.Support;
 using LottiePlugin.Utility;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -41,6 +41,7 @@ namespace LottiePlugin
         public event Action<LottieAnimation> Started;
         public event Action<LottieAnimation> Paused;
         public event Action<LottieAnimation> Stopped;
+        internal event Action<Texture, Texture> OutputTextureReplaced;
 
         public Texture2D Texture { get; private set; }
         
@@ -164,8 +165,9 @@ namespace LottiePlugin
             ThrowIf.Value.IsZero(height, nameof(height));
             try
             {
+                var source = new LottieMarkerSet.ValidatedSource(jsonData);
                 _animationWrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animationWrapperIntPtr);
-                Markers = LottieMarkerSet.Parse(jsonData, _animationWrapper.totalFrames, () => _disposed);
+                Markers = source.MapFrames(_animationWrapper.totalFrames, () => _disposed);
                 CompleteConstruction(width, height, options);
             }
             catch
@@ -174,25 +176,6 @@ namespace LottiePlugin
                 throw;
             }
         }
-        private LottieAnimation(string jsonFilePath, uint width, uint height, LottieAnimationOptions options)
-        {
-            ThrowIf.String.IsNullOrEmpty(jsonFilePath, nameof(jsonFilePath));
-            ThrowIf.Value.IsZero(width, nameof(width));
-            ThrowIf.Value.IsZero(height, nameof(height));
-            string jsonData = File.ReadAllText(jsonFilePath);
-            try
-            {
-                _animationWrapper = NativeBridge.LoadFromFile(jsonFilePath, out _animationWrapperIntPtr);
-                Markers = LottieMarkerSet.Parse(jsonData, _animationWrapper.totalFrames, () => _disposed);
-                CompleteConstruction(width, height, options);
-            }
-            catch
-            {
-                Dispose(false);
-                throw;
-            }
-        }
-
         private void CompleteConstruction(uint width, uint height, LottieAnimationOptions options)
         {
             options = options ?? new LottieAnimationOptions();
@@ -263,6 +246,7 @@ namespace LottiePlugin
                 Started = null;
                 Paused = null;
                 Stopped = null;
+                OutputTextureReplaced = null;
             }
 
             lock (sAliveLock)
@@ -459,7 +443,10 @@ namespace LottiePlugin
         public static LottieAnimation LoadFromJsonFile(string filePath, uint width, uint height, LottieAnimationOptions options = null)
         {
             ThrowIf.String.IsNullOrEmpty(filePath, nameof(filePath));
-            return new LottieAnimation(filePath, width, height, options);
+            ThrowIf.Value.IsZero(width, nameof(width));
+            ThrowIf.Value.IsZero(height, nameof(height));
+            string json = FilesHelper.ReadAnimationFile(filePath, out string resourcesPath);
+            return new LottieAnimation(json, resourcesPath, width, height, options);
         }
         public static LottieAnimation LoadFromJsonData(string jsonData, string resourcesPath, uint width, uint height, LottieAnimationOptions options = null)
         {

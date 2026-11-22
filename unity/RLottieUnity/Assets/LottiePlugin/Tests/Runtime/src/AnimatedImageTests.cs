@@ -4,6 +4,7 @@ using UnityEngine.TestTools;
 using LottiePlugin.UI;
 using System.Collections;
 using System.Reflection;
+using Unity.Collections;
 
 namespace LottiePlugin.Tests.Runtime
 {
@@ -275,6 +276,78 @@ namespace LottiePlugin.Tests.Runtime
             Assert.AreSame(
                 _animatedImage.LottieAnimation.OutputTexture,
                 _animatedImage.RawImage.texture);
+        }
+
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        [TestCase(false)]
+        [TestCase(true)]
+        public void LateUploadRecoveryRendersCurrentFrameAndPreservesImageBinding(bool useExternalTexture)
+        {
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
+            var animation = _animatedImage.Animation;
+            animation.DrawOneFrame(5);
+            animation.Pause();
+            Texture previous = animation.OutputTexture;
+            if (useExternalTexture) _animatedImage.RawImage.texture = Texture2D.whiteTexture;
+
+            LogAssert.Expect(LogType.Warning, "[LottiePlugin] Native texture upload unavailable (test); using Texture2D.Apply fallback");
+            animation.RecoverFromNativeUploadFailure("test");
+
+            Assert.AreNotSame(previous, animation.OutputTexture);
+            Assert.AreEqual(LottieTextureUploadBackend.ManagedTextureUpload, animation.TextureUploadBackend);
+            Assert.AreSame(useExternalTexture ? Texture2D.whiteTexture : animation.OutputTexture, _animatedImage.RawImage.texture);
+            Assert.AreEqual(5, animation.CurrentFrame);
+            Assert.IsFalse(animation.IsPlaying);
+            AssertManagedTextureMatchesCpuFrame(animation, 5);
+
+            _animatedImage.DisposeLottieAnimation();
+            Assert.AreSame(useExternalTexture ? Texture2D.whiteTexture : null, _animatedImage.RawImage.texture);
+        }
+#endif
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        [TestCase(false)]
+        [TestCase(true)]
+        public void LostAndroidRenderTargetResubmitsTheRequestedFrame(bool asynchronous)
+        {
+            _animatedImage.LoadFromAnimationJson(_lottieAnimation.text, 32, 32);
+            var animation = _animatedImage.Animation;
+            if (animation.TextureUploadBackend != LottieTextureUploadBackend.NativeVulkan &&
+                animation.TextureUploadBackend != LottieTextureUploadBackend.NativeOpenGL)
+                Assert.Ignore("This case requires an Android native upload backend.");
+
+            var handleField = typeof(LottieAnimation).GetField("_animationWrapperIntPtr", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(handleField);
+            var handle = (System.IntPtr)handleField.GetValue(animation);
+            animation.LogLevel = LottieLogLevel.None;
+            NativeBridge.LottieDestroyTexture(handle, animation.Texture.GetNativeTexturePtr());
+            LogAssert.Expect(LogType.Warning, "[LottiePlugin] Native texture upload unavailable (native render target unavailable); using Texture2D.Apply fallback");
+
+            if (asynchronous)
+            {
+                animation.DrawOneFrameAsyncPrepare(5);
+                Assert.IsTrue(animation.AsyncDrawPending);
+                animation.DrawOneFrameAsyncGetResult();
+            }
+            else animation.DrawOneFrame(5);
+
+            Assert.AreEqual(5, animation.CurrentFrame);
+            Assert.IsFalse(animation.AsyncDrawPending);
+            Assert.AreEqual(LottieTextureUploadBackend.ManagedTextureUpload, animation.TextureUploadBackend);
+            Assert.AreSame(animation.OutputTexture, _animatedImage.RawImage.texture);
+            AssertManagedTextureMatchesCpuFrame(animation, 5);
+        }
+#endif
+
+        private void AssertManagedTextureMatchesCpuFrame(LottieAnimation animation, int frame)
+        {
+            Texture2D texture = animation.Texture;
+            using (var cpu = LottieCpuRasterizer.LoadFromJsonData(_lottieAnimation.text, "", texture.width, texture.height))
+            using (var pixels = new NativeArray<byte>(cpu.ByteCount, Allocator.Temp))
+            {
+                cpu.RenderFrame(frame, pixels);
+                CollectionAssert.AreEqual(pixels.ToArray(), texture.GetRawTextureData<byte>().ToArray());
+            }
         }
 
         private static bool HasVisibleOutputPixel(Texture texture)

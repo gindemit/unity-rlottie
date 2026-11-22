@@ -251,40 +251,59 @@ namespace LottiePlugin
             // correct channel layout and detach the native mailbox before the
             // independently owned CPU buffer becomes the render target.
             Texture2D previousTexture = Texture;
-            if (_animationWrapperIntPtr != IntPtr.Zero)
+            var replacement = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 1, false);
+            try
             {
+                ConfigureRuntimeTexture(replacement);
+                AllocateCpuPixelData(width, height);
                 NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
+                // Construction also publishes this prefix. Late recovery must
+                // replace the native descriptor's former null mailbox pointer.
+                Marshal.StructureToPtr(_lottieRenderData, _lottieRenderDataIntPtr, false);
             }
-            if (_ownsPixelData && _pixelData.IsCreated)
+            catch
             {
-                _pixelData.Dispose();
+                UnityEngine.Object.Destroy(replacement);
+                throw;
             }
-            _pixelData = default;
-            _ownsPixelData = false;
             _nativeTexturePtr = IntPtr.Zero;
             _usesUnityOwnedNativeTexture = false;
             _usesUnityOwnedOpenGLTexture = false;
             _usesCPURendering = true;
             TextureUploadBackend = LottieTextureUploadBackend.ManagedTextureUpload;
 
-            Texture = new Texture2D((int)width, (int)height, TextureFormat.BGRA32, 1, false);
-            ConfigureRuntimeTexture(Texture);
-            AllocateCpuPixelData(width, height);
+            Texture = replacement;
             if (previousTexture != null)
             {
-                UnityEngine.Object.Destroy(previousTexture);
+                try { OutputTextureReplaced?.Invoke(previousTexture, replacement); }
+                finally { UnityEngine.Object.Destroy(previousTexture); }
             }
 
             Debug.LogWarning($"[LottiePlugin] Native texture upload unavailable ({reason}); using Texture2D.Apply fallback");
         }
 
-        private void RenderCurrentFrameAfterManagedFallback()
+        internal void RecoverFromNativeUploadFailure(string reason)
         {
+            UseManagedTextureUploadFallback((uint)Texture.width, (uint)Texture.height, reason);
             int result = NativeBridge.LottieRenderImmediately(
                 _animationWrapperIntPtr, _lottieRenderDataIntPtr, CurrentFrame, true, false);
             if (result != 0)
                 throw new InvalidOperationException("Native rlottie rasterization failed after switching to managed upload.");
             UploadCpuPixels(Texture);
+        }
+
+        private bool TryRecoverUnavailableRenderTarget()
+        {
+            if (_disposed) return false;
+            bool unavailable =
+                (_usesUnityOwnedOpenGLTexture && NativeBridge.LottieIsOpenGLUploadAvailable(_animationWrapperIntPtr) == 0) ||
+                (_usesUnityOwnedNativeTexture && NativeBridge.LottieIsVulkanUploadAvailable(_animationWrapperIntPtr) == 0);
+            if (!unavailable) return false;
+
+            // A mailbox lost before submission has no CPU destination. Restore
+            // the surface, then submit the same requested frame once.
+            UseManagedTextureUploadFallback((uint)Texture.width, (uint)Texture.height, "native render target unavailable");
+            return true;
         }
 #endif
 
@@ -423,6 +442,8 @@ namespace LottiePlugin
 #else
             int result = NativeBridge.LottieRenderImmediately(
                 _animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
+            if (result < 0 && TryRecoverUnavailableRenderTarget())
+                result = NativeBridge.LottieRenderImmediately(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
 #endif
             if (result != 0) throw new InvalidOperationException("Native rlottie rasterization failed.");
             CurrentFrame = frameNumber;
@@ -457,6 +478,8 @@ namespace LottiePlugin
 #else
             int result = NativeBridge.LottieRenderCreateFutureAsync(
                 _animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
+            if (result < 0 && TryRecoverUnavailableRenderTarget())
+                result = NativeBridge.LottieRenderCreateFutureAsync(_animationWrapperIntPtr, _lottieRenderDataIntPtr, frameNumber, true, false);
 #endif
             if (result != 0) throw new InvalidOperationException("Native rlottie asynchronous rasterization could not start.");
         }
@@ -666,7 +689,6 @@ namespace LottiePlugin
                     // A renderer can be supported by Unity without having a native
                     // backend in this plugin. Clean up any partial native state and
                     // retain functional rendering through the managed upload path.
-                    NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, IntPtr.Zero);
                     UseManagedTextureUploadFallback(width, height, deviceType.ToString());
                     return;
                 }
@@ -692,7 +714,6 @@ namespace LottiePlugin
                 }
                 catch (Exception exception)
                 {
-                    NativeBridge.LottieDestroyTexture(_animationWrapperIntPtr, _nativeTexturePtr);
                     UseManagedTextureUploadFallback(width, height,
                         $"{deviceType}: {exception.GetType().Name}");
                 }
@@ -802,10 +823,7 @@ namespace LottiePlugin
                         }
                     }
 
-                    uint width = (uint)Texture.width;
-                    uint height = (uint)Texture.height;
-                    UseManagedTextureUploadFallback(width, height, "OpenGL native upload failure");
-                    RenderCurrentFrameAfterManagedFallback();
+                    RecoverFromNativeUploadFailure("OpenGL native upload failure");
                     return;
                 }
 
@@ -843,11 +861,8 @@ namespace LottiePlugin
                         }
                     }
 
-                    uint width = (uint)Texture.width;
-                    uint height = (uint)Texture.height;
-                    UseManagedTextureUploadFallback(width, height, "Vulkan native upload failure");
+                    RecoverFromNativeUploadFailure("Vulkan native upload failure");
                     LogVulkanApplyFallback();
-                    RenderCurrentFrameAfterManagedFallback();
                     return;
                 }
 

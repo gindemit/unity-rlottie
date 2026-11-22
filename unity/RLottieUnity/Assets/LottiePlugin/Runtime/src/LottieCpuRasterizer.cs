@@ -1,5 +1,5 @@
 using System;
-using System.IO;
+using LottiePlugin.Support;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Unity.Collections;
@@ -47,10 +47,11 @@ namespace LottiePlugin
             Height = height;
             try
             {
+                var source = new LottieMarkerSet.ValidatedSource(jsonData);
                 _wrapper = NativeBridge.LoadFromData(jsonData, resourcesPath, out _animation);
+                Markers = source.MapFrames(_wrapper.totalFrames, () => _disposed);
                 if (colorOverrides != null)
                     ApplyColorOverrides(colorOverrides);
-                Markers = LottieMarkerSet.Parse(jsonData, _wrapper.totalFrames, () => _disposed);
                 InitializeSurface();
                 lock (sAliveLock) sAlive.Add(this);
             }
@@ -72,8 +73,8 @@ namespace LottiePlugin
             IReadOnlyList<LottieColorOverride> colorOverrides = null)
         {
             if (string.IsNullOrEmpty(path)) throw new ArgumentException("A Lottie JSON path is required.", nameof(path));
-            string json = File.ReadAllText(path);
-            return new LottieCpuRasterizer(json, Path.GetDirectoryName(path), width, height, colorOverrides);
+            string json = FilesHelper.ReadAnimationFile(path, out string resourcesPath);
+            return new LottieCpuRasterizer(json, resourcesPath, width, height, colorOverrides);
         }
 
         public void SetFillColor(string keyPath, UnityEngine.Color color)
@@ -107,11 +108,30 @@ namespace LottiePlugin
                 if (!destination.IsCreated) throw new ArgumentException("Destination storage is not created.", nameof(destination));
                 if (destination.Length != ByteCount)
                     throw new ArgumentException("Destination must contain exactly " + ByteCount + " bytes.", nameof(destination));
-                if (frame < 0 || frame >= _wrapper.totalFrames) throw new ArgumentOutOfRangeException(nameof(frame));
-                int result = NativeBridge.LottieRenderImmediately(_animation, _renderDataPointer, frame, true, false);
-                if (result != 0) throw new InvalidOperationException("Native rlottie rasterization failed.");
+                RenderToStaging(frame);
                 NativeArray<byte>.Copy(_staging, destination);
             }
+        }
+
+        // A worker writes each completed frame straight into its batch while
+        // the same lock keeps the native staging buffer alive through the copy.
+        internal void RenderIntoBatch(int frame, byte[] destination, int offset)
+        {
+            lock (_renderLock)
+            {
+                ThrowIfDisposed();
+                if (destination == null) throw new ArgumentNullException(nameof(destination));
+                if (offset < 0 || offset > destination.Length - ByteCount) throw new ArgumentOutOfRangeException(nameof(offset));
+                RenderToStaging(frame);
+                NativeArray<byte>.Copy(_staging, 0, destination, offset, ByteCount);
+            }
+        }
+
+        private void RenderToStaging(int frame)
+        {
+            if (frame < 0 || frame >= _wrapper.totalFrames) throw new ArgumentOutOfRangeException(nameof(frame));
+            int result = NativeBridge.LottieRenderImmediately(_animation, _renderDataPointer, frame, true, false);
+            if (result != 0) throw new InvalidOperationException("Native rlottie rasterization failed.");
         }
 
         public void RenderMarkerFrame(string markerName, float normalized, NativeArray<byte> destination)

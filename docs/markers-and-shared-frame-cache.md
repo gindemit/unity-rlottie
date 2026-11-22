@@ -28,6 +28,18 @@ int last = marker.LastRenderFrameInclusive;
 animation.DrawMarkerFrame("grow", 0.5f);
 ```
 
+Both managed `LoadFromJsonFile` methods read the file once per call. Marker
+validation and native drawing use that same JSON string, and the containing
+directory supplies the base for relative image assets. Replacing a document
+at its path takes effect on the next load. Repeated loads of an unchanged file
+parse the native model each time and bypass the native file loader's path cache.
+
+The packaged Windows decoder can leave relative external images transparent.
+Its native path check retains a trailing separator when canonicalizing the base
+directory, then expects a second separator before the child filename. Embedded
+PNG images render on Windows. The Android runtime suite checks both managed file
+APIs against a PNG in a sibling `images` directory.
+
 `LottieMarkerSet.Parse(json, totalFramesCount)` is also available when marker
 metadata is needed without retaining an animation-owned marker set. Parsing is
 ordinal and rejects missing/invalid `fr`, `ip`, or `op`, empty or duplicate

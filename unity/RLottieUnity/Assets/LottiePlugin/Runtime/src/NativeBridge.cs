@@ -212,13 +212,6 @@ namespace LottiePlugin
 
         [DllImport(PLUGIN_NAME,
             CallingConvention = CallingConvention.Cdecl,
-            EntryPoint = "lottie_load_from_file")]
-        private static extern int LottieLoadFromFile(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath,
-            out IntPtr animationWrapper);
-
-        [DllImport(PLUGIN_NAME,
-            CallingConvention = CallingConvention.Cdecl,
             EntryPoint = "lottie_dispose_wrapper")]
         internal static extern int LottieDisposeWrapper(
             ref IntPtr animationWrapper);
@@ -311,15 +304,16 @@ namespace LottiePlugin
             IntPtr animationWrapper,
             IReadOnlyList<LottieColorOverride> overrides)
         {
-            if (overrides == null || overrides.Count == 0)
-                return 0;
+            int count = overrides?.Count ?? 0;
+            if (count == 0) return 0;
 
             int itemSize = Marshal.SizeOf<NativeLottieColorOverride>();
-            IntPtr items = Marshal.AllocHGlobal(checked(itemSize * overrides.Count));
-            IntPtr[] keyPaths = new IntPtr[overrides.Count];
+            int byteCount = checked(itemSize * count);
+            IntPtr[] keyPaths = new IntPtr[count];
+            IntPtr items = Marshal.AllocHGlobal(byteCount);
             try
             {
-                for (int index = 0; index < overrides.Count; index++)
+                for (int index = 0; index < count; index++)
                 {
                     LottieColorOverride colorOverride = overrides[index];
                     ValidateColorOverride(colorOverride, nameof(overrides));
@@ -334,7 +328,7 @@ namespace LottiePlugin
                     };
                     Marshal.StructureToPtr(nativeOverride, IntPtr.Add(items, itemSize * index), false);
                 }
-                return LottieApplyColorOverrides(animationWrapper, items, checked((uint)overrides.Count));
+                return LottieApplyColorOverrides(animationWrapper, items, (uint)count);
             }
             finally
             {
@@ -351,6 +345,8 @@ namespace LottiePlugin
         {
             if (string.IsNullOrEmpty(colorOverride.KeyPath))
                 throw new ArgumentException("A non-empty rlottie keypath is required.", parameterName);
+            if (colorOverride.KeyPath.IndexOf('\0') >= 0)
+                throw new ArgumentException("A rlottie keypath cannot contain a null character.", parameterName);
             if (colorOverride.Property != LottieColorProperty.FillColor &&
                 colorOverride.Property != LottieColorProperty.StrokeColor)
                 throw new ArgumentOutOfRangeException(parameterName, "Unsupported Lottie color property.");
@@ -378,17 +374,6 @@ namespace LottiePlugin
                 if (animationWrapper != IntPtr.Zero)
                     LottieDisposeWrapper(ref animationWrapper);
                 throw new InvalidDataException("The native rlottie library could not load the JSON data.");
-            }
-            return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
-        }
-        internal static LottieAnimationWrapper LoadFromFile(string filePath, out IntPtr animationWrapper)
-        {
-            int result = LottieLoadFromFile(filePath, out animationWrapper);
-            if (result != 0 || animationWrapper == IntPtr.Zero)
-            {
-                if (animationWrapper != IntPtr.Zero)
-                    LottieDisposeWrapper(ref animationWrapper);
-                throw new InvalidDataException("The native rlottie library could not load the JSON file.");
             }
             return Marshal.PtrToStructure<LottieAnimationWrapper>(animationWrapper);
         }

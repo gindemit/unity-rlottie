@@ -7,6 +7,14 @@ namespace LottiePlugin.Support
     {
         private const string JSON_EXTENTION = ".json";
 
+        internal static string ReadAnimationFile(string path, out string resourcesPath)
+        {
+            string fullPath = Path.GetFullPath(path);
+            // rlottie concatenates this directory with asset paths verbatim.
+            resourcesPath = fullPath.Substring(0, fullPath.Length - Path.GetFileName(fullPath).Length);
+            return File.ReadAllText(fullPath);
+        }
+
         public static void CopyAnimationsJsonsFromStreamingAssetsToPersistentData(string[] animations)
         {
             for (int i = 0; i < animations.Length; ++i)

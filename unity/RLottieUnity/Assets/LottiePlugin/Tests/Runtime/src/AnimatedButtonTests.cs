@@ -114,6 +114,32 @@ namespace LottiePlugin.Tests.Runtime
             Assert.AreSame(button.Animation.OutputTexture, rawImage.texture);
         }
 
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        [TestCase(false)]
+        [TestCase(true)]
+        public void LateUploadRecoveryPreservesButtonBinding(bool useExternalTexture)
+        {
+            _gameObject = new GameObject("RecoveringAnimatedButton");
+            RawImage rawImage = _gameObject.AddComponent<RawImage>();
+            AnimatedButton button = _gameObject.AddComponent<AnimatedButton>();
+            SetField(button, "_animationJson", Resources.Load<TextAsset>("body_movin"));
+            SetField(button, "_rawImage", rawImage);
+            SetField(button, "_textureWidth", 32u);
+            SetField(button, "_textureHeight", 32u);
+            LottieAnimation animation = button.CreateIfNeededAndReturnLottieAnimation();
+            Texture previous = rawImage.texture;
+            if (useExternalTexture) rawImage.texture = Texture2D.whiteTexture;
+
+            LogAssert.Expect(LogType.Warning, "[LottiePlugin] Native texture upload unavailable (test); using Texture2D.Apply fallback");
+            animation.RecoverFromNativeUploadFailure("test");
+
+            Assert.AreNotSame(previous, animation.OutputTexture);
+            Assert.AreSame(useExternalTexture ? Texture2D.whiteTexture : animation.OutputTexture, rawImage.texture);
+            button.DisposeLottieAnimation();
+            Assert.AreSame(useExternalTexture ? Texture2D.whiteTexture : null, rawImage.texture);
+        }
+#endif
+
         private static void SetField<T>(AnimatedButton button, string fieldName, T value)
         {
             FieldInfo field = typeof(AnimatedButton).GetField(

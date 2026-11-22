@@ -45,27 +45,51 @@ namespace LottiePlugin
 
         internal static LottieMarkerSet Parse(string jsonData, long totalFramesCount, Func<bool> ownerDisposed)
         {
-            if (string.IsNullOrEmpty(jsonData)) throw new ArgumentException("Lottie JSON is required.", nameof(jsonData));
-            if (totalFramesCount <= 0 || totalFramesCount > int.MaxValue)
-                throw new ArgumentOutOfRangeException(nameof(totalFramesCount));
-
-            // Keyed by string instance: owners that keep their JSON string share one parse.
-            ParsedDocument document;
-            if (sParsed.TryGetValue(jsonData, out document) && document.TotalFramesCount == totalFramesCount)
-                return new LottieMarkerSet(document, ownerDisposed);
-            document = ParseDocument(jsonData, totalFramesCount);
-            lock (sParsedLock)
-            {
-                sParsed.Remove(jsonData);
-                sParsed.Add(jsonData, document);
-            }
-            return new LottieMarkerSet(document, ownerDisposed);
+            return new ValidatedSource(jsonData).MapFrames(totalFramesCount, ownerDisposed);
         }
 
-        private static ParsedDocument ParseDocument(string jsonData, long totalFramesCount)
+        // Validate the JSON structure before native loading. Mapping markers needs
+        // the native frame count, which is only available after loading succeeds.
+        internal readonly struct ValidatedSource
         {
-            var root = JsonSubsetParser.Parse(jsonData) as Dictionary<string, object>;
-            if (root == null) throw new FormatException("The Lottie document root must be an object.");
+            private readonly string _json;
+            private readonly ParsedDocument _cached;
+            private readonly Dictionary<string, object> _metadata;
+
+            internal ValidatedSource(string jsonData)
+            {
+                if (string.IsNullOrEmpty(jsonData)) throw new ArgumentException("Lottie JSON is required.", nameof(jsonData));
+                _json = jsonData;
+                sParsed.TryGetValue(jsonData, out _cached);
+                _metadata = _cached == null ? ReadMetadata(jsonData) : null;
+            }
+
+            internal LottieMarkerSet MapFrames(long totalFramesCount, Func<bool> ownerDisposed)
+            {
+                if (totalFramesCount <= 0 || totalFramesCount > int.MaxValue)
+                    throw new ArgumentOutOfRangeException(nameof(totalFramesCount));
+                if (_cached != null && _cached.TotalFramesCount == totalFramesCount)
+                    return new LottieMarkerSet(_cached, ownerDisposed);
+
+                ParsedDocument document = ParseDocument(_metadata ?? ReadMetadata(_json), totalFramesCount);
+                lock (sParsedLock)
+                {
+                    sParsed.Remove(_json);
+                    sParsed.Add(_json, document);
+                }
+                return new LottieMarkerSet(document, ownerDisposed);
+            }
+
+            private static Dictionary<string, object> ReadMetadata(string json)
+            {
+                var root = JsonSubsetParser.Parse(json) as Dictionary<string, object>;
+                if (root == null) throw new FormatException("The Lottie document root must be an object.");
+                return root;
+            }
+        }
+
+        private static ParsedDocument ParseDocument(Dictionary<string, object> root, long totalFramesCount)
+        {
             double frameRate = RequiredFiniteNumber(root, "fr");
             double inPoint = RequiredFiniteNumber(root, "ip");
             RequiredFiniteNumber(root, "op");

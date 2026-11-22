@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using NUnit.Framework;
 using Unity.Collections;
 using UnityEngine;
@@ -7,6 +8,143 @@ namespace LottiePlugin.Tests.Runtime
 {
     public sealed class LottieCpuAndFrameCacheTests
     {
+        [Test]
+        public void LiveAndCpuLoadersValidateJsonStructureBeforeNativeParsing()
+        {
+            const string incompleteJson = "{";
+            string path = Path.Combine(Application.temporaryCachePath, Guid.NewGuid() + ".json");
+            try
+            {
+                File.WriteAllText(path, incompleteJson);
+                Assert.Throws<FormatException>(() => LottieAnimation.LoadFromJsonData(incompleteJson, "", 8, 8));
+                Assert.Throws<FormatException>(() => LottieAnimation.LoadFromJsonFile(path, 8, 8));
+                Assert.Throws<FormatException>(() => LottieCpuRasterizer.LoadFromJsonData(incompleteJson, "", 8, 8));
+                Assert.Throws<FormatException>(() => LottieCpuRasterizer.LoadFromJsonFile(path, 8, 8));
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Test]
+        public void FileAndMemoryAnimationsRenderTheSameMarkerFrame()
+        {
+            string json = WithMarker(Resources.Load<TextAsset>("device_color_calibration_alpha").text, "clip", 5, 28);
+            string path = Path.Combine(Application.temporaryCachePath, Guid.NewGuid() + ".json");
+            var options = new LottieAnimationOptions { UseManagedTextureUpload = true };
+            var previousConversion = LottieWebGLSettings.ColorConversionMode;
+            try
+            {
+                LottieWebGLSettings.ColorConversionMode = WebGLColorConversionMode.Native;
+                File.WriteAllText(path, json);
+                using (var file = LottieAnimation.LoadFromJsonFile(path, 16, 16, options))
+                using (var data = LottieAnimation.LoadFromJsonData(json, "", 16, 16, options))
+                {
+                    Assert.AreEqual(data.TotalFramesCount, file.TotalFramesCount);
+                    Assert.AreEqual(data.Markers.Frame("clip", 1), file.Markers.Frame("clip", 1));
+                    data.DrawMarkerFrame("clip", 1);
+                    file.DrawMarkerFrame("clip", 1);
+                    Assert.AreEqual(Hash(data.Texture.GetRawTextureData<byte>()), Hash(file.Texture.GetRawTextureData<byte>()));
+                }
+            }
+            finally
+            {
+                LottieWebGLSettings.ColorConversionMode = previousConversion;
+                File.Delete(path);
+            }
+        }
+
+        [Test]
+        public void ReloadingAReplacedFileUsesItsCurrentMarkersAndPixels()
+        {
+            string first = Resources.Load<TextAsset>("semantic_palette").text;
+            string second = first.Replace("\"clip\"", "\"replacement\"").Replace("[0,0,1,1]", "[0,1,0,1]");
+            string path = Path.Combine(Application.temporaryCachePath, Guid.NewGuid() + ".json");
+            try
+            {
+                File.WriteAllText(path, first);
+                AssertFileFrame(path, "clip", new Color32(0, 0, 255, 255));
+                File.WriteAllText(path, second);
+                AssertFileFrame(path, "replacement", new Color32(0, 255, 0, 255));
+            }
+            finally { File.Delete(path); }
+        }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        [Test]
+        public void FileLoadersRenderExternalPngRelativeToJsonDirectory()
+        {
+            // A solid green 16x16 PNG. The PNG and JSON share a temporary
+            // directory so that neither Unity Resources nor the cwd can supply it.
+            const string greenPng = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAFklEQVR4nGNg+E8hHDVg1IBRA4aLAQAxtf4QMNSIagAAAABJRU5ErkJggg==";
+            const string json = "{\"v\":\"5.7.4\",\"fr\":30,\"ip\":0,\"op\":2,\"w\":16,\"h\":16," +
+                "\"assets\":[{\"id\":\"pixel\",\"w\":16,\"h\":16,\"u\":\"images/\",\"p\":\"green.png\",\"e\":0}]," +
+                "\"markers\":[{\"cm\":\"image\",\"tm\":0,\"dr\":2}]," +
+                "\"layers\":[{\"ty\":2,\"refId\":\"pixel\",\"ind\":1,\"ip\":0,\"op\":2,\"st\":0," +
+                "\"ks\":{\"o\":{\"a\":0,\"k\":100},\"r\":{\"a\":0,\"k\":0},\"p\":{\"a\":0,\"k\":[0,0]}," +
+                "\"a\":{\"a\":0,\"k\":[0,0]},\"s\":{\"a\":0,\"k\":[100,100]}}}]}";
+            string directory = Path.Combine(Application.temporaryCachePath, Guid.NewGuid().ToString());
+            string images = Path.Combine(directory, "images");
+            string pngPath = Path.Combine(images, "green.png");
+            string jsonPath = Path.Combine(directory, "animation.json");
+            Directory.CreateDirectory(images);
+            try
+            {
+                File.WriteAllBytes(pngPath, Convert.FromBase64String(greenPng));
+                File.WriteAllText(jsonPath, json);
+                AssertFileFrame(jsonPath, "image", new Color32(0, 255, 0, 255));
+            }
+            finally
+            {
+                File.Delete(jsonPath);
+                File.Delete(pngPath);
+                Directory.Delete(images);
+                Directory.Delete(directory);
+            }
+        }
+#endif
+
+        private static void AssertFileFrame(string path, string marker, Color32 expected)
+        {
+            var options = new LottieAnimationOptions { UseManagedTextureUpload = true };
+            var previousConversion = LottieWebGLSettings.ColorConversionMode;
+            try
+            {
+                LottieWebGLSettings.ColorConversionMode = WebGLColorConversionMode.Native;
+                using (var live = LottieAnimation.LoadFromJsonFile(path, 16, 16, options))
+                using (var cpu = LottieCpuRasterizer.LoadFromJsonFile(path, 16, 16))
+                using (var pixels = new NativeArray<byte>(cpu.ByteCount, Allocator.Temp))
+                {
+                    live.DrawMarkerFrame(marker, 0);
+                    cpu.RenderMarkerFrame(marker, 0, pixels);
+                    AssertBgraApproximately(pixels, 16, 8, 8, expected.b, expected.g, expected.r, expected.a);
+                    const int center = 8 * 16 + 8;
+                    int offset = center * 4;
+                    var cpuColor = new Color32(pixels[offset + 2], pixels[offset + 1], pixels[offset], pixels[offset + 3]);
+                    Assert.AreEqual(cpuColor, live.Texture.GetPixels32()[center]);
+                }
+            }
+            finally { LottieWebGLSettings.ColorConversionMode = previousConversion; }
+        }
+
+        [Test]
+        public void BatchRenderWritesOnlyTheRequestedFrameRange()
+        {
+            string json = Resources.Load<TextAsset>("device_color_calibration_alpha").text;
+            using (var rasterizer = LottieCpuRasterizer.LoadFromJsonData(json, "", 16, 16))
+            using (var expected = new NativeArray<byte>(rasterizer.ByteCount, Allocator.Temp))
+            {
+                var pixels = new byte[rasterizer.ByteCount + 2];
+                pixels[0] = 23;
+                pixels[pixels.Length - 1] = 42;
+                rasterizer.RenderFrame(30, expected);
+                rasterizer.RenderIntoBatch(30, pixels, 1);
+                Assert.AreEqual(23, pixels[0]);
+                Assert.AreEqual(42, pixels[pixels.Length - 1]);
+                for (int index = 0; index < expected.Length; index++)
+                    Assert.AreEqual(expected[index], pixels[index + 1]);
+                Assert.Throws<ArgumentOutOfRangeException>(() => rasterizer.RenderIntoBatch(30, pixels, 3));
+            }
+        }
+
         [Test]
         public void CpuRasterizerUsesCallerOwnedExactBufferAcrossFrames()
         {
@@ -74,6 +212,7 @@ namespace LottiePlugin.Tests.Runtime
                 AssertBgraApproximately(sequentialPixels, 16, 8, 8, 0, 255, 0, 255);
                 AssertContainsBlueDominantPixel(sequentialPixels);
                 Assert.Throws<ArgumentException>(() => sequential.SetFillColor(string.Empty, Color.red));
+                Assert.Throws<ArgumentException>(() => sequential.SetFillColor("**.palette.base\0suffix", Color.red));
                 Assert.Throws<ArgumentException>(() => sequential.SetStrokeColor(
                     "**.palette.ink", new Color(float.NaN, 0, 0)));
             }

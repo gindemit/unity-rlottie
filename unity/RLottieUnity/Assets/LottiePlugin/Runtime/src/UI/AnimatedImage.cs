@@ -137,10 +137,7 @@ namespace LottiePlugin.UI
                 width,
                 height,
                 CreateOptions());
-            _rawImage.texture = _lottieAnimation.OutputTexture;
-            _lottieAnimation.Started += OnAnimationStarted;
-            _lottieAnimation.Paused += OnAnimationPaused;
-            _lottieAnimation.Stopped += OnAnimationStopped;
+            BindAnimation();
         }
 
         public void LoadFromAnimationJsonFile(string filePath, uint width, uint height)
@@ -164,10 +161,7 @@ namespace LottiePlugin.UI
                 width,
                 height,
                 CreateOptions());
-            _rawImage.texture = _lottieAnimation.OutputTexture;
-            _lottieAnimation.Started += OnAnimationStarted;
-            _lottieAnimation.Paused += OnAnimationPaused;
-            _lottieAnimation.Stopped += OnAnimationStopped;
+            BindAnimation();
         }
 
         internal LottieAnimation CreateIfNeededAndReturnLottieAnimation()
@@ -203,21 +197,32 @@ namespace LottiePlugin.UI
                         TextureHeight,
                         CreateOptions());
                 }
-                _rawImage.texture = _lottieAnimation.OutputTexture;
-                _lottieAnimation.Started += OnAnimationStarted;
-                _lottieAnimation.Paused += OnAnimationPaused;
-                _lottieAnimation.Stopped += OnAnimationStopped;
+                BindAnimation();
             }
             return _lottieAnimation;
         }
+
+        private void BindAnimation()
+        {
+            _rawImage.texture = _lottieAnimation.OutputTexture;
+            _lottieAnimation.OutputTextureReplaced += ReplaceBoundTexture;
+            _lottieAnimation.Started += OnAnimationStarted;
+            _lottieAnimation.Paused += OnAnimationPaused;
+            _lottieAnimation.Stopped += OnAnimationStopped;
+        }
+
+        private void ReplaceBoundTexture(Texture previous, Texture replacement)
+        {
+            if (_rawImage != null && _rawImage.texture == previous)
+                _rawImage.texture = replacement;
+        }
+
         internal void DisposeLottieAnimation()
         {
             if (_lottieAnimation != null)
             {
-                if (_rawImage != null)
-                {
-                    _rawImage.texture = null;
-                }
+                _lottieAnimation.OutputTextureReplaced -= ReplaceBoundTexture;
+                ReplaceBoundTexture(_lottieAnimation.OutputTexture, null);
                 _lottieAnimation.Started -= OnAnimationStarted;
                 _lottieAnimation.Paused -= OnAnimationPaused;
                 _lottieAnimation.Stopped -= OnAnimationStopped;
