@@ -71,10 +71,13 @@ namespace LottiePlugin.Tests.Runtime
         {
             internal bool Retired;
             internal bool Malformed;
+            internal Exception WorkerError;
             public override void Start(int[] frames) { }
             public override bool TryComplete(out byte[] pixels)
             {
                 pixels = new byte[1];
+                if (WorkerError != null)
+                    System.Threading.Tasks.Task.FromException(WorkerError).GetAwaiter().GetResult();
                 if (!Malformed) throw new InvalidOperationException("injected failure");
                 return true;
             }
@@ -83,6 +86,7 @@ namespace LottiePlugin.Tests.Runtime
         private sealed class RecordingBatch : LottieRasterBatch
         {
             internal readonly List<int[]> Requests = new List<int[]>();
+            internal Exception RetirementError;
             private int[] _frames;
             private int[] _snapshot;
             private readonly int _bytesPerFrame;
@@ -101,7 +105,11 @@ namespace LottiePlugin.Tests.Runtime
                 _frames = null;
                 return true;
             }
-            public override void Dispose() { _frames = null; }
+            public override void Dispose()
+            {
+                _frames = null;
+                if (RetirementError != null) throw RetirementError;
+            }
         }
         [Test]
         public void FrameIndicesReuseEqualLengthBatchesAndKeepExactClipTails()
@@ -179,6 +187,44 @@ namespace LottiePlugin.Tests.Runtime
                     Assert.IsTrue(cache.FellBack);
                     CollectionAssert.AreEqual(serial.Sample("clip", 10).GetRawTextureData<byte>().ToArray(),
                         cache.Sample("clip", 10).GetRawTextureData<byte>().ToArray());
+                    Assert.AreEqual(0, pool.PendingPixelBytes);
+                }
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void NativeBindingErrorsSurfaceDuringBatchSetupAndCompletion(bool wrapped)
+        {
+            using (var pool = new LottieFramePreparationPool())
+            {
+                var options = Options(16, 32, LottieAlphaMode.StraightRgba, true);
+                Assert.Throws<DllNotFoundException>(() => new LottieFrameCache(Json, "", options, pool,
+                    () => throw new DllNotFoundException()));
+                Exception error = new EntryPointNotFoundException();
+                if (wrapped) error = new TypeInitializationException("Worker", error);
+                var batch = new FailedBatch { WorkerError = error };
+                using (var cache = new LottieFrameCache(Json, "", options, pool, () => batch))
+                {
+                    Assert.AreSame(error, Assert.Throws(error.GetType(), () => cache.WarmStep()));
+                    Assert.IsTrue(batch.Retired);
+                    Assert.AreEqual(0, pool.PendingPixelBytes);
+                    Assert.Throws<ObjectDisposedException>(() => cache.WarmStep());
+                }
+            }
+        }
+
+        [Test]
+        public void FailedBatchRetirementDisposesCacheBeforePublishingReady()
+        {
+            using (var pool = new LottieFramePreparationPool())
+            {
+                var batch = new RecordingBatch(16 * 32 * 4) { RetirementError = new EntryPointNotFoundException() };
+                using (var cache = new LottieFrameCache(Json, "", Options(16, 32, LottieAlphaMode.StraightRgba, true),
+                    pool, () => batch))
+                {
+                    Assert.Throws<EntryPointNotFoundException>(() => cache.WarmStep(cache.CachedFrameCount));
+                    Assert.Throws<ObjectDisposedException>(() => { bool ready = cache.Ready; });
                     Assert.AreEqual(0, pool.PendingPixelBytes);
                 }
             }

@@ -22,6 +22,29 @@ namespace LottiePlugin.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator IncompleteButtonCanStartResetAndReceiveInput()
+        {
+            _gameObject = new GameObject("IncompleteAnimatedButton");
+            AnimatedButton button = _gameObject.AddComponent<AnimatedButton>();
+            SetField(button, "_animationJson", Resources.Load<TextAsset>("body_movin"));
+            yield return null;
+
+            Assert.IsNull(button.Animation);
+            Assert.DoesNotThrow(() => button.ResetState());
+            Assert.DoesNotThrow(() => button.OnSubmit(null));
+
+            SetField(button, "_rawImage", _gameObject.AddComponent<RawImage>());
+            SetField(button, "_textureWidth", 0u);
+            SetField(button, "_textureHeight", 32u);
+            SetField(button, "_states", new AnimatedButton.State[0]);
+            Assert.NotNull(button.CreateIfNeededAndReturnLottieAnimation());
+            Assert.AreEqual(128, button.Animation.OutputTexture.width);
+            Assert.AreEqual(32, button.Animation.OutputTexture.height);
+            Assert.DoesNotThrow(() => button.ResetState());
+            Assert.DoesNotThrow(() => button.OnSubmit(null));
+        }
+
+        [UnityTest]
         public IEnumerator AnimatedButtonBindsItsOutputTexture()
         {
             TextAsset animationJson = Resources.Load<TextAsset>("body_movin");

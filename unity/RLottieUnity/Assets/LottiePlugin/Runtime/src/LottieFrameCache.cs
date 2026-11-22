@@ -136,14 +136,12 @@ namespace LottiePlugin
                 _rasterizer = LottieCpuRasterizer.LoadFromJsonData(jsonData, resourcesPath,
                     options.Width, options.Height, _options.ColorOverrides);
                 _preflight = BuildPreflight(_rasterizer.Markers, _options);
-                if (_preflight.TotalRawPixelBytes > options.MaximumRawPixelBytes)
-                    throw new InvalidOperationException("The frame cache exceeds MaximumRawPixelBytes.");
                 _pixels = new NativeArray<byte>(_rasterizer.ByteCount, Allocator.Persistent,
                     NativeArrayOptions.UninitializedMemory);
                 if (_options.Preparation == LottieFramePreparation.Parallel)
                 {
                     try { _batch = batchFactory == null ? _pool.CreateBatch(jsonData, resourcesPath, _options) : batchFactory(); }
-                    catch (Exception error) { FallBack(error); }
+                    catch (Exception error) when (LottieRasterBatch.CanFallBack(error)) { FallBack(error); }
                 }
             }
             catch { Dispose(); throw; }
@@ -186,7 +184,8 @@ namespace LottiePlugin
                         }
                         NativeArray<byte>.Copy(_completed, _completedOffset, _pixels, 0, _pixels.Length);
                     }
-                    catch (Exception error) { FallBack(error); }
+                    catch (Exception error) when (LottieRasterBatch.CanFallBack(error)) { FallBack(error); }
+                    catch { Dispose(); throw; }
                 }
                 if (_batch == null) _rasterizer.RenderFrame(clip.SourceFrames[_warmFrame], _pixels);
                 TextureFormat format = _options.AlphaMode == LottieAlphaMode.StraightRgba
@@ -213,17 +212,18 @@ namespace LottiePlugin
                     _completedOffset += _pixels.Length;
                     if (_completedOffset == _completed.Length) ReleaseBatchPixels();
                 }
-                if (_warmFrame == clip.SourceFrames.Length) { _warmClip++; _warmFrame = 0; }
+                if (_warmFrame == clip.SourceFrames.Length)
+                {
+                    clip.SourceFrames = null;
+                    _warmClip++;
+                    _warmFrame = 0;
+                }
             }
             if (_warmClip == _orderedClips.Count)
             {
+                try { ReleasePreparation(); }
+                catch { Dispose(); throw; }
                 _ready = true;
-                if (_batch != null) { _batch.Dispose(); _batch = null; }
-                _batchFrames = null;
-                _rasterizer.Dispose();
-                _rasterizer = null;
-                _pixels.Dispose();
-                _pixels = default(NativeArray<byte>);
             }
             return _ready;
         }
@@ -304,17 +304,34 @@ namespace LottiePlugin
                 LottieMarker marker = markers.Get(sampling.MarkerName);
                 double duration = marker.TimelineDuration / markers.FrameRate;
                 int intervals = Math.Max(1, checked((int)Math.Ceiling(duration * sampling.FramesPerSecond)));
-                int candidateCount = !sampling.Loop && sampling.IncludeExactEndFrame ? intervals + 1 : intervals;
-                var sourceFrames = new List<int>(candidateCount);
-                var samplePositions = new List<double>(candidateCount);
-                for (int index = 0; index < candidateCount; index++)
+                long candidateCount = !sampling.Loop && sampling.IncludeExactEndFrame ? (long)intervals + 1 : intervals;
+                var sourceFrames = new List<int>();
+                var samplePositions = new List<double>();
+                long availableFrames = (options.MaximumRawPixelBytes - totalBytes) / bytesPerFrame;
+                for (long index = 0; index < candidateCount;)
                 {
                     double normalized = (double)index / intervals;
-                    int frame = markers.Frame(sampling.MarkerName, (float)normalized);
-                    if (sourceFrames.Count == 0 || sourceFrames[sourceFrames.Count - 1] != frame)
+                    int frame = LottieMarkerSet.Frame(marker, (float)normalized);
+                    if (sourceFrames.Count >= availableFrames)
+                        throw new InvalidOperationException("The frame cache exceeds MaximumRawPixelBytes.");
+                    sourceFrames.Add(frame);
+                    samplePositions.Add(normalized);
+                    if (frame == marker.LastRenderFrameInclusive) break;
+
+                    // Frame mapping is monotonic. For repeated samples, find the
+                    // first index that changes frame without walking the whole run.
+                    index++;
+                    if (index < candidateCount && LottieMarkerSet.Frame(marker, (float)((double)index / intervals)) == frame)
                     {
-                        sourceFrames.Add(frame);
-                        samplePositions.Add(normalized);
+                        long end = candidateCount;
+                        while (index < end)
+                        {
+                            long middle = index + (end - index) / 2;
+                            if (LottieMarkerSet.Frame(marker, (float)((double)middle / intervals)) == frame)
+                                index = middle + 1;
+                            else
+                                end = middle;
+                        }
                     }
                 }
                 var clip = new Clip
@@ -357,17 +374,40 @@ namespace LottiePlugin
             if (System.Threading.Thread.CurrentThread.ManagedThreadId != _mainThreadId)
                 throw new InvalidOperationException("Dispose must run on the thread that created the frame cache.");
             _disposed = true;
-            if (_batch != null) { _batch.Dispose(); _batch = null; }
-            _batchFrames = null;
-            ReleaseBatchPixels();
-            if (_rasterizer != null) { _rasterizer.Dispose(); _rasterizer = null; }
-            if (_pixels.IsCreated) _pixels.Dispose();
-            foreach (Clip clip in _orderedClips)
-                foreach (Texture2D texture in clip.Textures)
-                    if (texture != null) UnityEngine.Object.DestroyImmediate(texture);
+            try { ReleasePreparation(); }
+            finally
+            {
+                foreach (Clip clip in _orderedClips)
+                    foreach (Texture2D texture in clip.Textures)
+                        if (texture != null) UnityEngine.Object.DestroyImmediate(texture);
+                _clips.Clear();
+                _orderedClips.Clear();
+                _preflight = null;
+            }
         }
 
         private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(nameof(LottieFrameCache)); }
+
+        private void ReleasePreparation()
+        {
+            try { RetireBatch(); }
+            finally
+            {
+                if (_pixels.IsCreated) _pixels.Dispose();
+                var rasterizer = _rasterizer;
+                _rasterizer = null;
+                rasterizer?.Dispose();
+            }
+        }
+
+        private void RetireBatch()
+        {
+            var batch = _batch;
+            _batch = null;
+            _batchFrames = null;
+            try { batch?.Dispose(); }
+            finally { ReleaseBatchPixels(); }
+        }
 
         private void ReleaseBatchPixels()
         {
@@ -378,9 +418,8 @@ namespace LottiePlugin
 
         private void FallBack(Exception error)
         {
-            if (_batch != null) { _batch.Dispose(); _batch = null; }
-            _batchFrames = null;
-            ReleaseBatchPixels();
+            try { RetireBatch(); }
+            catch { Dispose(); throw; }
             FellBack = true;
             FallbackReason = error.Message;
             Debug.LogWarning("Lottie frame preparation fell back to serial: " + error.GetType().Name);

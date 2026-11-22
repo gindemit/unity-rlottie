@@ -22,6 +22,8 @@ namespace LottiePlugin
 
     public sealed class LottieAnimationOptions
     {
+        internal const uint DefaultComponentTextureSize = 128;
+        internal static uint ComponentTextureSize(uint size) => size == 0 ? DefaultComponentTextureSize : size;
         public int TargetFps { get; set; } = 30;
         public int ResolutionDivider { get; set; } = 1;
         public bool PauseIfCulled { get; set; } = true;

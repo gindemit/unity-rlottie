@@ -93,14 +93,27 @@ namespace LottiePlugin
             if (_sessions != 0 || _pending != 0) throw new InvalidOperationException("Dispose all frame caches before the preparation pool.");
             _disposed = true;
 #if UNITY_WEBGL && !UNITY_EDITOR && LOTTIE_PARALLEL_PREPARATION
-            if (_browserId > 0) LottieWebRasterBatch.DisposePool(_browserId);
-#endif
+            try { if (_browserId > 0) LottieWebRasterBatch.DisposePool(_browserId); }
+            finally { Slots.Dispose(); }
+#else
             Slots.Dispose();
+#endif
         }
     }
 
     internal abstract class LottieRasterBatch : IDisposable
     {
+        // Worker admission, unsupported capabilities, raster failures and browser
+        // timeouts are recoverable. Loader and entry-point errors must surface.
+        internal static bool CanFallBack(Exception error)
+        {
+            for (; error != null; error = error.InnerException)
+            {
+                if (error is TypeLoadException || error is BadImageFormatException) return false;
+            }
+            return true;
+        }
+
         // Input indices and completed pixels may be reused by the next Start.
         // Callers must consume all completed pixels before starting another batch.
         public abstract void Start(int[] frames);
@@ -163,12 +176,15 @@ namespace LottiePlugin
             if (_disposed) return;
             _disposed = true;
             try { if (_pending != null) _pending.GetAwaiter().GetResult(); }
-            catch { /* Observe task failures during explicit retirement. */ }
-            _pending = null;
-            _resultPixels = null;
-            _pixels.Dispose();
-            _rasterizer.Dispose();
-            _pool.Retire();
+            catch (Exception error) when (CanFallBack(error)) { /* Retiring an unfinished batch. */ }
+            finally
+            {
+                _pending = null;
+                _resultPixels = null;
+                _pixels.Dispose();
+                try { _rasterizer.Dispose(); }
+                finally { _pool.Retire(); }
+            }
         }
     }
 
@@ -220,11 +236,14 @@ namespace LottiePlugin
         public override void Dispose()
         {
             if (_id <= 0) return;
-            LottieRasterDispose(_id);
-            _id = 0;
-            _pixels = null;
-            _resultPixels = null;
-            _pool.Retire();
+            try { LottieRasterDispose(_id); }
+            finally
+            {
+                _id = 0;
+                _pixels = null;
+                _resultPixels = null;
+                _pool.Retire();
+            }
         }
     }
 #endif

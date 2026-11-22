@@ -247,6 +247,26 @@ namespace LottiePlugin.Tests.Runtime
         }
 
         [Test]
+        public void HighSamplingRateRetainsOnlyDistinctSourceFrames()
+        {
+            string json = WithMarker(Resources.Load<TextAsset>("device_color_calibration_alpha").text, "clip", 0, 60);
+            var options = new LottieFrameCacheOptions
+            {
+                Width = 1,
+                Height = 1,
+                Clips = new[] { new LottieClipSampling("clip", int.MaxValue, false, true) },
+                MaximumRawPixelBytes = 60 * 4
+            };
+            using (var cache = new LottieFrameCache(json, string.Empty, options))
+            {
+                Assert.AreEqual(60, cache.CachedFrameCount);
+                Assert.AreEqual(options.MaximumRawPixelBytes, cache.EstimatedRawPixelBytes);
+            }
+            options.MaximumRawPixelBytes--;
+            Assert.Throws<InvalidOperationException>(() => new LottieFrameCache(json, string.Empty, options));
+        }
+
+        [Test]
         public void ManagedUploadStagingSurvivesTextureRawDataInspectionAndMutation()
         {
             TextAsset source = Resources.Load<TextAsset>("device_color_calibration_alpha");

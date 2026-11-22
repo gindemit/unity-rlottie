@@ -55,6 +55,18 @@ namespace LottiePlugin.Tests.Runtime
             Assert.Throws<FormatException>(() => LottieMarkerSet.Parse(json, 3));
         }
 
+        [TestCase(127, true)]
+        [TestCase(128, false)]
+        public void BoundsContainerDepthInSkippedArraysAndObjects(int nestedContainers, bool accepted)
+        {
+            string nested = "0";
+            for (int i = 0; i < nestedContainers; i++)
+                nested = i % 2 == 0 ? "[" + nested + "]" : "{\"value\":" + nested + "}";
+            string json = "{\"fr\":30,\"ip\":0,\"op\":2,\"ignored\":" + nested + "}";
+            if (accepted) Assert.AreEqual(0, LottieMarkerSet.Parse(json, 2).Markers.Count);
+            else Assert.Throws<FormatException>(() => LottieMarkerSet.Parse(json, 2));
+        }
+
         [TestCase("{\"shape\":{\"a\":1,\"a\":2}}")]
         [TestCase("{\"shape\":[{\"a\":1,\"\\u0061\":2}]}")]
         [TestCase("{\"shape\":{\"\\uD800\":1,\"\\ud800\":2}}")]

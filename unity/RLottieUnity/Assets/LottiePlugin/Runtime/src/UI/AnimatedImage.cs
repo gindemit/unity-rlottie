@@ -20,8 +20,8 @@ namespace LottiePlugin.UI
         public RawImage RawImage { get => _rawImage; internal set { _rawImage = value; } }
         public LottieAnimation Animation => _lottieAnimation;
         internal TextAsset AnimationJson => _animationJson;
-        internal uint TextureWidth => _textureWidth;
-        internal uint TextureHeight => _textureHeight;
+        internal uint TextureWidth => LottieAnimationOptions.ComponentTextureSize(_textureWidth);
+        internal uint TextureHeight => LottieAnimationOptions.ComponentTextureSize(_textureHeight);
         internal LottieAnimation LottieAnimation => _lottieAnimation;
         internal float AnimationSpeed => _animationSpeed;
         internal bool Loop => _loop;
@@ -32,8 +32,8 @@ namespace LottiePlugin.UI
         [SerializeField] private string _jsonFilePath = string.Empty;
         [SerializeField] private RawImage _rawImage = null;
         [SerializeField] private float _animationSpeed = 1f;
-        [SerializeField] private uint _textureWidth = 0;
-        [SerializeField] private uint _textureHeight = 0;
+        [SerializeField] private uint _textureWidth = LottieAnimationOptions.DefaultComponentTextureSize;
+        [SerializeField] private uint _textureHeight = LottieAnimationOptions.DefaultComponentTextureSize;
         [SerializeField] private bool _playOnAwake = true;
         [SerializeField] private bool _loop = true;
         [SerializeField] private bool _stopOnLastFrame = true;
@@ -191,16 +191,16 @@ namespace LottiePlugin.UI
                     _lottieAnimation = LottieAnimation.LoadFromJsonData(
                         _animationJson.text,
                         _resourcesPath ?? string.Empty,
-                        _textureWidth,
-                        _textureHeight,
+                        TextureWidth,
+                        TextureHeight,
                         CreateOptions());
                 }
                 else if (!string.IsNullOrEmpty(_jsonFilePath))
                 {
                     _lottieAnimation = LottieAnimation.LoadFromJsonFile(
                         _jsonFilePath,
-                        _textureWidth,
-                        _textureHeight,
+                        TextureWidth,
+                        TextureHeight,
                         CreateOptions());
                 }
                 _rawImage.texture = _lottieAnimation.OutputTexture;

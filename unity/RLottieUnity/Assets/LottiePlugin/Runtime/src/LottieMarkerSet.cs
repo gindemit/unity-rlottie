@@ -94,9 +94,9 @@ namespace LottiePlugin
                     // rlottie rounds ip, adds it to zero-based render indices, and clamps to its
                     // inclusive TotalFramesCount. Lottie marker intervals remain half-open.
                     int firstTimeline = CheckedCeiling(start, name);
-                    int lastTimeline = duration == 0
+                    long lastTimeline = duration == 0
                         ? firstTimeline
-                        : CheckedCeiling(start + duration, name) - 1;
+                        : (long)CheckedCeiling(start + duration, name) - 1;
                     if (duration > 0 && lastTimeline < firstTimeline)
                         throw new FormatException("Lottie marker has no renderable integral frame: " + name);
                     int first = Clamp((long)firstTimeline - roundedInPoint, 0, lastAnimationFrame);
@@ -135,7 +135,11 @@ namespace LottiePlugin
         public int Frame(string name, float normalized)
         {
             if (float.IsNaN(normalized)) throw new ArgumentException("Normalized position must be finite.", nameof(normalized));
-            LottieMarker marker = Get(name);
+            return Frame(Get(name), normalized);
+        }
+
+        internal static int Frame(LottieMarker marker, float normalized)
+        {
             double value = Math.Max(0.0, Math.Min(1.0, normalized));
             int count = marker.LastRenderFrameInclusive - marker.FirstRenderFrame + 1;
             long offset = (long)Math.Floor(value * count);
@@ -214,6 +218,7 @@ namespace LottiePlugin
             private static readonly ulong sKeyHashSeed = ((ulong)(uint)Guid.NewGuid().GetHashCode() << 32) |
                 (uint)Guid.NewGuid().GetHashCode();
             private enum Selection { Skip, Root, Scalar, Markers, Marker }
+            private const int MAX_CONTAINER_DEPTH = 128;
             private readonly string _text;
             private readonly List<HashSet<KeyToken>> _keys = new List<HashSet<KeyToken>>();
             private readonly List<KeyToken> _activeKeys = new List<KeyToken>();
@@ -223,19 +228,23 @@ namespace LottiePlugin
             public static object Parse(string text)
             {
                 var parser = new JsonSubsetParser(text);
-                object value = parser.ReadValue(Selection.Root);
+                object value = parser.ReadValue(Selection.Root, 0);
                 parser.SkipWhiteSpace();
                 if (parser._position != text.Length) throw parser.Error("Unexpected trailing JSON content.");
                 return value;
             }
 
-            private object ReadValue(Selection selection)
+            private object ReadValue(Selection selection, int containerDepth)
             {
                 SkipWhiteSpace();
                 if (_position >= _text.Length) throw Error("Unexpected end of JSON.");
                 char c = _text[_position];
-                if (c == '{') return ReadObject(selection);
-                if (c == '[') return ReadArray(selection);
+                if (c == '{' || c == '[')
+                {
+                    if (containerDepth >= MAX_CONTAINER_DEPTH) throw Error("JSON nesting exceeds the supported depth.");
+                    if (c == '{') return ReadObject(selection, containerDepth + 1);
+                    return ReadArray(selection, containerDepth + 1);
+                }
                 if (c == '"')
                 {
                     KeyToken value = ReadStringToken();
@@ -246,7 +255,7 @@ namespace LottiePlugin
                 throw Error("Unexpected JSON token.");
             }
 
-            private Dictionary<string, object> ReadObject(Selection selection)
+            private Dictionary<string, object> ReadObject(Selection selection, int containerDepth)
             {
                 bool keep = selection == Selection.Root || selection == Selection.Marker;
                 var result = keep ? new Dictionary<string, object>(StringComparer.Ordinal) : null;
@@ -282,7 +291,7 @@ namespace LottiePlugin
                             else if (key.Is("dr")) field = "dr";
                         }
                         if (field != null && child == Selection.Skip) child = Selection.Scalar;
-                        object value = ReadValue(child);
+                        object value = ReadValue(child, containerDepth);
                         if (field != null) result.Add(field, value);
                         SkipWhiteSpace();
                         if (Take('}')) return result;
@@ -299,7 +308,7 @@ namespace LottiePlugin
                 }
             }
 
-            private List<object> ReadArray(Selection selection)
+            private List<object> ReadArray(Selection selection, int containerDepth)
             {
                 bool keep = selection == Selection.Markers;
                 var result = keep ? new List<object>() : null;
@@ -307,7 +316,7 @@ namespace LottiePlugin
                 if (Take(']')) return result;
                 while (true)
                 {
-                    object value = ReadValue(keep ? Selection.Marker : Selection.Skip);
+                    object value = ReadValue(keep ? Selection.Marker : Selection.Skip, containerDepth);
                     if (keep) result.Add(value);
                     SkipWhiteSpace();
                     if (Take(']')) return result;
