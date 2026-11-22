@@ -1,0 +1,51 @@
+# Unity RLottie implementation review · 22 November 2026
+
+## Scope
+
+The review started at `83e6d11f` on `main`. The 12 preserved `origin/unity/*` branches have identical Git trees for native source, Unity runtime, editor code and samples. Those trees match historical `origin/dev`. Their package and project settings differ by editor version and render pipeline. This makes the branch snapshots valuable for compatibility testing without requiring separate implementations of the fixes.
+
+| Preserved editor | Configurations compared |
+| --- | --- |
+| 2019.4.41f2, 2021.3.45f2, 6000.2.13f1 | One version branch each |
+| 6000.3.7f1, 6000.4.5f1, 6000.5.3f1 | Built-in, URP and HDRP for each |
+| Additional historical refs | An older HDRP import and the two WebGL feature tips at `8b87b42c` and `f63121f3` |
+
+The former WebGL working directory has no verified one-to-one mapping to a surviving branch. Current `main` also contains newer WebGL upload scheduling, archive staging, diagnostics and managed frame-cache work. All changes are in the canonical checkout.
+
+## Findings and corrections
+
+| Area | Previous behavior and impact | Change |
+| --- | --- | --- |
+| Async rendering | Reusing an outstanding request could replace future or slot bookkeeping. Waiting twice could invoke an empty future on an exception-disabled Android build. | Validate ownership and pending state, preserve the original request on misuse and release acquired slots on exceptional exits. |
+| Texture lifetime | Creation used a registry pointer after unlocking. Failed replacement could leave stale native texture dimensions or handles. | Hold the state lifetime lock during creation and handoff. Clear cached texture state during reset. A synchronous waiter selects a ready slot under the same lifetime protection. |
+| Native upload | WebGL conversion treated padded rows as contiguous pixels. D3D12 ring offsets needed independent placement alignment and checked multiplication. A failed fence-event setup could allow premature release. | Use the supplied row stride and share the WebGL sync implementation. Align and bound D3D12 slots, validate fence availability before recording a copy, and use fixed-size storage for the three Vulkan upload slots. |
+| Managed parsing and cache sizing | Ignored JSON subtrees could recurse without a depth bound. Dense sampling allocated based on the candidate count before deduplication and budget enforcement. | Limit managed JSON to 128 nested containers. Check remaining pixel budget per distinct frame and skip repeated samples while preserving the first sample position. Release warmup indices once each clip is ready. |
+| Worker failure and cleanup | Broad fallback handling could hide missing native symbols. A batch retirement failure could interrupt cleanup or leave the cache reporting readiness. | Surface binding failures, retain serial fallback for operational errors, release reservations and publish readiness after cleanup. |
+| Inspector and sample presentation | A repaint or selection could change authored state. Frame controls could use the frame count as a drawable index. Sample views bound an intermediate texture on some backends. | Preserve mixed values, apply edits before rebinding previews, clamp the last frame, and bind the renderer's output texture. A preview releases its animation even after partial initialization or independent destruction. |
+| On-device presentation | The automated run passed pixel checks while the performance lab covered the scene in its screenshot. The FPS unit wrapped below its value. | Collapse the benchmark panel when the smoke run starts. Measure the FPS string with the drawing style, cache it between updates, and position it within the screen safe area. |
+| Shared-device testing | The smoke runner cleared the phone's entire log buffer and ignored failure to remove an old result. | Capture logs from device time at launch, require stale-result removal to succeed and clean up the temporary screenshot after a failed pull. |
+
+Independent reviews caught a lifetime gap in an intermediate retry implementation, incomplete D3D12 fence failure handling, mixed-selection inspector behavior, and a failure during cache retirement. Each received a correction and a second review.
+
+## Remaining limits
+
+- D3D12 keeps GPU references alive when fence completion cannot be confirmed. The CPU footprint is released. Repeated fence failures can still accumulate GPU resources. A deferred release implementation needs a Windows GPU test that covers later fence completion and device shutdown.
+- The managed marker depth limit applies to the managed parser. Native animation loading happens first on the loading path. The pinned rlottie parser still needs a separate assessment for applications that accept untrusted animation content.
+- Historical branch comparison is source-level. Device qualification here covers the canonical Unity project and the Android hardware listed below. Other Unity versions and pipelines require their own player runs.
+
+## Verification
+
+The canonical project uses Unity 2022.3.62f3. The physical device was a Samsung Galaxy Note10+ (SM-N975F), running Android 12 on a Mali-G76. Before deployment, the coordinator checked the Orca terminal inventory, the previous Android lead's completed run, supervised worker status, ADB clients and forwarding, and foreground activity.
+
+| Test | Result |
+| --- | --- |
+| Android IL2CPP player, full plugin runtime assembly | 75 passed, 0 failed, 0 skipped. The final player wrote its NUnit XML on the device in 69.2 seconds. USB retrieval succeeded after the editor's network callback timed out. |
+| Android rendered scene, Vulkan and OpenGL ES 3 | 17/17 checks passed on each backend using native texture uploads. Both players presented changing pixels, responded to a button press, passed color calibration and semantic color overrides, and completed 12 create/dispose cycles. The final Vulkan screenshot shows the scene and the FPS unit on a single line. |
+| Native ABI executable on the phone | Passed against the rebuilt ARM64 shared library, including duplicate waits, ownership mismatch, surface reuse and padded row conversion. |
+| Windows x64 CTest | Native ABI and upload queue suites both passed. |
+| Windows Direct3D 12 player | 17/17 rendered checks passed on a GeForce RTX 3080 Ti using the native external-texture backend. The packaged DLL matched the rebuilt x64 library. |
+| Unity EditMode | 9/9 passed, including frame endpoints and mixed-selection serialization. |
+| Binary verification | All four Android libraries retained their public plugin exports and have at least 16 KiB ELF load-segment alignment. The ARM64 and ARMv7 libraries in the player APK matched the rebuilt files byte for byte. Windows x64 retained its plugin exports. |
+| Sample compilation | The SceneUI sample runtime sources compiled against the project's Unity player references. |
+
+This pass rebuilt the four Android ABIs and the Windows x64 editor library. Other platforms retain their previously packaged native binaries until they are rebuilt and qualified. No package or release tag was published. The device lifecycle checks exercise repeated creation and disposal. A long-duration allocation profile and D3D12 device-loss run remain open.
