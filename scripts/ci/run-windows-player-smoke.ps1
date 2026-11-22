@@ -6,6 +6,8 @@ param(
     [string] $LogFile,
     [string] $ResultFile,
     [int] $RunSeconds = 20,
+    [ValidateRange(1, 10000)]
+    [int] $LifecycleCycles = 12,
     [ValidateSet('Direct3D11', 'Direct3D12', 'OpenGLCore', 'Vulkan')]
     [string] $ExpectedGraphicsApi,
     [ValidateSet('Gamma', 'Linear')]
@@ -13,7 +15,7 @@ param(
     [string] $ExpectedUploadBackend,
     [string] $ExpectedGraphicsVendor,
     [ValidateRange(1, 2147483647)]
-    [int] $MinimumSchemaVersion,
+    [int] $MinimumSchemaVersion = 4,
     [string[]] $RequiredCheckNames,
     [switch] $RequireGraphicsDeviceMetadata,
     [switch] $RequireNativeUpload
@@ -26,7 +28,9 @@ $LogFile = [IO.Path]::GetFullPath($LogFile)
 $ResultFile = if ($ResultFile) { [IO.Path]::GetFullPath($ResultFile) } else { "$LogFile.smoke.json" }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ResultFile) | Out-Null
-Remove-Item -LiteralPath $ResultFile -Force -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $ResultFile -PathType Leaf) {
+    Remove-Item -LiteralPath $ResultFile -Force
+}
 
 $process = Start-Process -FilePath $Player `
     -ArgumentList @(
@@ -34,12 +38,16 @@ $process = Start-Process -FilePath $Player `
         '-screen-width', '1280',
         '-screen-height', '720',
         '-lottieSmokeResult', "`"$ResultFile`"",
-        '-lottieSmokeQuit'
+        '-lottieSmokeQuit',
+        '-lottieLifecycleCycles', $LifecycleCycles
     ) `
     -WindowStyle Hidden -PassThru
 try {
     $exited = $process.WaitForExit($RunSeconds * 1000)
-    if ($exited -and $process.ExitCode -ne 0) {
+    if (-not $exited) {
+        throw "RLottie player did not finish and exit within $RunSeconds seconds. See $LogFile"
+    }
+    if ($process.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $ResultFile -PathType Leaf)) {
         throw "RLottie player exited with code $($process.ExitCode)."
     }
 }
@@ -55,13 +63,19 @@ if (-not (Test-Path -LiteralPath $ResultFile)) {
 }
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
-$effectiveRequiredCheckNames = @($RequiredCheckNames) + 'semanticColorOverrides'
 $effectiveMinimumSchemaVersion = [Math]::Max(3, $MinimumSchemaVersion)
+$expectedCycles = if ($result.schemaVersion -ge 4 -or $PSBoundParameters.ContainsKey('LifecycleCycles')) { $LifecycleCycles } else { 0 }
+$requiredChecks = @($RequiredCheckNames) + 'semanticColorOverrides'
 Assert-LottieSmokeResult -Result $result -Platform Windows -ExpectedGraphicsApi $ExpectedGraphicsApi `
     -ExpectedColorSpace $ExpectedColorSpace -ExpectedUploadBackend $ExpectedUploadBackend `
     -ExpectedGraphicsVendor $ExpectedGraphicsVendor `
-    -MinimumSchemaVersion $effectiveMinimumSchemaVersion -RequiredCheckNames $effectiveRequiredCheckNames `
+    -MinimumSchemaVersion $effectiveMinimumSchemaVersion -RequiredCheckNames $requiredChecks `
+    -ExpectedLifecycleCycles $expectedCycles `
     -RequireGraphicsDeviceMetadata:$RequireGraphicsDeviceMetadata `
     -RequireNativeUpload:$RequireNativeUpload
 
-Write-Output "Windows rendered-player smoke test passed. Result: $ResultFile; log: $LogFile"
+if ($process.ExitCode -ne 0) { throw "RLottie player exited with code $($process.ExitCode). See $LogFile" }
+[ordered]@{
+    platform = 'Windows'; result = 'Passed'; checks = $result.checks.Count; graphicsApi = $result.graphicsApi
+    backend = $result.animatedImageUploadBackend; cycles = $result.completedLifecycleCycles; evidence = $ResultFile
+} | ConvertTo-Json -Compress

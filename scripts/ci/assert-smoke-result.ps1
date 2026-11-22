@@ -10,25 +10,52 @@ function Assert-LottieSmokeResult {
         [string] $ExpectedUploadBackend,
         [string] $ExpectedGraphicsVendor,
         [int] $MinimumSchemaVersion,
+        [int] $ExpectedLifecycleCycles,
         [string[]] $RequiredCheckNames,
         [switch] $RequireGraphicsDeviceMetadata,
         [switch] $RequireNativeUpload,
         [switch] $RequireNativeVulkanUpload
     )
 
+    if ($Result.passed -isnot [bool] -or $Result.checks -isnot [array] -or $Result.checks.Count -eq 0) {
+        throw "$Platform smoke result must contain a boolean verdict and a nonempty list of checks."
+    }
+    $seen = @{}
+    foreach ($check in $Result.checks) {
+        if ($check.name -isnot [string] -or [string]::IsNullOrWhiteSpace($check.name) -or
+            $check.passed -isnot [bool] -or $seen.ContainsKey($check.name)) {
+            throw "$Platform smoke result has an invalid or duplicate check '$($check.name)'."
+        }
+        $seen[$check.name] = $true
+    }
     $failedChecks = @($Result.checks | Where-Object { -not $_.passed })
     if (-not $Result.passed -or $failedChecks.Count -gt 0) {
-        $details = $failedChecks | ForEach-Object { "$($_.name): $($_.details)" }
+        $details = @($Result.error | Where-Object { $_ }) + @($failedChecks | ForEach-Object { "$($_.name): $($_.details)" })
         throw "$Platform rendered-player smoke test failed:`n$($details -join "`n")"
     }
 
     if ($MinimumSchemaVersion -gt 0 -and [int] $Result.schemaVersion -lt $MinimumSchemaVersion) {
         throw "$Platform smoke result uses an outdated schema: required>=$MinimumSchemaVersion, actual=$($Result.schemaVersion)."
     }
+    if ($MinimumSchemaVersion -ge 4 -or $ExpectedLifecycleCycles -gt 0) {
+        $RequiredCheckNames = @($RequiredCheckNames) + @(
+            'animatedButtonFound', 'animatedImageFound', 'animatedButtonLoaded', 'animatedImageLoaded',
+            'animatedButtonStartsAtFirstFrame', 'animatedImageStartsAtFirstFrame', 'animatedImagePlayOnAwake',
+            'animatedButtonFirstFrameVisible', 'animatedImageFirstFrameVisible', 'animatedImageAdvances',
+            'animatedImagePixelsChange', 'animatedButtonAcceptsPress', 'animatedButtonAdvancesAfterPress',
+            'animatedButtonPixelsChangeAfterPress', 'exactColorCalibration', 'semanticColorOverrides',
+            'animationLifecycleStress', 'asyncFrameMatchesSync', 'disposedOutputTexturesReleased'
+        )
+    }
     foreach ($requiredCheckName in @($RequiredCheckNames | Where-Object { $_ })) {
-        if (-not @($Result.checks | Where-Object { $_.name -eq $requiredCheckName }).Count) {
+        if (-not $seen.ContainsKey($requiredCheckName)) {
             throw "$Platform smoke result is missing required check '$requiredCheckName'."
         }
+    }
+    if ($ExpectedLifecycleCycles -gt 0 -and (
+        ($Result.completedLifecycleCycles -isnot [int] -and $Result.completedLifecycleCycles -isnot [long]) -or
+        $Result.completedLifecycleCycles -ne $ExpectedLifecycleCycles)) {
+        throw "$Platform smoke result completed $($Result.completedLifecycleCycles) lifecycle cycles, expected $ExpectedLifecycleCycles."
     }
 
     $animatedImageBackend = [string] $Result.animatedImageUploadBackend
@@ -56,10 +83,9 @@ function Assert-LottieSmokeResult {
     }
 
     if ($RequireNativeUpload) {
-        $managedBackends = @('ManagedTextureUpload', 'WebGLManagedTextureUpload', 'WebGLShaderConversion')
-        if ($managedBackends -contains $animatedImageBackend -or
-            $managedBackends -contains $animatedButtonBackend) {
-            throw "$Platform smoke test used a managed upload backend: AnimatedImage=$animatedImageBackend, AnimatedButton=$animatedButtonBackend."
+        $nativeBackends = @('NativeVulkan', 'NativeExternalTexture', 'NativeOpenGL', 'NativeWebGL')
+        if ($nativeBackends -notcontains $animatedImageBackend -or $nativeBackends -notcontains $animatedButtonBackend) {
+            throw "$Platform smoke test requires a native upload backend: AnimatedImage=$animatedImageBackend, AnimatedButton=$animatedButtonBackend."
         }
     }
 

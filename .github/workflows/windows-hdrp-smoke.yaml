@@ -51,6 +51,7 @@ jobs:
           ./scripts/ci/run-windows-player-smoke.ps1
           -Player artifacts/RLottieSmoke.exe -LogFile artifacts/Player.log
           -ExpectedGraphicsApi Direct3D11 -RequireNativeUpload
+          -MinimumSchemaVersion 3
           -RequiredCheckNames exactColorCalibration,animationLifecycleStress
           -RunSeconds 60
       - uses: actions/upload-artifact@v4

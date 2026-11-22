@@ -89,9 +89,45 @@ Assert-Throws {
 Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -AnimatedImageBackend ManagedTextureUpload) `
         -Platform Windows -ExpectedUploadBackend NativeExternalTexture } 'unexpected upload backend'
 Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -AnimatedButtonBackend ManagedTextureUpload) `
-        -Platform Windows -RequireNativeUpload } 'managed upload backend'
+        -Platform Windows -RequireNativeUpload } 'requires a native upload backend'
+Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -AnimatedButtonBackend Unknown) `
+        -Platform Windows -RequireNativeUpload } 'requires a native upload backend'
 Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -GraphicsApi Vulkan `
         -AnimatedImageBackend NativeVulkan -AnimatedButtonBackend ManagedTextureUpload) -Platform Android `
         -RequireNativeVulkanUpload } 'did not use native Vulkan upload'
+
+Assert-Throws { Assert-LottieSmokeResult -Result (New-SmokeResult -Checks @()) -Platform Android } 'nonempty list'
+Assert-Throws {
+    $malformed = New-SmokeResult
+    $malformed.checks[0].passed = 'false'
+    Assert-LottieSmokeResult -Result $malformed -Platform Android
+} 'invalid or duplicate'
+Assert-Throws {
+    $duplicate = New-SmokeResult
+    $duplicate.checks += $duplicate.checks[0]
+    Assert-LottieSmokeResult -Result $duplicate -Platform Android
+} 'invalid or duplicate'
+$current = New-SmokeResult -Checks @(
+    foreach ($name in @(
+        'animatedButtonFound', 'animatedImageFound', 'animatedButtonLoaded', 'animatedImageLoaded',
+        'animatedButtonStartsAtFirstFrame', 'animatedImageStartsAtFirstFrame', 'animatedImagePlayOnAwake',
+        'animatedButtonFirstFrameVisible', 'animatedImageFirstFrameVisible', 'animatedImageAdvances',
+        'animatedImagePixelsChange', 'animatedButtonAcceptsPress', 'animatedButtonAdvancesAfterPress',
+        'animatedButtonPixelsChangeAfterPress', 'exactColorCalibration', 'semanticColorOverrides',
+        'animationLifecycleStress', 'asyncFrameMatchesSync', 'disposedOutputTexturesReleased'
+    )) {
+        [pscustomobject]@{ name = $name; passed = $true; details = 'ok' }
+    }
+)
+$current.schemaVersion = 4
+$current | Add-Member -NotePropertyName completedLifecycleCycles -NotePropertyValue 12
+Assert-LottieSmokeResult -Result $current -Platform Android -MinimumSchemaVersion 4 -ExpectedLifecycleCycles 12
+Assert-Throws { Assert-LottieSmokeResult -Result $current -Platform Android -ExpectedLifecycleCycles 24 } 'expected 24'
+$current.completedLifecycleCycles = '12'
+Assert-Throws { Assert-LottieSmokeResult -Result $current -Platform Android -ExpectedLifecycleCycles 12 } 'expected 12'
+$current.checks = @($current.checks | Where-Object name -ne asyncFrameMatchesSync)
+Assert-Throws { Assert-LottieSmokeResult -Result $current -Platform Android -MinimumSchemaVersion 4 } "missing required check 'asyncFrameMatchesSync'"
+$current.checks = @($current.checks | Where-Object name -ne animatedButtonFirstFrameVisible)
+Assert-Throws { Assert-LottieSmokeResult -Result $current -Platform Android -MinimumSchemaVersion 4 } "missing required check 'animatedButtonFirstFrameVisible'"
 
 Write-Output 'Smoke-result assertion tests passed.'

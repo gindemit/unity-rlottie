@@ -32,9 +32,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Test smoke-result assertions
+      - name: Test player result validation
         shell: pwsh
-        run: ./scripts/ci/test-smoke-result-assertions.ps1
+        run: |
+          ./scripts/ci/test-smoke-result-assertions.ps1
+          ./scripts/ci/test-player-test-runner.ps1
+          ./scripts/ci/test-android-qualification.ps1
 
       - name: Restore Unity Library cache
         uses: actions/cache@v4
@@ -536,6 +539,7 @@ jobs:
           ./scripts/ci/run-windows-player-smoke.ps1
           -Player artifacts/windows/${{ matrix.pipeline }}/RLottieSmoke.exe
           -LogFile artifacts/windows/${{ matrix.pipeline }}/Player.log
+          -MinimumSchemaVersion 3
 
       - name: Upload player smoke artifacts
         if: always()

@@ -24,12 +24,13 @@ public sealed class LottieSmokeController : MonoBehaviour
     private const float AnimationTimeoutSeconds = 5f;
     private const float ReadbackTimeoutSeconds = 5f;
     private const int MinimumChangedFrames = 3;
-    private const int LifecycleStressCycles = 12;
+    private const int DefaultLifecycleCycles = 12;
 
     [Serializable]
     private sealed class SmokeResult
     {
-        public int schemaVersion = 3;
+        public int schemaVersion = 4;
+        public int completedLifecycleCycles;
         public bool passed;
         public string platform;
         public string graphicsApi;
@@ -296,8 +297,10 @@ public sealed class LottieSmokeController : MonoBehaviour
             yield break;
         }
 
-        _result.animatedButtonUploadBackend = buttonAnimation.TextureUploadBackend.ToString();
-        _result.animatedImageUploadBackend = imageAnimation.TextureUploadBackend.ToString();
+        LottieTextureUploadBackend buttonBackend = buttonAnimation.TextureUploadBackend;
+        LottieTextureUploadBackend imageBackend = imageAnimation.TextureUploadBackend;
+        _result.animatedButtonUploadBackend = buttonBackend.ToString();
+        _result.animatedImageUploadBackend = imageBackend.ToString();
         Record("animatedButtonStartsAtFirstFrame", buttonAnimation.CurrentFrame == 0,
             "currentFrame=" + buttonAnimation.CurrentFrame.ToString(CultureInfo.InvariantCulture));
         Record("animatedImageStartsAtFirstFrame", imageAnimation.CurrentFrame == 0,
@@ -309,7 +312,19 @@ public sealed class LottieSmokeController : MonoBehaviour
 
         Debug.Log("[LottieSmoke] Capturing initial textures.");
         var buttonInitialCapture = new PixelCapture();
-        yield return CaptureTexture(buttonAnimation.OutputTexture, buttonAnimation.TextureUploadBackend, buttonInitialCapture);
+        // The untouched button stays on frame zero. Its first upload can still be in the
+        // render-thread queue when the scene finishes its first Unity frame.
+        int buttonReadbacks = 0;
+        float firstFrameDeadline = Time.realtimeSinceStartup + AnimationTimeoutSeconds;
+        do
+        {
+            yield return CaptureTexture(buttonAnimation.OutputTexture, buttonAnimation.TextureUploadBackend, buttonInitialCapture);
+            buttonReadbacks++;
+            if (!buttonInitialCapture.Succeeded || buttonInitialCapture.Signature.VisiblePixels > 4)
+                break;
+            yield return new WaitForEndOfFrame();
+        }
+        while (buttonAnimation.CurrentFrame == 0 && Time.realtimeSinceStartup < firstFrameDeadline);
         var imageInitialCapture = new PixelCapture();
         yield return CaptureTexture(imageAnimation.OutputTexture, imageAnimation.TextureUploadBackend, imageInitialCapture);
         if (!buttonInitialCapture.Succeeded || !imageInitialCapture.Succeeded)
@@ -321,8 +336,8 @@ public sealed class LottieSmokeController : MonoBehaviour
         PixelSignature buttonInitial = buttonInitialCapture.Signature;
         PixelSignature imageInitial = imageInitialCapture.Signature;
 
-        Record("animatedButtonFirstFrameVisible", buttonInitial.VisiblePixels > 4,
-            DescribeSignature(buttonInitial));
+        Record("animatedButtonFirstFrameVisible", buttonAnimation.CurrentFrame == 0 && buttonInitial.VisiblePixels > 4,
+            DescribeSignature(buttonInitial) + ", readbacks=" + buttonReadbacks);
         Record("animatedImageFirstFrameVisible", imageInitial.VisiblePixels > 4,
             DescribeSignature(imageInitial));
 
@@ -388,10 +403,20 @@ public sealed class LottieSmokeController : MonoBehaviour
 
         yield return ValidateCalibrationColors();
         yield return ValidateSemanticColorOverrides();
-        yield return RunLifecycleStress(imageAnimation.TextureUploadBackend);
+        TextAsset lifecycleAsset = Resources.Load<TextAsset>("device_color_calibration_alpha");
+        if (lifecycleAsset == null)
+        {
+            Complete("Missing device_color_calibration_alpha resource.");
+            yield break;
+        }
+        string lifecycleJson = lifecycleAsset.text;
+        yield return ValidateAsyncFrame(lifecycleJson, imageBackend);
+        yield return RunLifecycleStress(lifecycleJson, imageBackend, GetLifecycleCycles(arguments));
 
         Debug.Log("[LottieSmoke] Smoke checks complete; writing result.");
-        Complete(null);
+        bool sameBackends = buttonAnimation.TextureUploadBackend == buttonBackend && imageAnimation.TextureUploadBackend == imageBackend;
+        Complete(sameBackends ? null : "Scene upload backend changed during smoke run. Final button=" +
+            buttonAnimation.TextureUploadBackend + ", image=" + imageAnimation.TextureUploadBackend);
     }
 
     private IEnumerator ValidateCalibrationColors()
@@ -574,23 +599,55 @@ public sealed class LottieSmokeController : MonoBehaviour
         }
     }
 
-    private IEnumerator RunLifecycleStress(LottieTextureUploadBackend expectedBackend)
+    private IEnumerator ValidateAsyncFrame(string json, LottieTextureUploadBackend expectedBackend)
     {
-        TextAsset json = Resources.Load<TextAsset>("device_color_calibration_alpha");
-        if (json == null)
+        // Use an odd row width and a non-square texture so padded uploads are observable.
+        using (LottieAnimation animation = LottieAnimation.LoadFromJsonData(json, string.Empty, 101, 83))
         {
-            Record("animationLifecycleStress", false, "Missing device_color_calibration_alpha resource.");
-            yield break;
-        }
+            var reference = new PixelCapture();
+            animation.DrawOneFrame(30);
+            yield return new WaitForEndOfFrame();
+            yield return CaptureTexture(animation.OutputTexture, animation.TextureUploadBackend, reference);
 
-        int completed = 0;
-        for (int cycle = 0; cycle < LifecycleStressCycles; cycle++)
+            var initial = new PixelCapture();
+            animation.DrawOneFrame(0);
+            yield return new WaitForEndOfFrame();
+            yield return CaptureTexture(animation.OutputTexture, animation.TextureUploadBackend, initial);
+            if (!reference.Succeeded || !initial.Succeeded || reference.Signature.VisiblePixels == 0 ||
+                initial.Signature.VisiblePixels == 0 || reference.Signature.Hash == initial.Signature.Hash)
+            {
+                Record("asyncFrameMatchesSync", false, reference.Error ?? initial.Error ??
+                    "Synchronous frames 30 and 0 must have distinct visible pixels.");
+                yield break;
+            }
+
+            animation.DrawOneFrameAsyncPrepare(30);
+            var actual = new PixelCapture();
+            float deadline = Time.realtimeSinceStartup + AnimationTimeoutSeconds;
+            do
+            {
+                animation.DrawOneFrameAsyncGetResult();
+                yield return new WaitForEndOfFrame();
+                yield return CaptureTexture(animation.OutputTexture, animation.TextureUploadBackend, actual);
+                if (!actual.Succeeded || actual.Signature.Hash == reference.Signature.Hash)
+                    break;
+            }
+            while (Time.realtimeSinceStartup < deadline);
+            Record("asyncFrameMatchesSync", actual.Succeeded && actual.Signature.Hash == reference.Signature.Hash &&
+                animation.TextureUploadBackend == expectedBackend,
+                actual.Error ?? ("expected=" + reference.Signature.Hash + ", actual=" + actual.Signature.Hash +
+                    ", backend=" + animation.TextureUploadBackend));
+        }
+    }
+
+    private IEnumerator RunLifecycleStress(string json, LottieTextureUploadBackend expectedBackend, int cycles)
+    {
+        for (int cycle = 0; cycle < cycles; cycle++)
         {
             uint size = (uint)(64 + cycle % 4 * 32);
-            LottieAnimation animation = null;
-            try
+            Texture output;
+            using (LottieAnimation animation = LottieAnimation.LoadFromJsonData(json, string.Empty, size, size))
             {
-                animation = LottieAnimation.LoadFromJsonData(json.text, string.Empty, size, size);
                 if (animation.TextureUploadBackend != expectedBackend)
                 {
                     Record("animationLifecycleStress", false,
@@ -598,7 +655,7 @@ public sealed class LottieSmokeController : MonoBehaviour
                         animation.TextureUploadBackend + " during cycle " + cycle + ".");
                     yield break;
                 }
-                int frame = cycle * 7;
+                int frame = (int)(cycle * 7 % animation.TotalFramesCount);
                 var capture = new PixelCapture();
                 if ((cycle & 1) == 0)
                 {
@@ -634,19 +691,28 @@ public sealed class LottieSmokeController : MonoBehaviour
                         (capture.Error ?? DescribeSignature(capture.Signature)));
                     yield break;
                 }
-                completed++;
-            }
-            finally
-            {
-                if (animation != null)
+                // Dispose with a new render outstanding, before its result is consumed.
+                animation.DrawOneFrameAsyncPrepare(frame);
+                if (animation.TextureUploadBackend != expectedBackend)
                 {
-                    animation.Dispose();
+                    Record("animationLifecycleStress", false, "Backend changed during cycle " + cycle +
+                        ": expected=" + expectedBackend + ", actual=" + animation.TextureUploadBackend);
+                    yield break;
                 }
+                output = animation.OutputTexture;
             }
             yield return null;
+            yield return new WaitForEndOfFrame();
+            if (output != null)
+            {
+                Record("disposedOutputTexturesReleased", false, "Output texture survived disposal at cycle " + cycle);
+                yield break;
+            }
+            _result.completedLifecycleCycles++;
         }
+        Record("disposedOutputTexturesReleased", true, "Released output texture after each pending render.");
         Record("animationLifecycleStress", true,
-            "completedCycles=" + completed.ToString(CultureInfo.InvariantCulture) +
+            "completedCycles=" + _result.completedLifecycleCycles.ToString(CultureInfo.InvariantCulture) +
             ", backend=" + expectedBackend);
     }
 
@@ -696,7 +762,7 @@ public sealed class LottieSmokeController : MonoBehaviour
         }
     }
 
-    private static bool TryCapture(Texture source, out PixelSignature signature, out string error)
+    private static bool TryCapture(Texture source, LottieTextureUploadBackend backend, out PixelSignature signature, out string error)
     {
         signature = default;
         error = null;
@@ -706,22 +772,7 @@ public sealed class LottieSmokeController : MonoBehaviour
             return false;
         }
 
-        LottieAnimation owner = null;
-        AnimatedImage image = FindObjectOfType<AnimatedImage>();
-        if (image != null && image.Animation != null && image.Animation.OutputTexture == source)
-        {
-            owner = image.Animation;
-        }
-        if (owner == null)
-        {
-            AnimatedButton button = FindObjectOfType<AnimatedButton>();
-            if (button != null && button.Animation != null && button.Animation.OutputTexture == source)
-            {
-                owner = button.Animation;
-            }
-        }
-        if (owner != null && owner.TextureUploadBackend == LottieTextureUploadBackend.ManagedTextureUpload &&
-            source is Texture2D managedTexture)
+        if (backend == LottieTextureUploadBackend.ManagedTextureUpload && source is Texture2D managedTexture)
         {
             return TryCaptureManagedTexture(managedTexture, out signature, out error);
         }
@@ -783,6 +834,9 @@ public sealed class LottieSmokeController : MonoBehaviour
         LottieTextureUploadBackend backend,
         PixelCapture capture)
     {
+        capture.Succeeded = false;
+        capture.Signature = default;
+        capture.Error = null;
         // Native OpenGL is GPU-written just like Vulkan and external textures.
         // A synchronous ReadPixels stalls badly on CPU-only hosted llvmpipe, so
         // normalize through the existing bounded 64x64 async readback whenever
@@ -798,7 +852,7 @@ public sealed class LottieSmokeController : MonoBehaviour
             yield break;
         }
 
-        capture.Succeeded = TryCapture(source, out capture.Signature, out capture.Error);
+        capture.Succeeded = TryCapture(source, backend, out capture.Signature, out capture.Error);
     }
 
     private static IEnumerator CaptureTextureAsync(
@@ -858,6 +912,7 @@ public sealed class LottieSmokeController : MonoBehaviour
         intermediate = null;
         request = default;
         error = null;
+        RenderTexture previous = RenderTexture.active;
         try
         {
             // Normalize native-written BGRA/external textures through a small
@@ -880,6 +935,10 @@ public sealed class LottieSmokeController : MonoBehaviour
             error = "Could not start async GPU texture readback: " +
                 exception.GetType().Name + ": " + exception.Message;
             return false;
+        }
+        finally
+        {
+            RenderTexture.active = previous;
         }
     }
 
@@ -1065,16 +1124,24 @@ public sealed class LottieSmokeController : MonoBehaviour
 #if LOTTIE_CI_SMOKE && UNITY_ANDROID && !UNITY_EDITOR
         return true;
 #else
-        return GetAndroidBooleanExtra(AndroidRequestExtra);
+        return GetAndroidExtra("getBooleanExtra", AndroidRequestExtra, false);
 #endif
     }
 
     private static bool IsAndroidFpsOnlyRequested()
     {
-        return GetAndroidBooleanExtra(AndroidFpsOnlyExtra);
+        return GetAndroidExtra("getBooleanExtra", AndroidFpsOnlyExtra, false);
     }
 
-    private static bool GetAndroidBooleanExtra(string name)
+    private static int GetLifecycleCycles(string[] arguments)
+    {
+        int cycles;
+        if (!int.TryParse(GetArgument(arguments, "-lottieLifecycleCycles", null), out cycles))
+            cycles = GetAndroidExtra("getIntExtra", "lottieLifecycleCycles", DefaultLifecycleCycles);
+        return Mathf.Clamp(cycles, 1, 10000);
+    }
+
+    private static T GetAndroidExtra<T>(string method, string name, T fallback)
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
         try
@@ -1083,7 +1150,7 @@ public sealed class LottieSmokeController : MonoBehaviour
             using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
             using (AndroidJavaObject intent = activity.Call<AndroidJavaObject>("getIntent"))
             {
-                return intent.Call<bool>("getBooleanExtra", name, false);
+                return intent.Call<T>(method, name, fallback);
             }
         }
         catch (Exception exception)
@@ -1091,7 +1158,7 @@ public sealed class LottieSmokeController : MonoBehaviour
             Debug.LogWarning("Could not read Android launch extra '" + name + "': " + exception.Message);
         }
 #endif
-        return false;
+        return fallback;
     }
 
     private static bool IsQuitEnvironmentVariableSet()

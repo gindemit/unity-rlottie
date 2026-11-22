@@ -152,6 +152,18 @@ Check out the 'Scene UI' Sample in Unity Package manager.
 
 https://github.com/gindemit/unity-rlottie/assets/5675979/3301d00e-fc9e-49c0-bc7f-7408f1f72ce4
 
+## Android device tests
+
+From the repository root, use one USB-connected Android device with debugging enabled and the project's Unity editor with Android Build Support installed.
+
+```powershell
+$editor = "$env:ProgramFiles\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe"
+.\scripts\ci\run-android-qualification.ps1 -Unity $editor -ProjectPath .\unity\RLottieUnity `
+    -OutputDirectory "$env:TEMP\rlottie-qualification" -LifecycleCycles 120
+```
+
+The runner builds and launches Vulkan and OpenGL ES 3 players, checks rendered pixels and texture disposal, and runs the plugin's Android runtime assembly. Read `qualification.json` for pass counts, backend names, failures and evidence paths. Each backend also produces a screenshot, full player log and detailed JSON. The runtime suite writes NUnit XML that the runner can recover over USB after an editor heartbeat timeout.
+
 ## Documentation
 
 * [Texture upload paths and Vulkan native-upload analysis](docs/texture-upload-platform-matrix.md)

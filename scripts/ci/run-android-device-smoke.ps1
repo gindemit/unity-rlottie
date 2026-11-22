@@ -4,6 +4,7 @@ param(
     [string] $Apk,
     [string] $Adb = 'adb',
     [string] $Serial,
+    [ValidatePattern('^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$')]
     [string] $Package = 'com.DefaultCompany.LottiePlugin',
     [Parameter(Mandatory = $true)]
     [string] $LogFile,
@@ -11,6 +12,8 @@ param(
     [string] $Screenshot,
     [string] $ResultFile,
     [int] $RunSeconds = 20,
+    [ValidateRange(1, 10000)]
+    [int] $LifecycleCycles = 12,
     [ValidateSet('Vulkan', 'OpenGLES2', 'OpenGLES3')]
     [string] $ExpectedGraphicsApi,
     [string] $ExpectedUploadBackend,
@@ -53,8 +56,8 @@ if ($LASTEXITCODE -ne 0 -or $deviceState -ne 'device') {
 if (-not $SkipInstall) {
     $remoteApk = "/data/local/tmp/rlottie-device-smoke-$PID.apk"
     try {
-        Invoke-Adb -Arguments @('push', $Apk, $remoteApk) | Out-Host
-        Invoke-Adb -Arguments @('shell', 'pm', 'install', '-r', $remoteApk) | Out-Host
+        Invoke-Adb -Arguments @('push', $Apk, $remoteApk) | Write-Verbose
+        Invoke-Adb -Arguments @('shell', 'pm', 'install', '-r', $remoteApk) | Write-Verbose
     }
     finally {
         & $Adb @adbPrefix shell rm -f $remoteApk | Out-Null
@@ -80,8 +83,9 @@ Invoke-Adb -Arguments @(
     '-n', $launcherActivity,
     '-a', 'android.intent.action.MAIN',
     '-c', 'android.intent.category.LAUNCHER',
-    '--ez', 'lottieSmoke', 'true'
-) | Out-Host
+    '--ez', 'lottieSmoke', 'true',
+    '--ei', 'lottieLifecycleCycles', $LifecycleCycles
+) | Write-Verbose
 
 $deadline = [DateTime]::UtcNow.AddSeconds($RunSeconds)
 do {
@@ -95,7 +99,7 @@ if (-not $resultReady) {
     $timeoutLog | Set-Content -LiteralPath $LogFile -Encoding UTF8
     throw "Android smoke result was not produced within $RunSeconds seconds: $remoteResult"
 }
-Invoke-Adb -Arguments @('pull', $remoteResult, $ResultFile) | Out-Host
+Invoke-Adb -Arguments @('pull', $remoteResult, $ResultFile) | Write-Verbose
 
 $pidValue = (& $Adb @adbPrefix shell pidof $Package 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $pidValue) {
@@ -107,7 +111,7 @@ $log | Set-Content -LiteralPath $LogFile -Encoding UTF8
 $remoteScreenshot = "/sdcard/rlottie-device-smoke-$PID.png"
 try {
     Invoke-Adb -Arguments @('shell', 'screencap', '-p', $remoteScreenshot)
-    Invoke-Adb -Arguments @('pull', $remoteScreenshot, $Screenshot) | Out-Host
+    Invoke-Adb -Arguments @('pull', $remoteScreenshot, $Screenshot) | Write-Verbose
 }
 finally {
     & $Adb @adbPrefix shell rm -f $remoteScreenshot | Out-Null
@@ -115,10 +119,13 @@ finally {
 
 $result = Get-Content -Raw -LiteralPath $ResultFile | ConvertFrom-Json
 Assert-LottieSmokeResult -Result $result -Platform Android -ExpectedGraphicsApi $ExpectedGraphicsApi `
-    -ExpectedUploadBackend $ExpectedUploadBackend -MinimumSchemaVersion 3 `
-    -RequiredCheckNames semanticColorOverrides -RequireNativeVulkanUpload:$RequireNativeVulkanUpload
+    -ExpectedUploadBackend $ExpectedUploadBackend -MinimumSchemaVersion 4 `
+    -ExpectedLifecycleCycles $LifecycleCycles -RequireNativeVulkanUpload:$RequireNativeVulkanUpload
 if ((Get-Item -LiteralPath $Screenshot).Length -lt 1024) {
     throw "Android screenshot is unexpectedly small: $Screenshot"
 }
 
-Write-Output "Android rendered-player smoke test passed. Result: $ResultFile; log: $LogFile; screenshot: $Screenshot"
+[ordered]@{
+    platform = 'Android'; result = 'Passed'; checks = $result.checks.Count; graphicsApi = $result.graphicsApi
+    backend = $result.animatedImageUploadBackend; cycles = $result.completedLifecycleCycles; evidence = $ResultFile
+} | ConvertTo-Json -Compress

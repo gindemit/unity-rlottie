@@ -15,6 +15,9 @@ namespace RLottie.CI
         {
             GraphicsApiState graphicsApiState = default(GraphicsApiState);
             ColorSpaceState colorSpaceState = default(ColorSpaceState);
+            string originalAndroidPackage = null;
+            SerializedObject playerSettings = null;
+            bool overrideDefaultIdentifier = false;
             try
             {
                 string targetName = GetArgument("-ciTarget", "Windows64");
@@ -37,6 +40,15 @@ namespace RLottie.CI
 
                 graphicsApiState = ConfigureGraphicsApi(target, requestedGraphicsApi);
                 colorSpaceState = ConfigureColorSpace(requestedColorSpace);
+                string androidPackage = GetArgument("-ciAndroidPackage", string.Empty);
+                if (target == BuildTarget.Android && !string.IsNullOrEmpty(androidPackage))
+                {
+                    // SetApplicationIdentifier also turns on the project-wide override.
+                    playerSettings = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset")[0]);
+                    overrideDefaultIdentifier = playerSettings.FindProperty("overrideDefaultApplicationIdentifier")?.boolValue ?? false;
+                    originalAndroidPackage = PlayerSettings.GetApplicationIdentifier(group);
+                    PlayerSettings.SetApplicationIdentifier(group, androidPackage);
+                }
                 EnsureOutputDirectory(outputPath, target);
 
                 BuildOptions buildOptions = BuildOptions.StrictMode;
@@ -76,14 +88,32 @@ namespace RLottie.CI
                         " (errors=" + summary.totalErrors + ").");
                 }
             }
-            catch (Exception exception)
-            {
-                Debug.LogException(exception);
-                EditorApplication.Exit(1);
-            }
             finally
             {
-                RestoreBuildSettings(graphicsApiState, colorSpaceState);
+                try
+                {
+                    if (originalAndroidPackage != null)
+                    {
+                        PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, originalAndroidPackage);
+                        playerSettings.Update();
+                        SerializedProperty property = playerSettings.FindProperty("overrideDefaultApplicationIdentifier");
+                        if (property != null)
+                        {
+                            property.boolValue = overrideDefaultIdentifier;
+                            playerSettings.ApplyModifiedPropertiesWithoutUndo();
+                        }
+                    }
+                }
+                finally
+                {
+                    playerSettings?.Dispose();
+                    RestoreBuildSettings(graphicsApiState, colorSpaceState);
+                    // Batch mode may exit on a build exception before Unity saves restored settings.
+                    if (originalAndroidPackage != null || graphicsApiState.Changed || colorSpaceState.Changed)
+                    {
+                        AssetDatabase.SaveAssets();
+                    }
+                }
             }
         }
 
