@@ -95,7 +95,7 @@ def main():
         "platform": platform.platform(), "mode": args.mode, "pairs": pairs, "metrics": metrics,
     }
     (output / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    lines = [f"### {args.mode} performance · `{args.baseline_ref}` → `{args.candidate_ref}`", "",
+    lines = [f"### {args.mode} performance from `{args.baseline_ref}` to `{args.candidate_ref}`", "",
              "| Metric | Baseline (ms) | Candidate (ms) | Paired change | Pairs over limit |",
              "| --- | ---: | ---: | ---: | ---: |"]
     for name, metric in metrics.items():

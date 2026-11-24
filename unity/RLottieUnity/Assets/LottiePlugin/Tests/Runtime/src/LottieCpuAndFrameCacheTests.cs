@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using NUnit.Framework;
 using Unity.Collections;
 using UnityEngine;
@@ -56,14 +57,40 @@ namespace LottiePlugin.Tests.Runtime
         public void ReloadingAReplacedFileUsesItsCurrentMarkersAndPixels()
         {
             string first = Resources.Load<TextAsset>("semantic_palette").text;
-            string second = first.Replace("\"clip\"", "\"replacement\"").Replace("[0,0,1,1]", "[0,1,0,1]");
+            string second = first.Replace("\"clip\"", "\"swap\"").Replace("[0,0,1,1]", "[0,1,0,1]");
             string path = Path.Combine(Application.temporaryCachePath, Guid.NewGuid() + ".json");
             try
             {
                 File.WriteAllText(path, first);
+                DateTime timestamp = File.GetLastWriteTimeUtc(path);
+                long length = new FileInfo(path).Length;
                 AssertFileFrame(path, "clip", new Color32(0, 0, 255, 255));
                 File.WriteAllText(path, second);
-                AssertFileFrame(path, "replacement", new Color32(0, 255, 0, 255));
+                File.SetLastWriteTimeUtc(path, timestamp);
+                Assert.AreEqual(length, new FileInfo(path).Length);
+                Assert.AreEqual(timestamp, File.GetLastWriteTimeUtc(path));
+                AssertFileFrame(path, "swap", new Color32(0, 255, 0, 255));
+            }
+            finally { File.Delete(path); }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void UnchangedFileReusesValidatedMarkersAcrossLoaders(bool utf16)
+        {
+            string path = Path.Combine(Application.temporaryCachePath, Guid.NewGuid() + ".json");
+            try
+            {
+                File.WriteAllText(path, Resources.Load<TextAsset>("semantic_palette").text,
+                    utf16 ? Encoding.Unicode : Encoding.UTF8);
+                var options = new LottieAnimationOptions { UseManagedTextureUpload = true };
+                using (var live = LottieAnimation.LoadFromJsonFile(path, 16, 16, options))
+                using (var cpu = LottieCpuRasterizer.LoadFromJsonFile(path, 16, 16))
+                {
+                    Assert.AreSame(live.Markers.Markers, cpu.Markers.Markers);
+                    live.Dispose();
+                    Assert.DoesNotThrow(() => cpu.Markers.Get("clip"));
+                }
             }
             finally { File.Delete(path); }
         }
