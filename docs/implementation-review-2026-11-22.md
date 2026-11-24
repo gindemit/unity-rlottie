@@ -87,3 +87,25 @@ An Android Gradle failure exposed a cleanup issue in Unity batch mode. The build
 ### Remaining limits
 
 A live D3D12 fence that never advances or reports device removal must keep its referenced allocations alive. The structural validation applies to Unity's managed loaders. Direct native ABI callers still use the pinned rlottie parser. The pinned Windows image decoder can render a relative external PNG as transparent. Embedded PNGs render correctly on Windows. Historical Unity configurations and other operating systems require separate player runs.
+
+## Core performance follow-up
+
+The first paired run against `7f56e754` found that repeated loads of the same 216 KB animation file were about 90% slower at `1246a098` on both Linux and Windows. The correction at `dfbe8b30` still reads the current file on every load. For four recent files of at most 1 MiB each, a byte-for-byte match reuses the decoded JSON and its managed validation. The native model still parses from that snapshot, including when relative assets are present. Tests passed for UTF-8 and UTF-16 with BOMs and for a replacement that preserved the original length and modification time.
+
+The Windows run used Unity 2022.3.62f3 and an RTX 3080 Ti. It compared the corrected code with `7f56e754` across five paired launches.
+
+| Workload | Baseline | With correction | Median paired change |
+| --- | ---: | ---: | ---: |
+| Repeated file load | 2.47 ms | 2.46 ms | −0.1% |
+| JSON-data load | 2.09 ms | 2.10 ms | +0.7% |
+| CPU rasterization at 512 × 512 | 0.95 ms | 0.96 ms | 0.0% |
+| Eight-frame worker batch at 512 × 512 | 9.16 ms | 7.76 ms | −15.2% |
+| D3D12 draw | 0.93 ms | 0.95 ms | +1.2% |
+| D3D12 frame | 1.06 ms | 1.05 ms | −0.5% |
+| D3D12 disposal p95 | 1.54 ms | 0.38 ms | −77.0% |
+
+Unity passed 9/9 EditMode and 85/85 PlayMode tests. The hosted Linux gate passed all four workloads against the original baseline, with repeated file loads 12.8% faster by the median paired comparison. It also passed a rerun against the pre-correction code and the automatic control run after the benchmark workloads were isolated. [Original regression](https://github.com/gindemit/unity-rlottie/actions/runs/45506766449) · [Corrected comparison](https://github.com/gindemit/unity-rlottie/actions/runs/45508935296) · [Automatic control](https://github.com/gindemit/unity-rlottie/actions/runs/45508924110)
+
+On the Galaxy Note10+, five launch pairs per graphics API exercised three animations with four 512 × 512 instances and 180 sampled frames per case. The 30 paired pixel hashes matched. Median paired p95 render-batch changes ranged from −3.0% to +1.2% on Vulkan and from −4.8% to +6.9% on OpenGL ES 3. In the OpenGL ES 3 case with the largest difference, the candidate was slower when it ran second and faster when it ran first. Observed frame-time p95 changed by at most 0.1% across both APIs.
+
+The automatic gate covers Linux CPU timings. The Windows D3D12 and Android numbers are physical-device measurements. The repeated-file result applies to the tested fixture within the snapshot cache limit. Large files and working sets that exceed the cache can still pay for decoding and managed validation on reload.
