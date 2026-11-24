@@ -77,31 +77,38 @@ public sealed class CorePerformanceProbe : MonoBehaviour
             if (raster.TotalFramesCount <= Frames[Frames.Length - 1])
                 throw new InvalidOperationException("Fixture has too few frames.");
 
-            // Round zero warms the disk cache, native model, JIT and worker.
-            for (int round = 0; round <= Rounds; round++)
+            // Give each workload its own warmup and rounds. A change in one
+            // loader should not change the immediate CPU load before the other.
+            foreach (object step in MeasureCpuMetric("load_data", 16, _ =>
             {
-                Add(round, "load_file", Measure(16, _ =>
-                {
-                    using (var animation = LottieAnimation.LoadFromJsonFile(_file, 64, 64, options)) { }
-                }));
-                yield return null;
-                Add(round, "load_data", Measure(16, _ =>
-                {
-                    using (var animation = LottieAnimation.LoadFromJsonData(json, "", 64, 64, options)) { }
-                }));
-                yield return null;
-                Add(round, "raster", Measure(Frames.Length * 4, frame =>
-                    raster.RenderFrame(Frames[frame % Frames.Length], pixels)));
-                Add(round, "prepare", Measure(8, _ =>
-                {
-                    batch.Start(Frames);
-                    byte[] result;
-                    while (!batch.TryComplete(out result)) Thread.Yield();
-                    if (result.Length != raster.ByteCount * Frames.Length)
-                        throw new InvalidOperationException("Worker returned an incomplete batch.");
-                }));
-                yield return null;
-            }
+                using (var animation = LottieAnimation.LoadFromJsonData(json, "", 64, 64, options)) { }
+            })) yield return step;
+
+            foreach (object step in MeasureCpuMetric("load_file", 16, _ =>
+            {
+                using (var animation = LottieAnimation.LoadFromJsonFile(_file, 64, 64, options)) { }
+            })) yield return step;
+
+            foreach (object step in MeasureCpuMetric("raster", Frames.Length * 4, frame =>
+                raster.RenderFrame(Frames[frame % Frames.Length], pixels))) yield return step;
+
+            foreach (object step in MeasureCpuMetric("prepare", 8, _ =>
+            {
+                batch.Start(Frames);
+                byte[] result;
+                while (!batch.TryComplete(out result)) Thread.Yield();
+                if (result.Length != raster.ByteCount * Frames.Length)
+                    throw new InvalidOperationException("Worker returned an incomplete batch.");
+            })) yield return step;
+        }
+    }
+
+    private IEnumerable<object> MeasureCpuMetric(string metric, int count, Action<int> action)
+    {
+        for (int round = 0; round <= Rounds; round++)
+        {
+            Add(round, metric, Measure(count, action));
+            yield return null;
         }
     }
 
