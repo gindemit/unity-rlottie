@@ -171,6 +171,20 @@ $editor = "$env:ProgramFiles\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe"
 
 The runner builds and launches Vulkan and OpenGL ES 3 players, checks rendered pixels and texture disposal, and runs the plugin's Android runtime assembly. Read `qualification.json` for pass counts, backend names, failures and evidence paths. Each backend also produces a screenshot, full player log and detailed JSON. The runtime suite writes NUnit XML that the runner can recover over USB after an editor heartbeat timeout.
 
+## Core performance regression checks
+
+[Core performance](https://github.com/gindemit/unity-rlottie/actions/workflows/core-performance.yaml) runs after core changes on `main` and on same-repository pull requests targeting `main`. It builds the Release native plugin and a Unity player for each revision. A single Linux runner alternates five baseline/candidate launch pairs with the same animation and measures repeated file loads, loads from JSON data, CPU frame rasterization and parallel frame preparation. The baseline is the previous tip for pushes and the base commit for pull requests. Use workflow dispatch to compare explicit SHAs, including trusted revisions from external pull requests that need repository Unity credentials to run.
+
+Each launch uses the median of nine measured rounds after a warmup round. The job fails when at least three pairs exceed both the 12% CPU slowdown limit and that metric's absolute millisecond floor. The step summary shows the paired changes. The `core-performance-results` artifact contains the thresholds, per-pair results, raw timings and player logs.
+
+For CPU and native D3D12 measurements on a Windows GPU, run the following from the repository root with Unity 2022.3.62f3 and Python 3 installed. It stages both Git revisions outside the checkout and uses their packaged Windows DLLs. The D3D12 pass measures draw time, player frame time and p95 disposal latency after an upload, with a 15% relative limit and per-metric absolute floors. The hosted check uses Unity's headless graphics device. Android device qualification remains a separate check.
+
+```powershell
+./scripts/benchmarks/run-windows-core-performance.ps1 -Baseline 7f56e754 -Candidate 1246a098 `
+  -Unity 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe' `
+  -ResultsRoot 'C:/benchmarks/rlottie-core-comparison'
+```
+
 ## Documentation
 
 * [Texture upload paths and Vulkan native-upload analysis](docs/texture-upload-platform-matrix.md)

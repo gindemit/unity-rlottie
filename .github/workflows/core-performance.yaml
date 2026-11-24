@@ -1,0 +1,160 @@
+name: Core performance
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Baseline commit SHA
+        required: true
+        type: string
+      candidate:
+        description: Candidate commit SHA (defaults to the selected branch tip)
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'projects/CMake/**'
+      - 'dependency/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Plugins/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/CI/**'
+      - 'unity/RLottieUnity/Assets/Resources/LottieBenchmark/**'
+      - 'unity/RLottieUnity/Packages/**'
+      - 'unity/RLottieUnity/ProjectSettings/**'
+      - 'scripts/benchmarks/**'
+      - 'tests/core-performance/**'
+      - '.github/workflows/core-performance.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'projects/CMake/**'
+      - 'dependency/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Runtime/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Plugins/**'
+      - 'unity/RLottieUnity/Assets/LottiePlugin/Editor/src/CI/**'
+      - 'unity/RLottieUnity/Assets/Resources/LottieBenchmark/**'
+      - 'unity/RLottieUnity/Packages/**'
+      - 'unity/RLottieUnity/ProjectSettings/**'
+      - 'scripts/benchmarks/**'
+      - 'tests/core-performance/**'
+      - '.github/workflows/core-performance.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-performance-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  revisions:
+    # External PRs cannot use Unity license secrets. Run a trusted revision via dispatch.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    outputs:
+      baseline: ${{ steps.refs.outputs.baseline }}
+      candidate: ${{ steps.refs.outputs.candidate }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: refs
+        env:
+          BASELINE: ${{ inputs.baseline || github.event.pull_request.base.sha || github.event.before }}
+          CANDIDATE: ${{ inputs.candidate || github.sha }}
+        run: |
+          set -euo pipefail
+          # A push that creates a ref has no previous tip.
+          if [[ "$BASELINE" =~ ^0+$ ]]; then BASELINE=$(git rev-parse HEAD^); fi
+          [[ "$BASELINE" =~ ^[0-9a-fA-F]{7,40}$ && "$CANDIDATE" =~ ^[0-9a-fA-F]{7,40}$ ]]
+          echo "baseline=$(git rev-parse --verify "${BASELINE}^{commit}")" >> "$GITHUB_OUTPUT"
+          echo "candidate=$(git rev-parse --verify "${CANDIDATE}^{commit}")" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: revisions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        role: [baseline, candidate]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.revisions.outputs[matrix.role] }}
+          path: snapshot
+          submodules: recursive
+          persist-credentials: false
+      - name: Build Release native plugin and stage shared probe
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libgl-dev
+          cmake -S snapshot/projects/CMake -B "$RUNNER_TEMP/native" \
+            -DCMAKE_BUILD_TYPE=Release -DRLOTTIE_LINUX=ON -DBUILD_TESTING=OFF \
+            -DUSE_UNITY_PLUGINAPI=ON
+          cmake --build "$RUNNER_TEMP/native" --target LottiePlugin --parallel 2
+          plugin=snapshot/unity/RLottieUnity/Assets/LottiePlugin
+          install -m 755 snapshot/out/Release/Plugins/Linux/x86_64/libLottiePlugin.so \
+            "$plugin/Plugins/Linux/x86_64/libLottiePlugin.so"
+          cp scripts/benchmarks/CorePerformanceProbe.cs "$plugin/Runtime/src/"
+      - name: Build benchmark player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          allowDirtyBuild: true
+          versioning: None
+          projectPath: snapshot/unity/RLottieUnity
+          targetPlatform: StandaloneLinux64
+          buildMethod: RLottie.CI.BuildMatrix.Build
+          customParameters: >-
+            -ciTarget Linux64 -ciPipeline BuiltIn
+            -ciOutputPath /github/workspace/artifacts/RLottiePerf.x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-player-${{ matrix.role }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 3
+
+  compare:
+    name: Compare core performance
+    needs: [revisions, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: core-player-*
+          path: players
+      - name: Benchmark both players on the same runner
+        env:
+          BASELINE: ${{ needs.revisions.outputs.baseline }}
+          CANDIDATE: ${{ needs.revisions.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          python3 tests/core-performance/test_compare.py
+          chmod +x players/core-player-{baseline,candidate}/RLottiePerf.x86_64
+          python3 scripts/benchmarks/compare-core-performance.py \
+            --baseline players/core-player-baseline/RLottiePerf.x86_64 \
+            --candidate players/core-player-candidate/RLottiePerf.x86_64 \
+            --baseline-ref "$BASELINE" --candidate-ref "$CANDIDATE" \
+            --fixture unity/RLottieUnity/Assets/Resources/LottieBenchmark/patch-pal-iteration-b-vector-felt.json \
+            --output performance-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: core-performance-results
+          path: performance-results/
+          if-no-files-found: warn
