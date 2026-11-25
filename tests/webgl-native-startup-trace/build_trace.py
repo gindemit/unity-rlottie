@@ -20,14 +20,14 @@ from native_contract import external_fresh
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = 'webgl-native-state-trace.'
-BASE_PLUGIN = '65f22f125419daa0b035167485cc56589501449f0d10e6a57071a5dff9a658db'
+BASE_PLUGIN = '0e368698c6b023081b21554b50eeb72acc783cd118d887731deb8723ab85d81d'
 BASE_RLOTTIE = 'b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da'
 ADDED = sorted('lottie_webgl_trace_' + name for name in ('arm', 'copy', 'issue', 'register', 'request'))
 NEW_UNDEFINED = {'emscripten_webgl_get_current_context', 'emscripten_webgl_get_context_attributes',
                  'emscripten_is_webgl_context_lost', 'emscripten_get_heap_size'}
 ABI_FLAGS = ['-fwasm-exceptions', '-sSUPPORT_LONGJMP=wasm', '-sWASM_LEGACY_EXCEPTIONS=1']
 # Actual Unity LLVM v2 observations: empty/platform-disabled WebGL units.
-EMPTY_MEMBERS = {'InstanceRegistry.cpp.o', 'UploadQueue.cpp.o', 'UploadPipeline.cpp.o',
+EMPTY_MEMBERS = {'InstanceRegistry.cpp.o', 'UploadQueue.cpp.o', 'UploadPipeline.cpp.o', 'PixelFormatUtils.cpp.o',
                  'TextureBackend.cpp.o', 'VulkanBackend.cpp.o', 'UnityIntegration.cpp.o',
                  'UnityExports.cpp.o', 'lottieproxymodel.cpp.o', 'vdebug.cpp.o',
                  'vdrawhelper_neon.cpp.o', 'vdrawhelper_sse2.cpp.o'}

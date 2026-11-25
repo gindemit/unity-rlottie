@@ -152,14 +152,14 @@ namespace RLottie
 
     internal sealed class LottieWebGLDiagnosticManifest
     {
-        internal const string PluginHash = "65f22f125419daa0b035167485cc56589501449f0d10e6a57071a5dff9a658db";
+        internal const string PluginHash = "0e368698c6b023081b21554b50eeb72acc783cd118d887731deb8723ab85d81d";
         internal const string RlottieHash = "b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da";
         internal static readonly string[] AddedSymbols = {
             "lottie_webgl_trace_arm", "lottie_webgl_trace_copy", "lottie_webgl_trace_issue",
             "lottie_webgl_trace_register", "lottie_webgl_trace_request"
         };
         private static readonly string[] EmptySymbolMembers = {
-            "InstanceRegistry.cpp.o", "UploadQueue.cpp.o", "UploadPipeline.cpp.o", "TextureBackend.cpp.o", "VulkanBackend.cpp.o",
+            "InstanceRegistry.cpp.o", "UploadQueue.cpp.o", "UploadPipeline.cpp.o", "PixelFormatUtils.cpp.o", "TextureBackend.cpp.o", "VulkanBackend.cpp.o",
             "UnityIntegration.cpp.o", "UnityExports.cpp.o", "lottieproxymodel.cpp.o", "vdebug.cpp.o", "vdrawhelper_neon.cpp.o", "vdrawhelper_sse2.cpp.o"
         };
         internal string Root, Path, Hash, Plugin, Rlottie, SourceCommit;

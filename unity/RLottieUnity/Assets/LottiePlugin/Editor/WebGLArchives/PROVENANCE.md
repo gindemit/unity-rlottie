@@ -1,6 +1,17 @@
 # WebGL archive provenance
 
-## Current pending-event revision — 2026-10-24
+## WasmExceptions plugin refresh — 2026-11-25
+
+The Unity 6.5+ plugin archive was rebuilt from `2bf37397ef5d5047658d6468060f958ea9a86a2c`
+with Unity 6000.5.3f1's bundled Emscripten 4.0.20-git in Release mode, with
+Wasm exceptions enabled and native tracing disabled. Its SHA-256 is
+`0e368698c6b023081b21554b50eeb72acc783cd118d887731deb8723ab85d81d`. The 21 public WebGL plugin exports match the previous archive.
+The rebuilt rlottie dependency archive matched the existing archive byte for
+byte, so its existing archive and raster worker sidecar retain their provenance.
+The Legacy, Legacy2021 and Legacy2019 variants still have the October provenance
+below.
+
+## Historical pending-event revision — 2026-10-24
 
 The four plugin archives below supersede the dated plugin hashes later in this
 document. They are ordinary, trace-disabled builds of source `88a506b715bd0830bd788bec78dc6c96dbcb8ef2`,

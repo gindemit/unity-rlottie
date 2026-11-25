@@ -55,7 +55,7 @@ namespace RLottie
         private static readonly string Legacy2021RlottieHash = "b5078d63c82615a8ad23940d5a67d49a6f01c0e40ebe3efea0142e16932b141c";
         private static readonly string Legacy2019PluginHash = "4894f1ca6be1a8c873e59589b17deb5e5de4d56f6da13086155b43ca48595010";
         private static readonly string Legacy2019RlottieHash = "42dc8c94ed02a010e77f84707015822adc6b18381e94f23273ecd9facf58424a";
-        private static readonly string WasmPluginHash = "65f22f125419daa0b035167485cc56589501449f0d10e6a57071a5dff9a658db";
+        private static readonly string WasmPluginHash = "0e368698c6b023081b21554b50eeb72acc783cd118d887731deb8723ab85d81d";
         private static readonly string WasmRlottieHash = "b17cda443208f9c746a6610e8edee79257684fdd8ae39f93f8df3a1263d908da";
 
         public int callbackOrder { get { return int.MinValue; } }
