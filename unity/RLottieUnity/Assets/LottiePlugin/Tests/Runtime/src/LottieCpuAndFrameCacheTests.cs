@@ -61,8 +61,11 @@ namespace LottiePlugin.Tests.Runtime
             string path = Path.Combine(Application.temporaryCachePath, Guid.NewGuid() + ".json");
             try
             {
+                // A whole-second value survives filesystem and Android timestamp rounding.
+                var timestamp = new DateTime(2024, 1, 2, 3, 4, 6, DateTimeKind.Utc);
                 File.WriteAllText(path, first);
-                DateTime timestamp = File.GetLastWriteTimeUtc(path);
+                File.SetLastWriteTimeUtc(path, timestamp);
+                Assert.AreEqual(timestamp, File.GetLastWriteTimeUtc(path));
                 long length = new FileInfo(path).Length;
                 AssertFileFrame(path, "clip", new Color32(0, 0, 255, 255));
                 File.WriteAllText(path, second);
